@@ -1,0 +1,155 @@
+name: Release Artifacts
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-exe:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-windows.txt pyinstaller
+
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name Hosty --hidden-import hosty.ui.windows.application --collect-submodules hosty.ui.windows --collect-submodules hosty.backend --exclude-module gi --exclude-module hosty.application hosty.py
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosty-windows-exe
+          path: dist/Hosty.exe
+
+  build-linux-rpm:
+    name: Build Linux RPM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read app version
+        id: version
+        run: |
+          VERSION=$(python3 -c "import re; from pathlib import Path; text = Path('hosty/utils/constants.py').read_text(encoding='utf-8'); match = re.search(r'^APP_VERSION\\s*=\\s*\"([^\"]+)\"', text, re.MULTILINE); print(match.group(1) if match else '')")
+          if [ -z "$VERSION" ]; then
+            echo "APP_VERSION not found" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install packaging tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev rpm
+          sudo gem install --no-document fpm
+
+      - name: Build RPM payload
+        run: |
+          rm -rf package-root
+          mkdir -p package-root/usr/share/hosty
+          mkdir -p package-root/usr/share/applications
+          mkdir -p package-root/usr/share/icons/hicolor/scalable/apps
+          mkdir -p package-root/usr/bin
+
+          cp -a hosty package-root/usr/share/hosty/
+          cp hosty.py package-root/usr/share/hosty/hosty.py
+          cp packaging/linux/com.github.hosty.Hosty.desktop package-root/usr/share/applications/hosty.desktop
+          cp packaging/linux/com.github.hosty.Hosty.svg package-root/usr/share/icons/hicolor/scalable/apps/com.github.hosty.Hosty.svg
+
+          printf '%s\n' '#!/usr/bin/env sh' 'exec /usr/bin/python3 /usr/share/hosty/hosty.py "$@"' > package-root/usr/bin/hosty
+          chmod +x package-root/usr/bin/hosty
+
+      - name: Build RPM
+        run: |
+          fpm -s dir -t rpm \
+            -n hosty \
+            -v "${{ steps.version.outputs.version }}" \
+            --iteration 1 \
+            --architecture x86_64 \
+            --license GPL-3.0-or-later \
+            --description "Hosty Fabric Minecraft server manager" \
+            --url "https://github.com/${{ github.repository }}" \
+            -d python3 \
+            -d python3-requests \
+            -d python3-psutil \
+            -C package-root \
+            .
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosty-linux-rpm
+          path: ./*.rpm
+
+  build-flatpak:
+    name: Build Flatpak Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+
+      - name: Add Flathub remote
+        run: |
+          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Build flatpak repo
+        run: |
+          flatpak-builder --user --install-deps-from=flathub --default-branch=stable --repo=repo --force-clean build-dir packaging/flatpak/com.github.hosty.Hosty.yml
+
+      - name: Build flatpak bundle
+        run: |
+          flatpak build-bundle repo Hosty.flatpak com.github.hosty.Hosty stable
+
+      - name: Upload flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosty-linux-flatpak
+          path: Hosty.flatpak
+
+  upload-release-assets:
+    name: Upload assets to GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - build-windows-exe
+      - build-linux-rpm
+      - build-flatpak
+    if: github.event_name == 'release'
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Upload assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/**/*.exe
+            release-assets/**/*.rpm
+            release-assets/**/*.flatpak

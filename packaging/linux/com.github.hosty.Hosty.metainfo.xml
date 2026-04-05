@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.github.hosty.Hosty</id>
+  <name>Hosty</name>
+  <summary>Fabric Minecraft server manager</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>Hosty helps you create, run, and manage local Fabric Minecraft servers from a desktop UI.</p>
+  </description>
+  <launchable type="desktop-id">com.github.hosty.Hosty.desktop</launchable>
+  <url type="homepage">https://github.com/hosty</url>
+  <content_rating type="oars-1.1"/>
+</component>

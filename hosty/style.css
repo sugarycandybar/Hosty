@@ -1,0 +1,113 @@
+/* Hosty - Minimal Adwaita CSS overrides
+ *
+ * We intentionally keep this very light. Adwaita handles colors, buttons,
+ * and overall theming. We only override things that are genuinely custom
+ * (console dark theme, status indicators, performance gauges).
+ */
+
+/* Sidebar header — closer to GNOME Files (monospace title) */
+.sidebar-header-title {
+    font-family: "JetBrains Mono", "Roboto Mono", ui-monospace, monospace;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+}
+
+/* Banner when console/performance follow a different server than sidebar selection */
+.selection-context-banner {
+    margin: 0;
+}
+
+/* ===== Status Indicators ===== */
+.status-dot {
+    min-width: 10px;
+    min-height: 10px;
+    border-radius: 50%;
+}
+
+.status-dot.running {
+    background-color: #2ec27e;
+}
+
+.status-dot.starting {
+    background-color: #e5a50a;
+}
+
+.status-dot.stopping {
+    background-color: #e5a50a;
+}
+
+.status-dot.stopped {
+    background-color: alpha(currentColor, 0.3);
+}
+
+/* ===== Status Pill ===== */
+.status-pill {
+    border-radius: 99px;
+    padding: 2px 10px;
+    font-weight: 600;
+    font-size: 11px;
+}
+
+.status-pill.running {
+    background-color: alpha(#2ec27e, 0.15);
+    color: #2ec27e;
+}
+
+.status-pill.starting {
+    background-color: alpha(#e5a50a, 0.15);
+    color: #e5a50a;
+}
+
+.status-pill.stopping {
+    background-color: alpha(#e5a50a, 0.15);
+    color: #e5a50a;
+}
+
+.status-pill.stopped {
+    background-color: alpha(currentColor, 0.08);
+    color: alpha(currentColor, 0.5);
+}
+
+/* ===== Console View ===== */
+.console-view {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+    font-family: "Source Code Pro", "JetBrains Mono", "Fira Code", monospace;
+    font-size: 13px;
+    padding: 12px 16px;
+}
+
+.console-view text {
+    background-color: transparent;
+    color: #cdd6f4;
+    caret-color: #cdd6f4;
+}
+
+.console-input {
+    font-family: "Source Code Pro", "JetBrains Mono", "Fira Code", monospace;
+    font-size: 13px;
+}
+
+/* ===== Performance Cards ===== */
+.perf-value {
+    font-size: 32px;
+    font-weight: 800;
+}
+
+.perf-label {
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.55;
+}
+
+.perf-unit {
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0.45;
+}
+
+/* ===== Sparkline ===== */
+.sparkline {
+    min-height: 40px;
+}

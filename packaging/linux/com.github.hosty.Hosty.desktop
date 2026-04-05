@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Hosty
+Comment=Fabric Minecraft server manager
+Exec=hosty
+Icon=com.github.hosty.Hosty
+Terminal=false
+Categories=Game;Utility;
+StartupNotify=true
