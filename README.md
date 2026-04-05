@@ -16,9 +16,9 @@ It helps you set up a server, run it, and manage it without juggling lots of sep
 ### Windows
 
 1. Install dependencies:
-	python3 -m pip install -r requirements-windows.txt
+	python -m pip install -r requirements-windows.txt
 2. Run Hosty:
-	python3 hosty.py
+	python hosty.py
 
 ### Linux
 
