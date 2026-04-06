@@ -3,12 +3,14 @@ FilesView — folders, worlds, backups, and Modrinth integration (per selected s
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
+import urllib.parse
 import urllib.request
 import webbrowser
 import zipfile
@@ -112,15 +114,23 @@ class FilesView(Gtk.Box):
         self._server_manager: Optional[ServerManager] = None
         self._root_page: Optional[Adw.NavigationPage] = None
 
-        self._folders_group: Optional[Adw.PreferencesGroup] = None
         self._worlds_group: Optional[Adw.PreferencesGroup] = None
         self._mods_group: Optional[Adw.PreferencesGroup] = None
+        self._players_group: Optional[Adw.PreferencesGroup] = None
         self._world_rows: list[Gtk.Widget] = []
         self._mod_rows: list[Gtk.Widget] = []
 
         self._backups_group: Optional[Adw.PreferencesGroup] = None
         self._backup_rows: list[Gtk.Widget] = []
         self._backup_busy = False
+        self._create_backup_row: Optional[Adw.ActionRow] = None
+        self._backup_spinner: Optional[Gtk.Spinner] = None
+
+        self._players_name_row: Optional[Adw.EntryRow] = None
+        self._whitelist_group: Optional[Adw.PreferencesGroup] = None
+        self._banned_group: Optional[Adw.PreferencesGroup] = None
+        self._whitelist_rows: list[Gtk.Widget] = []
+        self._banned_rows: list[Gtk.Widget] = []
 
         self._nav = Adw.NavigationView()
         self._nav.set_vexpand(True)
@@ -140,23 +150,13 @@ class FilesView(Gtk.Box):
 
         page = Adw.PreferencesPage()
 
-        self._folders_group = Adw.PreferencesGroup(title="Folders")
-
+        self._worlds_group = Adw.PreferencesGroup(title="Worlds")
         open_server_row = Adw.ActionRow(title="Open server folder")
         open_server_row.add_prefix(Gtk.Image.new_from_icon_name("folder-open-symbolic"))
         open_server_row.set_activatable(True)
         open_server_row.connect("activated", self._on_open_server_folder)
-        self._folders_group.add(open_server_row)
+        self._worlds_group.add(open_server_row)
 
-        open_mods_row = Adw.ActionRow(title="Open mods folder")
-        open_mods_row.add_prefix(Gtk.Image.new_from_icon_name("application-x-addon-symbolic"))
-        open_mods_row.set_activatable(True)
-        open_mods_row.connect("activated", self._on_open_mods_folder)
-        self._folders_group.add(open_mods_row)
-
-        page.add(self._folders_group)
-
-        self._worlds_group = Adw.PreferencesGroup(title="Worlds")
         backups_row = Adw.ActionRow(
             title="Backups",
             subtitle="Create, restore, and manage backup archives",
@@ -168,6 +168,12 @@ class FilesView(Gtk.Box):
         page.add(self._worlds_group)
 
         self._mods_group = Adw.PreferencesGroup(title="Mods")
+        open_mods_row = Adw.ActionRow(title="Open mods folder")
+        open_mods_row.add_prefix(Gtk.Image.new_from_icon_name("application-x-addon-symbolic"))
+        open_mods_row.set_activatable(True)
+        open_mods_row.connect("activated", self._on_open_mods_folder)
+        self._mods_group.add(open_mods_row)
+
         modrinth_row = Adw.ActionRow(
             title="Modrinth",
             subtitle="Discover and install compatible mods",
@@ -177,6 +183,17 @@ class FilesView(Gtk.Box):
         modrinth_row.connect("activated", self._push_modrinth_page)
         self._mods_group.add(modrinth_row)
         page.add(self._mods_group)
+
+        self._players_group = Adw.PreferencesGroup(title="Players")
+        players_row = Adw.ActionRow(
+            title="Whitelist and banned players",
+            subtitle="Manage who can join your server",
+        )
+        players_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+        players_row.set_activatable(True)
+        players_row.connect("activated", self._push_players_page)
+        self._players_group.add(players_row)
+        page.add(self._players_group)
 
         scroll.set_child(page)
         return scroll
@@ -343,12 +360,17 @@ class FilesView(Gtk.Box):
         actions = Adw.PreferencesGroup(title="Actions")
         create_row = Adw.ActionRow(
             title="Create backup now",
-            subtitle="Save server files, worlds, configs, and mods",
+            subtitle="Back up world folders only",
         )
         create_row.add_prefix(Gtk.Image.new_from_icon_name("document-save-symbolic"))
+        self._backup_spinner = Gtk.Spinner()
+        self._backup_spinner.set_spinning(False)
+        self._backup_spinner.set_visible(False)
+        create_row.add_suffix(self._backup_spinner)
         create_row.set_activatable(True)
         create_row.connect("activated", lambda *_: self._on_create_backup())
         actions.add(create_row)
+        self._create_backup_row = create_row
 
         open_row = Adw.ActionRow(title="Open backups folder")
         open_row.add_prefix(Gtk.Image.new_from_icon_name("folder-open-symbolic"))
@@ -431,20 +453,33 @@ class FilesView(Gtk.Box):
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         zp = bdir / f"hosty-backup-{stamp}.zip"
         self._backup_busy = True
+        if self._backup_spinner:
+            self._backup_spinner.set_visible(True)
+            self._backup_spinner.start()
+        if self._create_backup_row:
+            self._create_backup_row.set_subtitle("Creating backup...")
 
         def worker():
             try:
+                worlds = _world_dirs(root)
+                if not worlds:
+                    raise RuntimeError("No world folder found to back up.")
+
                 with zipfile.ZipFile(zp, "w", zipfile.ZIP_DEFLATED) as zf:
-                    for item in root.rglob("*"):
-                        if not item.is_file():
-                            continue
-                        if _is_relative_to(item.resolve(), bdir.resolve()):
-                            continue
-                        arc = item.relative_to(root)
-                        zf.write(item, arcname=str(arc).replace("\\", "/"))
+                    for world_dir in worlds:
+                        for item in world_dir.rglob("*"):
+                            if not item.is_file():
+                                continue
+                            arc = item.relative_to(root)
+                            zf.write(item, arcname=str(arc).replace("\\", "/"))
 
                 def ui_ok():
                     self._backup_busy = False
+                    if self._backup_spinner:
+                        self._backup_spinner.stop()
+                        self._backup_spinner.set_visible(False)
+                    if self._create_backup_row:
+                        self._create_backup_row.set_subtitle("Back up world folders only")
                     self._refresh_backup_list()
                     self._toast(f"Saved {zp.name}")
 
@@ -452,6 +487,11 @@ class FilesView(Gtk.Box):
             except Exception as e:
                 def ui_err():
                     self._backup_busy = False
+                    if self._backup_spinner:
+                        self._backup_spinner.stop()
+                        self._backup_spinner.set_visible(False)
+                    if self._create_backup_row:
+                        self._create_backup_row.set_subtitle("Back up world folders only")
                     self._alert("Backup failed", str(e))
 
                 GLib.idle_add(ui_err)
@@ -467,7 +507,7 @@ class FilesView(Gtk.Box):
         dialog.set_heading("Restore backup?")
         dialog.set_body(
             f"Restore “{zp.name}”?\n\n"
-            "Current server files will be replaced (backup archives are kept)."
+            "This replaces only world folders contained in the backup."
         )
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("restore", "Restore")
@@ -506,23 +546,18 @@ class FilesView(Gtk.Box):
                                 raise RuntimeError("Backup archive contains invalid paths.")
                         zf.extractall(tmp_root)
 
-                    for item in root.iterdir():
-                        if item.resolve() == bdir.resolve():
-                            continue
-                        if item.is_dir():
-                            shutil.rmtree(item, ignore_errors=True)
-                        else:
-                            item.unlink(missing_ok=True)
+                    extracted_worlds = [
+                        item for item in tmp_root.iterdir()
+                        if item.is_dir() and (item / "level.dat").exists()
+                    ]
+                    if not extracted_worlds:
+                        raise RuntimeError("This backup does not contain any world data.")
 
-                    for item in tmp_root.iterdir():
-                        if item.name == "hosty-backups":
-                            continue
+                    for item in extracted_worlds:
                         dst = root / item.name
-                        if item.is_dir():
-                            shutil.copytree(item, dst, dirs_exist_ok=True)
-                        else:
-                            dst.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copy2(item, dst)
+                        if dst.is_dir():
+                            shutil.rmtree(dst, ignore_errors=True)
+                        shutil.copytree(item, dst, dirs_exist_ok=True)
 
                 def ui_ok():
                     self._backup_busy = False
@@ -566,6 +601,274 @@ class FilesView(Gtk.Box):
         page = Adw.NavigationPage(title="Modrinth", child=self._build_modrinth_page())
         self._nav.push(page)
 
+    def _push_players_page(self, *_args) -> None:
+        page = Adw.NavigationPage(title="Players", child=self._build_players_page())
+        self._nav.push(page)
+
+    def _build_players_page(self) -> Gtk.Widget:
+        page = Adw.PreferencesPage()
+
+        actions = Adw.PreferencesGroup(
+            title="Manage Players",
+            description="Add names to whitelist or ban list",
+        )
+        self._players_name_row = Adw.EntryRow(title="Player name")
+        self._players_name_row.set_show_apply_button(False)
+        actions.add(self._players_name_row)
+
+        add_row = Adw.ActionRow(
+            title="Add to whitelist",
+            subtitle="Allow this player to join",
+        )
+        add_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
+        add_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+        add_row.set_activatable(True)
+        add_row.connect("activated", self._on_add_whitelist)
+        actions.add(add_row)
+
+        ban_row = Adw.ActionRow(
+            title="Ban player",
+            subtitle="Block this player from joining",
+        )
+        ban_row.add_prefix(Gtk.Image.new_from_icon_name("user-trash-symbolic"))
+        ban_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+        ban_row.set_activatable(True)
+        ban_row.connect("activated", self._on_add_banned)
+        actions.add(ban_row)
+        page.add(actions)
+
+        self._whitelist_group = Adw.PreferencesGroup(title="Whitelist")
+        page.add(self._whitelist_group)
+
+        self._banned_group = Adw.PreferencesGroup(title="Banned Players")
+        page.add(self._banned_group)
+
+        self._refresh_player_lists()
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        sw.set_child(page)
+        return self._build_subpage_shell("Players", sw)
+
+    def _player_list_paths(self) -> tuple[Optional[Path], Optional[Path]]:
+        root = self._server_dir()
+        if not root:
+            return None, None
+        return root / "whitelist.json", root / "banned-players.json"
+
+    def _read_player_list(self, path: Optional[Path]) -> list[dict]:
+        if not path or not path.exists():
+            return []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception:
+            return []
+
+        if not isinstance(raw, list):
+            return []
+
+        out = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "")).strip()
+            if not name:
+                continue
+            out.append(item)
+
+        return sorted(out, key=lambda e: str(e.get("name", "")).lower())
+
+    def _write_player_list(self, path: Optional[Path], entries: list[dict]) -> bool:
+        if not path:
+            return False
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(entries, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def _refresh_player_lists(self) -> None:
+        if not self._whitelist_group or not self._banned_group:
+            return
+
+        self._clear_group_rows(self._whitelist_group, self._whitelist_rows)
+        self._clear_group_rows(self._banned_group, self._banned_rows)
+
+        whitelist_path, banned_path = self._player_list_paths()
+        if not whitelist_path or not banned_path:
+            self._whitelist_rows.append(self._add_info_row(self._whitelist_group, "No server selected"))
+            self._banned_rows.append(self._add_info_row(self._banned_group, "No server selected"))
+            return
+
+        whitelist = self._read_player_list(whitelist_path)
+        banned = self._read_player_list(banned_path)
+
+        if not whitelist:
+            self._whitelist_rows.append(self._add_info_row(self._whitelist_group, "No whitelisted players"))
+        else:
+            for entry in whitelist:
+                name = str(entry.get("name", "")).strip()
+                row = Adw.ActionRow(title=name)
+                row.set_subtitle(str(entry.get("uuid", "Unknown UUID")))
+                row.set_activatable(False)
+                remove_btn = self._icon_button(
+                    "user-trash-symbolic",
+                    "Remove from whitelist",
+                    lambda *_p, n=name: self._remove_whitelist_player(n),
+                    destructive=True,
+                )
+                row.add_suffix(remove_btn)
+                self._whitelist_group.add(row)
+                self._whitelist_rows.append(row)
+
+        if not banned:
+            self._banned_rows.append(self._add_info_row(self._banned_group, "No banned players"))
+        else:
+            for entry in banned:
+                name = str(entry.get("name", "")).strip()
+                reason = str(entry.get("reason", "Banned")).strip()
+                row = Adw.ActionRow(title=name)
+                row.set_subtitle(reason)
+                row.set_activatable(False)
+                remove_btn = self._icon_button(
+                    "user-trash-symbolic",
+                    "Pardon player",
+                    lambda *_p, n=name: self._remove_banned_player(n),
+                    destructive=True,
+                )
+                row.add_suffix(remove_btn)
+                self._banned_group.add(row)
+                self._banned_rows.append(row)
+
+    def _entered_player_name(self) -> str:
+        if not self._players_name_row:
+            return ""
+        return self._players_name_row.get_text().strip()
+
+    def _dash_uuid(self, value: str) -> str:
+        raw = value.strip()
+        if len(raw) != 32:
+            return raw
+        return f"{raw[0:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:32]}"
+
+    def _resolve_profile(self, name: str) -> tuple[str, str]:
+        """Best-effort Mojang profile lookup; returns (resolved_name, uuid)."""
+        try:
+            quoted = urllib.parse.quote(name)
+            req = urllib.request.Request(
+                f"https://api.mojang.com/users/profiles/minecraft/{quoted}",
+                headers={"User-Agent": "Hosty/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=8.0) as resp:
+                if resp.status == 204:
+                    return name, ""
+                data = json.loads(resp.read().decode("utf-8"))
+            resolved_name = str(data.get("name", name)).strip() or name
+            resolved_uuid = self._dash_uuid(str(data.get("id", "")).strip())
+            return resolved_name, resolved_uuid
+        except Exception:
+            return name, ""
+
+    def _on_add_whitelist(self, *_args) -> None:
+        self._add_player(list_type="whitelist")
+
+    def _on_add_banned(self, *_args) -> None:
+        self._add_player(list_type="banned")
+
+    def _add_player(self, list_type: str) -> None:
+        name = self._entered_player_name()
+        if not name:
+            self._alert("Missing player name", "Enter a player name first.")
+            return
+
+        whitelist_path, banned_path = self._player_list_paths()
+        path = whitelist_path if list_type == "whitelist" else banned_path
+        if not path:
+            self._alert("No server selected", "Select a server first.")
+            return
+
+        process = self._process()
+        if process and process.is_running:
+            if list_type == "whitelist":
+                process.send_command(f"whitelist add {name}")
+            else:
+                process.send_command(f"ban {name}")
+
+        def worker():
+            resolved_name, resolved_uuid = self._resolve_profile(name)
+
+            def ui_apply():
+                entries = self._read_player_list(path)
+                if any(str(e.get("name", "")).lower() == resolved_name.lower() for e in entries):
+                    self._toast(f"{resolved_name} is already listed")
+                    return
+
+                if list_type == "whitelist":
+                    entries.append({"uuid": resolved_uuid, "name": resolved_name})
+                    saved = self._write_player_list(path, entries)
+                    if saved:
+                        self._toast(f"Added {resolved_name} to whitelist")
+                else:
+                    entries.append({
+                        "uuid": resolved_uuid,
+                        "name": resolved_name,
+                        "created": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S +0000"),
+                        "source": "Hosty",
+                        "expires": "forever",
+                        "reason": "Banned by Hosty",
+                    })
+                    saved = self._write_player_list(path, entries)
+                    if saved:
+                        self._toast(f"Banned {resolved_name}")
+
+                if saved:
+                    self._refresh_player_lists()
+                    if self._players_name_row:
+                        self._players_name_row.set_text("")
+                else:
+                    self._alert("Could not save", "Failed to write player list file.")
+
+            GLib.idle_add(ui_apply)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _remove_whitelist_player(self, name: str) -> None:
+        whitelist_path, _ = self._player_list_paths()
+        if not whitelist_path:
+            return
+
+        entries = self._read_player_list(whitelist_path)
+        new_entries = [e for e in entries if str(e.get("name", "")).lower() != name.lower()]
+        if len(new_entries) == len(entries):
+            return
+
+        if self._write_player_list(whitelist_path, new_entries):
+            process = self._process()
+            if process and process.is_running:
+                process.send_command(f"whitelist remove {name}")
+            self._refresh_player_lists()
+            self._toast(f"Removed {name} from whitelist")
+
+    def _remove_banned_player(self, name: str) -> None:
+        _, banned_path = self._player_list_paths()
+        if not banned_path:
+            return
+
+        entries = self._read_player_list(banned_path)
+        new_entries = [e for e in entries if str(e.get("name", "")).lower() != name.lower()]
+        if len(new_entries) == len(entries):
+            return
+
+        if self._write_player_list(banned_path, new_entries):
+            process = self._process()
+            if process and process.is_running:
+                process.send_command(f"pardon {name}")
+            self._refresh_player_lists()
+            self._toast(f"Unbanned {name}")
+
     def _build_modrinth_page(self) -> Gtk.Widget:
         from hosty.backend import modrinth_client
 
@@ -594,7 +897,7 @@ class FilesView(Gtk.Box):
 
         mc_ver = self._server_info.mc_version if self._server_info else ""
 
-        filter_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        controls_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
 
         category_items = [
             ("Any category", ""),
@@ -610,7 +913,7 @@ class FilesView(Gtk.Box):
         ]
         cat_dd = Gtk.DropDown.new_from_strings([x[0] for x in category_items])
         cat_dd.set_valign(Gtk.Align.CENTER)
-        filter_row.append(cat_dd)
+        controls_row.append(cat_dd)
 
         sort_items = [
             ("Relevance", "relevance"),
@@ -621,28 +924,18 @@ class FilesView(Gtk.Box):
         ]
         sort_dd = Gtk.DropDown.new_from_strings([x[0] for x in sort_items])
         sort_dd.set_valign(Gtk.Align.CENTER)
-        filter_row.append(sort_dd)
+        sort_dd.set_selected(1)
+        controls_row.append(sort_dd)
 
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
-        filter_row.append(spacer)
-
-        current_only = Gtk.CheckButton(label="Only current Minecraft version")
-        if mc_ver:
-            current_only.set_active(True)
-        else:
-            current_only.set_sensitive(False)
-            current_only.set_active(False)
-        current_only.set_halign(Gtk.Align.END)
-        filter_row.append(current_only)
-        outer.append(filter_row)
+        controls_row.append(spacer)
 
         results = Gtk.ListBox()
         results.set_selection_mode(Gtk.SelectionMode.NONE)
         results.add_css_class("boxed-list")
         results.set_vexpand(True)
 
-        pager = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         prev_btn = Gtk.Button(icon_name="go-previous-symbolic")
         prev_btn.add_css_class("flat")
         next_btn = Gtk.Button(icon_name="go-next-symbolic")
@@ -651,13 +944,11 @@ class FilesView(Gtk.Box):
         page_label.add_css_class("dim-label")
         results_label = Gtk.Label(label="", xalign=1.0)
         results_label.add_css_class("dim-label")
-        results_label.set_hexpand(True)
-        results_label.set_halign(Gtk.Align.END)
-        pager.append(prev_btn)
-        pager.append(next_btn)
-        pager.append(page_label)
-        pager.append(results_label)
-        outer.append(pager)
+        controls_row.append(prev_btn)
+        controls_row.append(next_btn)
+        controls_row.append(page_label)
+        controls_row.append(results_label)
+        outer.append(controls_row)
 
         page_size = 10
         state = {"offset": 0, "total": 0, "busy": False}
@@ -671,7 +962,7 @@ class FilesView(Gtk.Box):
         def selected_sort() -> str:
             idx = int(sort_dd.get_selected())
             if idx < 0 or idx >= len(sort_items):
-                return "relevance"
+                return "downloads"
             return sort_items[idx][1]
 
         def update_pager():
@@ -690,7 +981,6 @@ class FilesView(Gtk.Box):
             btn.set_sensitive(not busy)
             cat_dd.set_sensitive(not busy)
             sort_dd.set_sensitive(not busy)
-            current_only.set_sensitive((not busy) and bool(self._server_info and self._server_info.mc_version))
             update_pager()
 
         def clear_results():
@@ -732,7 +1022,6 @@ class FilesView(Gtk.Box):
             clear_results()
             q = entry.get_text().strip()
             mc_version = self._server_info.mc_version if self._server_info else ""
-            use_version = current_only.get_active() and bool(mc_version)
             qtxt = q
             results_label.set_label("Searching…")
             set_busy(True)
@@ -747,7 +1036,7 @@ class FilesView(Gtk.Box):
                         limit=page_size,
                         offset=offset,
                         sort=sort_key,
-                        game_version=(mc_version if use_version else None),
+                        game_version=(mc_version if mc_version else None),
                         category=category,
                         loader="fabric",
                         server_side_only=True,
@@ -780,7 +1069,6 @@ class FilesView(Gtk.Box):
         entry.connect("activate", lambda *_: do_search(reset=True))
         prev_btn.connect("clicked", on_prev)
         next_btn.connect("clicked", on_next)
-        current_only.connect("toggled", lambda *_: do_search(reset=True))
         cat_dd.connect("notify::selected", lambda *_: do_search(reset=True))
         sort_dd.connect("notify::selected", lambda *_: do_search(reset=True))
 
@@ -848,59 +1136,56 @@ class FilesView(Gtk.Box):
 
         row = Gtk.ListBoxRow()
         row.set_activatable(False)
+        row.add_css_class("mod-card-row")
 
         outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        outer.set_margin_start(12)
-        outer.set_margin_end(12)
-        outer.set_margin_top(10)
-        outer.set_margin_bottom(10)
+        outer.set_margin_start(14)
+        outer.set_margin_end(14)
+        outer.set_margin_top(12)
+        outer.set_margin_bottom(12)
 
         icon = Gtk.Image.new_from_icon_name("application-x-addon-symbolic")
         icon.set_pixel_size(44)
-        outer.append(icon)
+        icon_frame = Gtk.Frame()
+        icon_frame.add_css_class("mod-icon-frame")
+        icon_frame.set_child(icon)
+        outer.append(icon_frame)
         if hit.icon_url:
             self._load_icon_async(icon, hit.icon_url)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         content.set_hexpand(True)
 
-        title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         title = Gtk.Label(label=hit.title, xalign=0.0)
-        title.add_css_class("heading")
+        title.add_css_class("title-4")
         title.set_wrap(True)
         title.set_hexpand(True)
-        title_row.append(title)
+        content.append(title)
 
-        author = Gtk.Label(label=(hit.author or "Unknown"), xalign=1.0)
-        author.add_css_class("caption")
-        author.add_css_class("dim-label")
-        author.set_halign(Gtk.Align.END)
-        title_row.append(author)
-        content.append(title_row)
+        author_label = Gtk.Label(label=f"by {hit.author or 'Unknown'}", xalign=0.0)
+        author_label.add_css_class("caption")
+        author_label.add_css_class("dim-label")
+        content.append(author_label)
 
         desc_text = (hit.description or "No description available.").strip()
         desc = Gtk.Label(label=desc_text, xalign=0.0)
         desc.set_wrap(True)
         desc.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        desc.set_lines(1)
+        desc.set_lines(2)
         desc.set_ellipsize(Pango.EllipsizeMode.END)
         desc.add_css_class("dim-label")
         content.append(desc)
 
-        def chip(text: str, icon_name: str) -> Gtk.Button:
-            b = Gtk.Button()
-            b.add_css_class("flat")
-            b.add_css_class("pill")
-            b.set_sensitive(False)
+        def chip(text: str, icon_name: str) -> Gtk.Box:
             hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            hb.add_css_class("mod-chip")
             ic = Gtk.Image.new_from_icon_name(icon_name)
-            ic.set_pixel_size(14)
+            ic.set_pixel_size(12)
             hb.append(ic)
             lab = Gtk.Label(label=text)
             lab.add_css_class("caption")
             hb.append(lab)
-            b.set_child(hb)
-            return b
+            return hb
 
         category_icons = {
             "optimization": "system-run-symbolic",
@@ -916,8 +1201,8 @@ class FilesView(Gtk.Box):
         }
 
         chip_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        chip_row.append(chip(f"{_format_compact_count(int(hit.downloads or 0))} downloads", "folder-download-symbolic"))
-        for c in hit.categories[:3]:
+        chip_row.append(chip(f"{_format_compact_count(int(hit.downloads or 0))}", "folder-download-symbolic"))
+        for c in hit.categories[:2]:
             key = str(c).strip().lower()
             chip_row.append(chip(str(c), category_icons.get(key, "tag-symbolic")))
         content.append(chip_row)
@@ -929,21 +1214,19 @@ class FilesView(Gtk.Box):
         version_dd = Gtk.DropDown.new_from_strings(["Checking versions…"])
         version_dd.set_hexpand(True)
         version_row.append(version_dd)
-        content.append(version_row)
 
-        btns = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         install_btn = Gtk.Button(label="Install")
         install_btn.add_css_class("suggested-action")
         install_btn.set_halign(Gtk.Align.START)
         if self._looks_installed(hit, installed_names):
             install_btn.set_label("Installed")
             install_btn.set_sensitive(False)
-        btns.append(install_btn)
+        version_row.append(install_btn)
 
         open_btn = Gtk.Button(label="Open page")
         open_btn.add_css_class("flat")
-        btns.append(open_btn)
-        content.append(btns)
+        version_row.append(open_btn)
+        content.append(version_row)
 
         outer.append(content)
         row.set_child(outer)
@@ -978,17 +1261,13 @@ class FilesView(Gtk.Box):
 
             install_btn.set_sensitive(False)
 
-            def ui_no_file():
-                install_btn.set_sensitive(True)
-                self._alert(
-                    "No compatible version",
-                    "No Fabric .jar was found for this Minecraft version.",
-                )
-
-            def ui_ok(fname: str):
+            def ui_ok(fname: str, dep_count: int):
                 install_btn.set_label("Installed")
                 install_btn.set_sensitive(False)
+                if dep_count > 0:
+                    self._toast(f"Installed {dep_count} required dependencies")
                 self._toast(f"Installed {fname}")
+                self._toast("Restart the server for mod changes to apply")
                 self._rebuild_lists()
 
             def ui_err(msg: str):
@@ -1000,10 +1279,34 @@ class FilesView(Gtk.Box):
                     root = self._server_dir()
                     if not root:
                         raise RuntimeError("No server selected.")
-                    dest = root / "mods" / chosen.filename
-                    dest.parent.mkdir(parents=True, exist_ok=True)
+
+                    mods_dir = root / "mods"
+                    mods_dir.mkdir(parents=True, exist_ok=True)
+                    installed_names = {p.name.lower() for p in mods_dir.glob("*.jar")}
+
+                    installed_dep_count = 0
+                    prefs = self._server_manager.preferences if self._server_manager else None
+                    auto_resolve = prefs.auto_resolve_mod_dependencies if prefs else True
+                    if auto_resolve:
+                        deps = modrinth_client.resolve_required_dependencies(
+                            chosen.version_id,
+                            mc_version,
+                            loader="fabric",
+                        )
+                        for dep in deps:
+                            dep_name = dep.filename.lower()
+                            if dep_name in installed_names:
+                                continue
+                            if dep_name == chosen.filename.lower():
+                                continue
+                            dep_dest = mods_dir / dep.filename
+                            modrinth_client.download_to(dep.download_url, dep_dest)
+                            installed_names.add(dep_name)
+                            installed_dep_count += 1
+
+                    dest = mods_dir / chosen.filename
                     modrinth_client.download_to(chosen.download_url, dest)
-                    GLib.idle_add(lambda f=chosen.filename: ui_ok(f))
+                    GLib.idle_add(lambda f=chosen.filename, c=installed_dep_count: ui_ok(f, c))
                 except Exception as e:
                     GLib.idle_add(lambda m=str(e): ui_err(m))
 
@@ -1137,6 +1440,7 @@ class FilesView(Gtk.Box):
                     path.unlink(missing_ok=True)
                     self._rebuild_lists()
                     self._toast(f"Removed “{name}”")
+                    self._toast("Restart the server for mod changes to apply")
                 except OSError as e:
                     self._alert("Could not delete", str(e))
 

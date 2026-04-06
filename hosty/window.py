@@ -1,12 +1,15 @@
 """
 HostyWindow - Main application window with NavigationSplitView.
 """
+import threading
+
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib
 
 from hosty.backend.server_manager import ServerManager
+from hosty.ui.tray_manager import TrayManager
 from hosty.views.sidebar import Sidebar
 from hosty.views.server_detail import ServerDetailView
 from hosty.views.welcome_view import WelcomeView
@@ -19,6 +22,11 @@ class HostyWindow(Adw.ApplicationWindow):
         super().__init__(**kwargs)
         self._server_manager = server_manager
         self._current_server_id = None
+        self._force_close = False
+        self._tray = TrayManager(self._on_tray_restore, self._on_tray_quit)
+        self._inhibit_cookie = 0
+        self._status_poll_id = None
+        self._last_running_server_id = self._server_manager.get_running_server_id()
         
         self.set_title("Hosty")
         self.set_default_size(1100, 700)
@@ -80,6 +88,11 @@ class HostyWindow(Adw.ApplicationWindow):
         
         # Connect server add to switch content
         server_manager.connect('server-added', self._on_server_added)
+        server_manager.connect('server-removed', self._on_server_removed)
+        self.connect("close-request", self._on_close_request)
+        self.connect("notify::visible", self._on_visible_changed)
+
+        self._status_poll_id = GLib.timeout_add(1000, self._poll_runtime_state)
     
     def _on_server_selected(self, sidebar, server_id):
         """Handle server selection from sidebar."""
@@ -102,6 +115,124 @@ class HostyWindow(Adw.ApplicationWindow):
         """Handle new server added - switch to it."""
         # The sidebar handles adding the row and selecting it
         pass
+
+    def _on_server_removed(self, manager, server_id):
+        """Return to welcome when no servers remain."""
+        if not self._server_manager.servers:
+            self._current_server_id = None
+            self._content_stack.set_visible_child_name("welcome")
+
+    def _on_close_request(self, window):
+        """Keep app alive in background using a tray icon when enabled."""
+        if self._force_close:
+            return False
+
+        prefs = self._server_manager.preferences
+        if prefs.run_in_background_on_close:
+            if self._tray.show():
+                self.hide()
+                return True
+
+            # Fallback when tray backend is unavailable.
+            self.hide()
+            self.show_toast("Tray backend not available, Hosty is running in background")
+            return True
+        return False
+
+    def _on_visible_changed(self, *_args):
+        if self.get_visible():
+            self._tray.hide()
+
+    def _on_tray_restore(self):
+        self._tray.hide()
+        self.present()
+
+    def _on_tray_quit(self):
+        self._force_close = True
+        self._tray.hide()
+        self._set_sleep_inhibit(False)
+        app = self.get_application()
+        if app:
+            app.quit()
+
+    def restore_from_background(self):
+        """Bring window back when app is re-activated from launcher."""
+        self._tray.hide()
+
+    def shutdown_background(self):
+        """Ensure tray resources are released on app shutdown."""
+        if self._status_poll_id:
+            GLib.source_remove(self._status_poll_id)
+            self._status_poll_id = None
+
+        self._set_sleep_inhibit(False)
+        self._tray.hide()
+
+    def _poll_runtime_state(self):
+        running_id = self._server_manager.get_running_server_id()
+        prefs = self._server_manager.preferences
+
+        if running_id != self._last_running_server_id:
+            previous_id = self._last_running_server_id
+            self._last_running_server_id = running_id
+
+            if running_id:
+                running_info = self._server_manager.get_server(running_id)
+                running_name = running_info.name if running_info else "Server"
+                if prefs.prevent_sleep_while_running:
+                    self._set_sleep_inhibit(True, f"{running_name} is running")
+            else:
+                self._set_sleep_inhibit(False)
+
+                if previous_id:
+                    if prefs.auto_backup_on_stop:
+                        self._start_auto_backup(previous_id)
+        else:
+            if running_id and prefs.prevent_sleep_while_running and self._inhibit_cookie == 0:
+                self._set_sleep_inhibit(True, "Hosty server is running")
+            elif (not running_id) or (not prefs.prevent_sleep_while_running):
+                self._set_sleep_inhibit(False)
+
+        return True
+
+    def _set_sleep_inhibit(self, enable: bool, reason: str = ""):
+        app = self.get_application()
+        if not app:
+            return
+
+        if enable:
+            if self._inhibit_cookie != 0:
+                return
+            try:
+                self._inhibit_cookie = app.inhibit(
+                    self,
+                    Gtk.ApplicationInhibitFlags.IDLE,
+                    reason or "Hosty server is running",
+                )
+            except Exception:
+                self._inhibit_cookie = 0
+        else:
+            if self._inhibit_cookie == 0:
+                return
+            try:
+                app.uninhibit(self._inhibit_cookie)
+            except Exception:
+                pass
+            self._inhibit_cookie = 0
+
+    def _start_auto_backup(self, server_id: str):
+        def worker():
+            ok, msg = self._server_manager.create_world_backup(server_id, auto=True)
+
+            def ui_done():
+                if ok:
+                    self.show_toast(f"Auto backup created: {msg}")
+                else:
+                    self.show_toast(f"Auto backup skipped: {msg}")
+
+            GLib.idle_add(ui_done)
+
+        threading.Thread(target=worker, daemon=True).start()
     
     def show_toast(self, message: str):
         """Show a toast notification."""

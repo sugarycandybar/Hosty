@@ -6,4 +6,5 @@ Exec=hosty
 Icon=com.github.hosty.Hosty
 Terminal=false
 Categories=Game;Utility;
+Keywords=minecraft;server;fabric;modrinth;
 StartupNotify=true

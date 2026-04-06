@@ -40,6 +40,23 @@ class ModrinthVersion:
     filename: str
 
 
+def _version_to_model(ver: dict[str, Any]) -> Optional[ModrinthVersion]:
+    files = ver.get("files") or []
+    chosen = _pick_primary_file(files)
+    if not chosen:
+        return None
+    return ModrinthVersion(
+        version_id=ver.get("id", ""),
+        name=ver.get("name", ""),
+        version_number=ver.get("version_number", ""),
+        game_versions=[str(v) for v in (ver.get("game_versions") or [])],
+        loaders=[str(v) for v in (ver.get("loaders") or [])],
+        published=ver.get("date_published", ""),
+        download_url=chosen.get("url", ""),
+        filename=chosen.get("filename", "mod.jar"),
+    )
+
+
 def _request_json(url: str, timeout: float = 30.0) -> Any:
     req = urllib.request.Request(
         url,
@@ -71,13 +88,14 @@ def search_mods(
 
     Returns (hits, total_hits).
     """
-    qtext = query.strip() or "fabric"
     base = {
-        "query": qtext,
         "limit": str(max(1, limit)),
         "offset": str(max(0, offset)),
         "index": sort or "relevance",
     }
+    qtext = query.strip()
+    if qtext:
+        base["query"] = qtext
     facets_raw: list[list[str]] = [["project_type:mod"], [f"categories:{loader}"]]
     if server_side_only:
         facets_raw.append(["server_side:required", "server_side:optional"])
@@ -121,23 +139,79 @@ def get_project_versions(project_id: str) -> list[ModrinthVersion]:
 
     out: list[ModrinthVersion] = []
     for ver in raw_versions:
-        files = ver.get("files") or []
-        chosen = _pick_primary_file(files)
-        if not chosen:
-            continue
-        out.append(
-            ModrinthVersion(
-                version_id=ver.get("id", ""),
-                name=ver.get("name", ""),
-                version_number=ver.get("version_number", ""),
-                game_versions=[str(v) for v in (ver.get("game_versions") or [])],
-                loaders=[str(v) for v in (ver.get("loaders") or [])],
-                published=ver.get("date_published", ""),
-                download_url=chosen.get("url", ""),
-                filename=chosen.get("filename", "mod.jar"),
-            )
-        )
+        model = _version_to_model(ver)
+        if model:
+            out.append(model)
     return out
+
+
+def get_version(version_id: str) -> Optional[dict[str, Any]]:
+    """Fetch a single Modrinth version object by id."""
+    url = f"{API}/version/{version_id}"
+    try:
+        data = _request_json(url)
+    except urllib.error.HTTPError:
+        return None
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+def resolve_required_dependencies(
+    version_id: str,
+    game_version: str,
+    loader: str = "fabric",
+) -> list[ModrinthVersion]:
+    """
+    Resolve required dependencies for a given mod version.
+
+    Returns compatible dependency versions with downloadable jar files.
+    """
+    root = get_version(version_id)
+    if not root:
+        return []
+
+    deps = root.get("dependencies") or []
+    resolved: list[ModrinthVersion] = []
+    seen: set[str] = set()
+    loader_l = loader.lower()
+
+    for dep in deps:
+        if not isinstance(dep, dict):
+            continue
+        if str(dep.get("dependency_type", "")).lower() != "required":
+            continue
+
+        version_obj: Optional[ModrinthVersion] = None
+
+        dep_version_id = str(dep.get("version_id", "")).strip()
+        dep_project_id = str(dep.get("project_id", "")).strip()
+
+        if dep_version_id:
+            raw = get_version(dep_version_id)
+            if raw:
+                model = _version_to_model(raw)
+                if model:
+                    has_loader = loader_l in [x.lower() for x in model.loaders]
+                    has_game = (not game_version) or (game_version in model.game_versions)
+                    if has_loader and has_game:
+                        version_obj = model
+
+        if version_obj is None and dep_project_id:
+            version_obj = find_compatible_version(dep_project_id, game_version, loader=loader)
+
+        if version_obj is None:
+            continue
+        if not version_obj.download_url:
+            continue
+
+        key = version_obj.version_id or version_obj.filename
+        if key in seen:
+            continue
+        seen.add(key)
+        resolved.append(version_obj)
+
+    return resolved
 
 
 def find_compatible_versions(

@@ -5,6 +5,7 @@ Handles persistence, creation workflow, and server lifecycle.
 import json
 import uuid
 import shutil
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -17,6 +18,8 @@ from hosty.backend.server_process import ServerProcess
 from hosty.backend.config_manager import ConfigManager
 from hosty.backend.java_manager import JavaManager
 from hosty.backend.download_manager import DownloadManager
+from hosty.backend.playit_manager import PlayitManager
+from hosty.backend.preferences_manager import PreferencesManager
 from hosty.core.events import EventEmitter
 
 
@@ -66,6 +69,8 @@ class ServerManager(EventEmitter):
         self._processes: dict[str, ServerProcess] = {}
         self.java_manager = JavaManager()
         self.download_manager = DownloadManager()
+        self.playit_manager = PlayitManager()
+        self.preferences = PreferencesManager()
         self._load()
     
     def _load(self):
@@ -161,6 +166,9 @@ class ServerManager(EventEmitter):
         info = self._servers.get(server_id)
         if not info:
             return
+
+        if self.playit_manager.is_running_for(server_id):
+            self.playit_manager.stop()
         
         # Stop if running
         process = self._processes.get(server_id)
@@ -189,11 +197,18 @@ class ServerManager(EventEmitter):
             if not java_path:
                 # Try system java as fallback
                 java_path = shutil.which("java")
+
+            config = self.get_config(server_id)
+            max_players = 20
+            if config:
+                config.load()
+                max_players = config.get_int("max-players", 20)
             
             self._processes[server_id] = ServerProcess(
                 server_dir=str(info.server_dir),
                 java_path=java_path or "java",
                 ram_mb=info.ram_mb,
+                max_players=max_players,
             )
         
         return self._processes[server_id]
@@ -218,6 +233,7 @@ class ServerManager(EventEmitter):
         
     def stop_all(self):
         """Stop all running servers."""
+        self.playit_manager.stop()
         for server_id, process in self._processes.items():
             if process.is_running:
                 process.stop()
@@ -227,3 +243,44 @@ class ServerManager(EventEmitter):
                 except Exception:
                     pass
                 process.kill()
+
+    def create_world_backup(self, server_id: str, auto: bool = False) -> tuple[bool, str]:
+        """Create a zip backup containing world folders only."""
+        info = self.get_server(server_id)
+        if not info:
+            return False, "Server not found"
+
+        process = self._processes.get(server_id)
+        if process and process.is_running:
+            return False, "Server is running"
+
+        root = info.server_dir
+        if not root.exists():
+            return False, "Server directory does not exist"
+
+        worlds = [
+            item for item in root.iterdir()
+            if item.is_dir() and (item / "level.dat").exists()
+        ]
+        if not worlds:
+            return False, "No world folder found"
+
+        backups_dir = root / "hosty-backups"
+        backups_dir.mkdir(parents=True, exist_ok=True)
+
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        prefix = "hosty-auto-backup" if auto else "hosty-backup"
+        backup_path = backups_dir / f"{prefix}-{stamp}.zip"
+
+        try:
+            with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for world_dir in worlds:
+                    for item in world_dir.rglob("*"):
+                        if not item.is_file():
+                            continue
+                        arc = item.relative_to(root)
+                        zf.write(item, arcname=str(arc).replace("\\", "/"))
+        except Exception as e:
+            return False, str(e)
+
+        return True, backup_path.name

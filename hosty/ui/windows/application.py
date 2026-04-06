@@ -10,7 +10,6 @@ from typing import Optional
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -45,7 +44,6 @@ from hosty.backend.config_manager import ConfigManager
 from hosty.backend.server_manager import ServerInfo, ServerManager
 from hosty.core.events import set_main_thread_dispatcher
 from hosty.utils.constants import (
-    COMMON_COMMANDS,
     DEFAULT_RAM_MB,
     DEFAULT_SERVER_PROPERTIES,
     MAX_RAM_MB,
@@ -497,12 +495,6 @@ class HostyMainWindow(QMainWindow):
         layout.addWidget(self._console_output)
 
         row = QHBoxLayout()
-        self._command_combo = QComboBox(tab)
-        self._command_combo.addItem("Commands...")
-        for item in COMMON_COMMANDS:
-            self._command_combo.addItem(item["label"])
-        self._command_combo.currentIndexChanged.connect(self._on_common_command)
-        row.addWidget(self._command_combo)
 
         self._command_input = QLineEdit(tab)
         self._command_input.setPlaceholderText("Type a command...")
@@ -769,19 +761,6 @@ class HostyMainWindow(QMainWindow):
         ok = self._selected_process.start()
         if not ok:
             QMessageBox.warning(self, "Start Failed", "Unable to start server process.")
-
-    def _on_common_command(self, index: int) -> None:
-        if index <= 0:
-            return
-        cmd_info = COMMON_COMMANDS[index - 1]
-        cmd = cmd_info["command"]
-        if cmd_info["needs_args"]:
-            self._command_input.setText(cmd)
-            self._command_input.setFocus()
-        else:
-            self._command_input.setText(cmd)
-            self._send_command()
-        self._command_combo.setCurrentIndex(0)
 
     def _send_command(self) -> None:
         text = self._command_input.text().strip()

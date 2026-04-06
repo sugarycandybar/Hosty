@@ -4,9 +4,8 @@ ConsoleView - Server console/terminal view with command input.
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, Gdk, GLib, Pango
+from gi.repository import Gtk, GLib, Pango
 
-from hosty.utils.constants import COMMON_COMMANDS
 from hosty.backend.server_process import ServerProcess
 
 
@@ -51,14 +50,6 @@ class ConsoleView(Gtk.Box):
         input_bar.set_margin_end(8)
         input_bar.set_margin_bottom(8)
         input_bar.set_margin_top(4)
-        
-        # Command dropdown
-        cmd_labels = [c["label"] for c in COMMON_COMMANDS]
-        string_list = Gtk.StringList.new(["Commands..."] + cmd_labels)
-        self._cmd_dropdown = Gtk.DropDown(model=string_list)
-        self._cmd_dropdown.set_tooltip_text("Common commands")
-        self._cmd_dropdown.connect("notify::selected", self._on_command_selected)
-        input_bar.append(self._cmd_dropdown)
         
         # Command entry
         self._entry = Gtk.Entry()
@@ -170,27 +161,3 @@ class ConsoleView(Gtk.Box):
         
         self._entry.set_text("")
     
-    def _on_command_selected(self, dropdown, _pspec):
-        """Handle command dropdown selection."""
-        idx = dropdown.get_selected()
-        if idx == 0:  # "Commands..." placeholder
-            return
-        
-        cmd_info = COMMON_COMMANDS[idx - 1]
-        command = cmd_info["command"]
-        
-        if cmd_info["needs_args"]:
-            # Put command in entry for user to complete
-            self._entry.set_text(command)
-            self._entry.set_position(len(command))
-            self._entry.grab_focus()
-        else:
-            # Execute immediately
-            if self._process:
-                self.append_text(f"> {command}\n")
-                self._process.send_command(command)
-            else:
-                self.append_text("[Hosty] No server process connected\n")
-        
-        # Reset dropdown
-        GLib.idle_add(lambda: dropdown.set_selected(0))

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -19,11 +20,13 @@ class ServerProcess(EventEmitter):
     Emits signals for output and status changes.
     """
     
-    def __init__(self, server_dir: str, java_path: str, ram_mb: int = 2048):
+    def __init__(self, server_dir: str, java_path: str, ram_mb: int = 2048, max_players: int = 20):
         super().__init__()
         self.server_dir = Path(server_dir)
         self.java_path = java_path
         self.ram_mb = ram_mb
+        self.max_players = max(1, int(max_players))
+        self.player_count = 0
         self._process: Optional[subprocess.Popen] = None
         self._status = ServerStatus.STOPPED
         self._stdout_thread: Optional[threading.Thread] = None
@@ -75,6 +78,8 @@ class ServerProcess(EventEmitter):
         ]
         
         self.status = ServerStatus.STARTING
+        self.player_count = 0
+        self._emit_players_changed()
         self._emit_output(f"[Hosty] Starting server with {self.ram_mb}MB RAM...\n")
         self._emit_output(f"[Hosty] Command: {' '.join(cmd)}\n")
         
@@ -140,6 +145,8 @@ class ServerProcess(EventEmitter):
                 pass
             self._pid = None
             self.status = ServerStatus.STOPPED
+            self.player_count = 0
+            self._emit_players_changed()
             self._emit_output("[Hosty] Server killed.\n")
     
     def send_command(self, command: str):
@@ -169,6 +176,8 @@ class ServerProcess(EventEmitter):
                 if self._status == ServerStatus.STARTING:
                     if "Done" in line and "For help" in line:
                         self.status = ServerStatus.RUNNING
+
+                self._update_player_count_from_output(line)
                 
                 self._emit_output(line)
             
@@ -179,8 +188,36 @@ class ServerProcess(EventEmitter):
             if self._status != ServerStatus.STOPPED:
                 self._pid = None
                 self.status = ServerStatus.STOPPED
+                self.player_count = 0
+                self._emit_players_changed()
                 self._emit_output("[Hosty] Server process ended.\n")
     
     def _emit_output(self, text: str):
         """Emit output signal on the main thread."""
         self.emit_on_main_thread('output-received', text)
+
+    def _emit_players_changed(self):
+        self.emit_on_main_thread('players-changed', self.player_count, self.max_players)
+
+    def set_max_players(self, max_players: int):
+        self.max_players = max(1, int(max_players))
+        if self.player_count > self.max_players:
+            self.player_count = self.max_players
+        self._emit_players_changed()
+
+    def _update_player_count_from_output(self, line: str):
+        list_match = re.search(r"There are\s+(\d+)\s+of a max of\s+(\d+)\s+players online", line)
+        if list_match:
+            self.player_count = int(list_match.group(1))
+            self.max_players = max(1, int(list_match.group(2)))
+            self._emit_players_changed()
+            return
+
+        if " joined the game" in line:
+            self.player_count = min(self.max_players, self.player_count + 1)
+            self._emit_players_changed()
+            return
+
+        if " left the game" in line:
+            self.player_count = max(0, self.player_count - 1)
+            self._emit_players_changed()

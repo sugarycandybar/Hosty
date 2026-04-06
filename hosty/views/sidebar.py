@@ -20,10 +20,13 @@ class ServerRow(Adw.ActionRow):
         super().__init__()
         self.server_info = server_info
         self._server_manager = server_manager
+        self._process = None
+        self._status_handler_id = None
+        self._players_handler_id = None
         
         self.set_title(server_info.name)
-        self.set_subtitle(f"Minecraft {server_info.mc_version}")
-        self.set_tooltip_text(f"Minecraft {server_info.mc_version}")
+        self.set_subtitle(self._subtitle_text())
+        self.set_tooltip_text(server_info.mc_version)
         self.set_activatable(True)
         
         # Server icon
@@ -43,8 +46,15 @@ class ServerRow(Adw.ActionRow):
         # Connect to process status changes
         process = server_manager.get_process(server_info.id)
         if process:
-            process.connect('status-changed', self._on_status_changed)
+            self._process = process
+            self._status_handler_id = process.connect('status-changed', self._on_status_changed)
+            self._players_handler_id = process.connect('players-changed', self._on_players_changed)
             self._update_status(process.status)
+
+    def _subtitle_text(self) -> str:
+        if self._process:
+            return f"{self.server_info.mc_version} · {self._process.player_count}/{self._process.max_players}"
+        return self.server_info.mc_version
     
     def _update_icon(self):
         """Update the avatar icon from the server's icon path."""
@@ -61,6 +71,10 @@ class ServerRow(Adw.ActionRow):
     def _on_status_changed(self, process, status):
         """Handle process status change."""
         self._update_status(status)
+
+    def _on_players_changed(self, process, player_count, max_players):
+        """Handle player count updates from server output."""
+        self.set_subtitle(self._subtitle_text())
     
     def _update_status(self, status: str):
         """Update the status dot."""
@@ -72,8 +86,8 @@ class ServerRow(Adw.ActionRow):
         """Update displayed info."""
         self.server_info = server_info
         self.set_title(server_info.name)
-        self.set_subtitle(f"Minecraft {server_info.mc_version}")
-        self.set_tooltip_text(f"Minecraft {server_info.mc_version}")
+        self.set_subtitle(self._subtitle_text())
+        self.set_tooltip_text(server_info.mc_version)
         self._update_icon()
 
 
@@ -176,6 +190,8 @@ class Sidebar(Gtk.Box):
         row = self._rows.pop(server_id, None)
         if row:
             self._listbox.remove(row)
+        if not self._rows:
+            self.emit('server-selected', "")
     
     def _on_server_changed(self, manager, server_id):
         """Handle server info changed."""

@@ -50,11 +50,14 @@ class HostyApplication(Adw.Application):
                 server_manager=self._server_manager,
                 application=self,
             )
-        
+
+        self._window.restore_from_background()
         self._window.present()
     
     def do_shutdown(self):
         """Application shutdown - stop all servers."""
+        if self._window:
+            self._window.shutdown_background()
         if self._server_manager:
             self._server_manager.stop_all()
         set_main_thread_dispatcher(None)
@@ -131,7 +134,7 @@ class HostyApplication(Adw.Application):
         """Show application preferences."""
         from hosty.dialogs.preferences import show_preferences_window
         if self._window:
-            show_preferences_window(self._window)
+            show_preferences_window(self._window, self._server_manager.preferences)
     
     def _on_rename_server(self, action, param):
         """Show rename dialog for a server."""

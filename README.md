@@ -23,7 +23,9 @@ It helps you set up a server, run it, and manage it without juggling lots of sep
 ### Linux
 
 1. Install GTK4/libadwaita and PyGObject system packages.
-2. In this folder, run:
+2. Install Python dependencies:
+	python3 -m pip install requests psutil pystray Pillow
+3. In this folder, run:
 	python3 hosty.py
 
 ## Project layout

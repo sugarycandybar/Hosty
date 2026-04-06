@@ -52,7 +52,7 @@ class PropertiesView(Gtk.Box):
         general = Adw.PreferencesGroup(title="General")
 
         self._widgets["motd"] = self._add_entry_row(
-            general, "Message of the Day", "motd", "A Hosty Minecraft Server"
+            general, "Message of the Day", "motd", "a hosty server"
         )
         
         self._widgets["max-players"] = self._add_spin_row(
@@ -175,6 +175,7 @@ class PropertiesView(Gtk.Box):
         save_btn.add_css_class("suggested-action")
         save_btn.add_css_class("pill")
         save_btn.connect("clicked", self._on_save_clicked)
+        self._save_btn = save_btn
         save_bar.append(save_btn)
         
         self.append(save_bar)
@@ -313,5 +314,14 @@ class PropertiesView(Gtk.Box):
         if self._server_manager and self._server_info and self._ram_row:
             ram_mb = int(self._ram_row.get_value())
             self._server_manager.update_server_ram(self._server_info.id, ram_mb)
+
+            process = self._server_manager.get_process(self._server_info.id)
+            if process:
+                process.set_max_players(self._config.get_int("max-players", 20))
         
         self._banner.set_revealed(True)
+
+    def focus_save_button(self):
+        """Avoid auto-focusing MOTD when entering this tab."""
+        if hasattr(self, "_save_btn") and self._save_btn:
+            self._save_btn.grab_focus()

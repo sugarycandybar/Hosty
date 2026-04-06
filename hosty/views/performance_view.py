@@ -142,9 +142,9 @@ class PerformanceView(Gtk.Box):
         self._tps_value = 20.0
         self._tps_handler_id = None
         
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_vexpand(True)
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._scrolled = Gtk.ScrolledWindow()
+        self._scrolled.set_vexpand(True)
+        self._scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         content.set_margin_top(24)
@@ -192,9 +192,14 @@ class PerformanceView(Gtk.Box):
         
         content.append(self._info_group)
         
-        scrolled.set_child(content)
-        self.append(scrolled)
+        self._scrolled.set_child(content)
+        self.append(self._scrolled)
         self.reset()
+
+    def scroll_to_top(self):
+        vadj = self._scrolled.get_vadjustment()
+        if vadj:
+            vadj.set_value(vadj.get_lower())
     
     def set_process(self, process: ServerProcess):
         """Connect to a server process for monitoring."""
@@ -259,7 +264,10 @@ class PerformanceView(Gtk.Box):
                     self._psutil_process = psutil.Process(pid)
                 
                 # CPU
-                cpu = self._psutil_process.cpu_percent(interval=None)
+                raw_cpu = self._psutil_process.cpu_percent(interval=None)
+                cpu_count = psutil.cpu_count() or 1
+                cpu = raw_cpu / float(cpu_count)
+                cpu = max(0.0, min(100.0, cpu))
                 self._cpu_card.add_value(cpu, f"{cpu:.1f}")
                 
                 # Memory

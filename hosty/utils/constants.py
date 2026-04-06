@@ -118,7 +118,7 @@ def get_required_java_version(mc_version: str) -> int:
 
 # Default server.properties values
 DEFAULT_SERVER_PROPERTIES = {
-    "motd": "A Hosty Minecraft Server",
+    "motd": "a hosty server",
     "max-players": "20",
     "difficulty": "easy",
     "gamemode": "survival",
@@ -143,30 +143,34 @@ DEFAULT_SERVER_PROPERTIES = {
 # Common server commands
 COMMON_COMMANDS = [
     {"label": "Stop Server", "command": "/stop", "needs_args": False},
-    {"label": "Say Message...", "command": "/say ", "needs_args": True},
+    {"label": "Save All", "command": "/save-all", "needs_args": False},
     {"label": "List Players", "command": "/list", "needs_args": False},
+    {"label": "Say Message...", "command": "/say ", "needs_args": True},
+
     {"label": "Op Player...", "command": "/op ", "needs_args": True},
     {"label": "Deop Player...", "command": "/deop ", "needs_args": True},
+    {"label": "Kick Player...", "command": "/kick ", "needs_args": True},
+    {"label": "Ban Player...", "command": "/ban ", "needs_args": True},
+    {"label": "Pardon Player...", "command": "/pardon ", "needs_args": True},
     {"label": "Whitelist Add...", "command": "/whitelist add ", "needs_args": True},
     {"label": "Whitelist Remove...", "command": "/whitelist remove ", "needs_args": True},
+
     {"label": "Gamemode Survival...", "command": "/gamemode survival ", "needs_args": True},
     {"label": "Gamemode Creative...", "command": "/gamemode creative ", "needs_args": True},
     {"label": "Gamemode Spectator...", "command": "/gamemode spectator ", "needs_args": True},
+
     {"label": "Set Difficulty Peaceful", "command": "/difficulty peaceful", "needs_args": False},
     {"label": "Set Difficulty Easy", "command": "/difficulty easy", "needs_args": False},
     {"label": "Set Difficulty Normal", "command": "/difficulty normal", "needs_args": False},
     {"label": "Set Difficulty Hard", "command": "/difficulty hard", "needs_args": False},
+
     {"label": "Set Time Day", "command": "/time set day", "needs_args": False},
     {"label": "Set Time Night", "command": "/time set night", "needs_args": False},
     {"label": "Set Weather Clear", "command": "/weather clear", "needs_args": False},
     {"label": "Set Weather Rain", "command": "/weather rain", "needs_args": False},
     {"label": "Set Weather Thunder", "command": "/weather thunder", "needs_args": False},
     {"label": "Teleport Player...", "command": "/tp ", "needs_args": True},
-    {"label": "Ban Player...", "command": "/ban ", "needs_args": True},
-    {"label": "Pardon Player...", "command": "/pardon ", "needs_args": True},
-    {"label": "Kick Player...", "command": "/kick ", "needs_args": True},
     {"label": "Show Seed", "command": "/seed", "needs_args": False},
-    {"label": "Save All", "command": "/save-all", "needs_args": False},
 ]
 
 # Difficulty options

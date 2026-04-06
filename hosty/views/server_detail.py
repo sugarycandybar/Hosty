@@ -10,6 +10,7 @@ from typing import Optional
 from gi.repository import Gtk, Adw, GLib
 
 from hosty.views.console_view import ConsoleView
+from hosty.views.connect_view import ConnectView
 from hosty.views.performance_view import PerformanceView
 from hosty.views.properties_view import PropertiesView
 from hosty.views.files_view import FilesView
@@ -63,12 +64,18 @@ class ServerDetailView(Gtk.Box):
         
         self._view_stack = Adw.ViewStack()
         self._view_stack.set_vexpand(True)
+        self._view_stack.connect("notify::visible-child-name", self._on_tab_changed)
         self._view_switcher_title.set_stack(self._view_stack)
         
         # Console view
         self._console_view = ConsoleView()
         self._view_stack.add_titled_with_icon(
             self._console_view, "console", "Console", "utilities-terminal-symbolic"
+        )
+
+        self._connect_view = ConnectView()
+        self._view_stack.add_titled_with_icon(
+            self._connect_view, "connect", "Connect", "network-workgroup-symbolic"
         )
         
         # Performance view
@@ -126,6 +133,7 @@ class ServerDetailView(Gtk.Box):
         config = self._server_manager.get_config(server_info.id)
         self._props_view.set_config(config, self._server_manager, server_info)
         self._files_view.set_server(server_info, self._server_manager)
+        self._connect_view.set_server(server_info, self._server_manager)
         
         # Update toggle from the selected server's process
         self._update_toggle_for_selected(
@@ -248,6 +256,14 @@ class ServerDetailView(Gtk.Box):
             self._toggle_btn.set_tooltip_text(
                 "Another server is already running" if blocked else None
             )
+
+    def _on_tab_changed(self, stack, _pspec):
+        """Keep tab navigation predictable when changing pages."""
+        tab_name = stack.get_visible_child_name()
+        if tab_name == "performance":
+            self._perf_view.scroll_to_top()
+        elif tab_name == "properties":
+            GLib.idle_add(self._props_view.focus_save_button)
     
     def _on_toggle_clicked(self, button):
         """Handle start/stop button click."""

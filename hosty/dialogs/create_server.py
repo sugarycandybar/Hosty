@@ -11,7 +11,7 @@ from hosty.backend.server_manager import ServerManager
 from hosty.backend.download_manager import DownloadManager
 from hosty.backend.java_manager import JavaManager
 from hosty.utils.constants import (
-    DEFAULT_RAM_MB, MIN_RAM_MB, MAX_RAM_MB, get_required_java_version
+    DEFAULT_RAM_MB, MIN_RAM_MB, MAX_RAM_MB, get_required_java_version, DEFAULT_SERVER_PROPERTIES
 )
 
 
@@ -86,6 +86,19 @@ class CreateServerDialog(Adw.Dialog):
         self._name_entry.set_text("My Server")
         self._name_entry.connect("changed", self._validate)
         info_group.add(self._name_entry)
+
+        self._seed_entry = Adw.EntryRow(title="World Seed")
+        self._seed_entry.set_text("")
+        self._seed_entry.set_show_apply_button(False)
+        info_group.add(self._seed_entry)
+
+        self._eula_row = Adw.SwitchRow(
+            title="I agree to Minecraft EULA",
+            subtitle="Required to start the server"
+        )
+        self._eula_row.set_active(False)
+        self._eula_row.connect("notify::active", self._validate)
+        info_group.add(self._eula_row)
         
         page.add(info_group)
         
@@ -130,7 +143,7 @@ class CreateServerDialog(Adw.Dialog):
         )
         
         ram_adj = Gtk.Adjustment(
-            value=DEFAULT_RAM_MB,
+            value=self._server_manager.preferences.default_ram_mb,
             lower=MIN_RAM_MB,
             upper=MAX_RAM_MB,
             step_increment=256,
@@ -232,7 +245,8 @@ class CreateServerDialog(Adw.Dialog):
         """Validate form and enable/disable create button."""
         name = self._name_entry.get_text().strip()
         has_versions = len(self._game_versions) > 0
-        self._create_btn.set_sensitive(bool(name) and has_versions)
+        has_eula = self._eula_row.get_active()
+        self._create_btn.set_sensitive(bool(name) and has_versions and has_eula)
     
     def _on_create_clicked(self, button):
         """Start the server creation process."""
@@ -241,8 +255,10 @@ class CreateServerDialog(Adw.Dialog):
         mc_version = self._game_versions[mc_idx] if mc_idx < len(self._game_versions) else ""
         loader_version = self._loader_versions[0] if self._loader_versions else ""
         ram_mb = int(self._ram_row.get_value())
+        seed = self._seed_entry.get_text().strip()
+        eula_accepted = self._eula_row.get_active()
         
-        if not name or not mc_version:
+        if not name or not mc_version or not eula_accepted:
             return
         
         # Switch to progress page
@@ -252,12 +268,12 @@ class CreateServerDialog(Adw.Dialog):
         # Run installation in background
         thread = threading.Thread(
             target=self._install_thread,
-            args=(name, mc_version, loader_version, ram_mb),
+            args=(name, mc_version, loader_version, ram_mb, seed, eula_accepted),
             daemon=True,
         )
         thread.start()
     
-    def _install_thread(self, name, mc_version, loader_version, ram_mb):
+    def _install_thread(self, name, mc_version, loader_version, ram_mb, seed, eula_accepted):
         """Background installation thread."""
         try:
             java_ver = get_required_java_version(mc_version)
@@ -343,7 +359,11 @@ class CreateServerDialog(Adw.Dialog):
             self._update_progress(0.95, "Accepting EULA...", "")
             from hosty.backend.config_manager import ConfigManager
             config = ConfigManager(str(server_info.server_dir))
-            config.set_eula(True)
+            config.load()
+            config.set_value("motd", DEFAULT_SERVER_PROPERTIES.get("motd", "a hosty server"))
+            config.set_value("level-seed", seed)
+            config.save()
+            config.set_eula(bool(eula_accepted))
             
             # Done!
             self._show_success(server_info.id)

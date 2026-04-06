@@ -2,13 +2,37 @@
 <component type="desktop-application">
   <id>com.github.hosty.Hosty</id>
   <name>Hosty</name>
-  <summary>Fabric Minecraft server manager</summary>
+  <summary>Create and manage local Fabric Minecraft servers</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
+  <developer id="com.github.hosty">
+    <name>Hosty Contributors</name>
+  </developer>
+  <update_contact>maintainers@hosty.invalid</update_contact>
   <description>
-    <p>Hosty helps you create, run, and manage local Fabric Minecraft servers from a desktop UI.</p>
+    <p>Hosty helps you create, run, and manage local Fabric Minecraft servers with a native GNOME interface.</p>
+    <p>Use Hosty to create servers, monitor performance, edit server properties, manage worlds and backups, and install compatible mods from Modrinth.</p>
   </description>
+  <categories>
+    <category>Game</category>
+    <category>Utility</category>
+  </categories>
+  <keywords>
+    <keyword>minecraft</keyword>
+    <keyword>server</keyword>
+    <keyword>fabric</keyword>
+    <keyword>modrinth</keyword>
+    <keyword>java</keyword>
+  </keywords>
   <launchable type="desktop-id">com.github.hosty.Hosty.desktop</launchable>
   <url type="homepage">https://github.com/hosty</url>
+  <url type="bugtracker">https://github.com/hosty/issues</url>
+  <releases>
+    <release version="1.0.0" date="2026-04-06">
+      <description>
+        <p>Initial public release of Hosty.</p>
+      </description>
+    </release>
+  </releases>
   <content_rating type="oars-1.1"/>
 </component>
