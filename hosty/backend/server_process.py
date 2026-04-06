@@ -3,6 +3,7 @@ ServerProcess - Manage a Minecraft server subprocess.
 Handles stdin/stdout/stderr piping and lifecycle management.
 """
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -78,15 +79,18 @@ class ServerProcess(EventEmitter):
         self._emit_output(f"[Hosty] Command: {' '.join(cmd)}\n")
         
         try:
-            self._process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                cwd=str(self.server_dir),
-                text=True,
-                bufsize=1,
-            )
+            popen_kwargs = {
+                "stdin": subprocess.PIPE,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "cwd": str(self.server_dir),
+                "text": True,
+                "bufsize": 1,
+            }
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+            self._process = subprocess.Popen(cmd, **popen_kwargs)
             self._pid = self._process.pid
             
             # Start output reader thread

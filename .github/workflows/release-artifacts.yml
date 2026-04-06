@@ -99,36 +99,53 @@ jobs:
           name: hosty-linux-rpm
           path: ./*.rpm
 
-  build-flatpak:
-    name: Build Flatpak Bundle
+  build-linux-appimage:
+    name: Build Linux AppImage
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install flatpak tooling
+      - name: Read app version
+        id: version
+        run: |
+          VERSION=$(python3 -c "import re; from pathlib import Path; text = Path('hosty/utils/constants.py').read_text(encoding='utf-8'); match = re.search(r'^APP_VERSION\\s*=\\s*\"([^\"]+)\"', text, re.MULTILINE); print(match.group(1) if match else '')")
+          if [ -z "$VERSION" ]; then
+            echo "APP_VERSION not found" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install AppImage tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder
+          sudo apt-get install -y wget
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
 
-      - name: Add Flathub remote
+      - name: Build AppDir payload
         run: |
-          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          rm -rf AppDir
+          mkdir -p AppDir/usr/share/hosty
 
-      - name: Build flatpak repo
+          cp -a hosty AppDir/usr/share/hosty/
+          cp hosty.py AppDir/usr/share/hosty/hosty.py
+          cp packaging/linux/com.github.hosty.Hosty.desktop AppDir/com.github.hosty.Hosty.desktop
+          cp packaging/linux/com.github.hosty.Hosty.svg AppDir/com.github.hosty.Hosty.svg
+
+          printf '%s\n' '#!/usr/bin/env sh' 'HERE="$(dirname "$(readlink -f "$0")")"' 'exec /usr/bin/env python3 "$HERE/usr/share/hosty/hosty.py" "$@"' > AppDir/AppRun
+          chmod +x AppDir/AppRun
+
+      - name: Build AppImage
         run: |
-          flatpak-builder --user --install-deps-from=flathub --default-branch=stable --repo=repo --force-clean build-dir packaging/flatpak/com.github.hosty.Hosty.yml
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir "Hosty-${{ steps.version.outputs.version }}-x86_64.AppImage"
 
-      - name: Build flatpak bundle
-        run: |
-          flatpak build-bundle repo Hosty.flatpak com.github.hosty.Hosty stable
-
-      - name: Upload flatpak artifact
+      - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hosty-linux-flatpak
-          path: Hosty.flatpak
+          name: hosty-linux-appimage
+          path: ./*.AppImage
 
   upload-release-assets:
     name: Upload assets to GitHub Release
@@ -136,7 +153,7 @@ jobs:
     needs:
       - build-windows-exe
       - build-linux-rpm
-      - build-flatpak
+      - build-linux-appimage
     if: github.event_name == 'release'
 
     steps:
@@ -152,4 +169,4 @@ jobs:
           files: |
             release-assets/**/*.exe
             release-assets/**/*.rpm
-            release-assets/**/*.flatpak
+            release-assets/**/*.AppImage
