@@ -32,3 +32,11 @@ It helps you set up a server, run it, and manage it without juggling lots of sep
 - hosty/ contains the app code (UI, backend, dialogs, and utilities)
 
 Hosty is built for people who want a clean way to host Fabric servers locally. 🚀
+
+## Images
+
+Included image assets:
+
+- [Hosty/images/console.png](images/console.png)
+- [Hosty/images/mods.png](images/mods.png)
+- [Hosty/images/properties.png](images/properties.png)
