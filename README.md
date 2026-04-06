@@ -38,11 +38,19 @@ Hosty is built for people who want a clean way to host Fabric servers locally. ð
 Screenshots â€” Hosty in action:
 
 <p align="center">
-	<img src="images/console.png" alt="Console view" width="320" />
-	<img src="images/mods.png" alt="Mods view" width="320" />
-	<img src="images/properties.png" alt="Properties view" width="320" />
+  <img src="images/console.png" alt="Console view" width="800" />
 </p>
 
 - **Console:** View server output, chat, and run server commands.
+
+<p align="center">
+  <img src="images/mods.png" alt="Mods view" width="800" />
+</p>
+
 - **Mods:** Manage installed mods and downloads.
+
+<p align="center">
+  <img src="images/properties.png" alt="Properties view" width="800" />
+</p>
+
 - **Properties:** Edit `server.properties` and configuration options.
