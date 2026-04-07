@@ -8,6 +8,7 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib
 
+from hosty.backend.playit_config import load_playit_config
 from hosty.backend.server_manager import ServerManager
 from hosty.ui.tray_manager import TrayManager
 from hosty.views.sidebar import Sidebar
@@ -27,6 +28,7 @@ class HostyWindow(Adw.ApplicationWindow):
         self._inhibit_cookie = 0
         self._status_poll_id = None
         self._last_running_server_id = self._server_manager.get_running_server_id()
+        self._playit_starting_server_id = None
         
         self.set_title("Hosty")
         self.set_default_size(1100, 700)
@@ -181,8 +183,11 @@ class HostyWindow(Adw.ApplicationWindow):
                 running_name = running_info.name if running_info else "Server"
                 if prefs.prevent_sleep_while_running:
                     self._set_sleep_inhibit(True, f"{running_name} is running")
+
+                self._apply_playit_runtime(previous_id, running_id)
             else:
                 self._set_sleep_inhibit(False)
+                self._apply_playit_runtime(previous_id, None)
 
                 if previous_id:
                     if prefs.auto_backup_on_stop:
@@ -193,7 +198,60 @@ class HostyWindow(Adw.ApplicationWindow):
             elif (not running_id) or (not prefs.prevent_sleep_while_running):
                 self._set_sleep_inhibit(False)
 
+            # Keep playit in sync even when server runtime does not change.
+            self._apply_playit_runtime(None, running_id)
+
         return True
+
+    def _load_playit_config(self, server_id: str) -> dict:
+        info = self._server_manager.get_server(server_id)
+        if not info:
+            return {}
+        return load_playit_config(info.server_dir)
+
+    def _apply_playit_runtime(self, previous_id: str | None, running_id: str | None):
+        playit = self._server_manager.playit_manager
+
+        # Stop the current tunnel if the associated server stopped.
+        if previous_id and previous_id != running_id and playit.is_running_for(previous_id):
+            playit.stop()
+
+        if not running_id:
+            return
+
+        cfg = self._load_playit_config(running_id)
+        if not cfg.get("enabled", False):
+            return
+        if not cfg.get("auto_start", True):
+            return
+
+        if playit.is_running_for(running_id):
+            return
+
+        if self._playit_starting_server_id == running_id:
+            return
+
+        info = self._server_manager.get_server(running_id)
+        if not info:
+            return
+
+        self._playit_starting_server_id = running_id
+
+        def worker():
+            playit.start(
+                running_id,
+                str(info.server_dir),
+                secret=str(cfg.get("secret", "")).strip(),
+                auto_install=bool(cfg.get("auto_install", True)),
+            )
+
+            def clear_starting_flag():
+                if self._playit_starting_server_id == running_id:
+                    self._playit_starting_server_id = None
+
+            GLib.idle_add(clear_starting_flag)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _set_sleep_inhibit(self, enable: bool, reason: str = ""):
         app = self.get_application()
