@@ -39,7 +39,22 @@ jobs:
         run: |
           $version = "${{ steps.version.outputs.version }}"
           $tag = "${{ github.event.release.tag_name }}"
-          if ($tag -ne $version -and $tag -ne "v$version") {
+          function Normalize-Version([string]$value) {
+            $v = ($value ?? "").Trim()
+            $v = $v -replace '^[vV]', ''
+            if ($v -match '^\d+\.\d+$') {
+              return "$v.0"
+            }
+            if ($v -match '^\d+\.\d+\.\d+$') {
+              return $v
+            }
+            return $null
+          }
+
+          $normalizedVersion = Normalize-Version $version
+          $normalizedTag = Normalize-Version $tag
+
+          if (-not $normalizedVersion -or -not $normalizedTag -or $normalizedTag -ne $normalizedVersion) {
             Write-Error "Release tag '$tag' does not match APP_VERSION '$version'"
             exit 1
           }
@@ -87,7 +102,23 @@ jobs:
         run: |
           TAG="${{ github.event.release.tag_name }}"
           VERSION="${{ steps.version.outputs.version }}"
-          if [ "$TAG" != "$VERSION" ] && [ "$TAG" != "v$VERSION" ]; then
+
+          normalize_version() {
+            value="$1"
+            value="${value#v}"
+            value="${value#V}"
+            if [[ "$value" =~ ^[0-9]+\.[0-9]+$ ]]; then
+              echo "$value.0"
+              return 0
+            fi
+            if [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "$value"
+              return 0
+            fi
+            return 1
+          }
+
+          if ! NORMALIZED_TAG="$(normalize_version "$TAG")" || ! NORMALIZED_VERSION="$(normalize_version "$VERSION")" || [ "$NORMALIZED_TAG" != "$NORMALIZED_VERSION" ]; then
             echo "Release tag '$TAG' does not match APP_VERSION '$VERSION'" >&2
             exit 1
           fi
