@@ -26,7 +26,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = python -c 'import re; from pathlib import Path; text = Path("hosty/utils/constants.py").read_text(encoding="utf-8"); match = re.search(r"^APP_VERSION\\s*=\\s*\"([^\"]+)\"", text, re.MULTILINE); print(match.group(1) if match else "")'
+          $version = python -c 'import ast; from pathlib import Path; tree = ast.parse(Path("hosty/utils/constants.py").read_text(encoding="utf-8")); print(next((node.value.value for node in tree.body if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id == "APP_VERSION" and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)), ""))'
           if (-not $version) {
             Write-Error "APP_VERSION not found"
             exit 1
