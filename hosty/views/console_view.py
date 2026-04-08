@@ -4,7 +4,8 @@ ConsoleView - Server console/terminal view with command input.
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, GLib, Pango
+gi.require_version('Gdk', '4.0')
+from gi.repository import Gtk, GLib, Pango, Gdk
 
 from hosty.backend.server_process import ServerProcess
 
@@ -17,6 +18,23 @@ class ConsoleView(Gtk.Box):
         self._process = None
         self._output_handler_id = None
         self._auto_scroll = True
+        self._tab_prefix = ""
+        self._tab_matches: list[str] = []
+        self._tab_index = -1
+        self._applying_completion = False
+        self._command_words = sorted({
+            "advancement", "attribute", "ban", "ban-ip", "banlist", "bossbar", "clear",
+            "clone", "data", "datapack", "debug", "deop", "difficulty", "effect",
+            "enchant", "execute", "experience", "fill", "forceload", "function",
+            "gamemode", "gamerule", "give", "help", "item", "jfr", "kick", "kill",
+            "list", "locate", "loot", "me", "msg", "op", "pardon", "pardon-ip",
+            "particle", "perf", "place", "playsound", "publish", "recipe", "reload",
+            "save-all", "save-off", "save-on", "say", "schedule", "scoreboard", "seed",
+            "setblock", "setidletimeout", "setworldspawn", "spawnpoint", "spectate",
+            "spreadplayers", "stop", "stopsound", "summon", "tag", "team", "teammsg",
+            "teleport", "tell", "tellraw", "time", "title", "tm", "tp", "trigger",
+            "w", "weather", "whitelist", "worldborder", "xp",
+        })
         
         # ===== Console output area =====
         self._scrolled = Gtk.ScrolledWindow()
@@ -57,6 +75,10 @@ class ConsoleView(Gtk.Box):
         self._entry.set_hexpand(True)
         self._entry.add_css_class("console-input")
         self._entry.connect("activate", self._on_entry_activate)
+        self._entry.connect("changed", self._on_entry_changed)
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_entry_key_pressed)
+        self._entry.add_controller(key_controller)
         input_bar.append(self._entry)
         
         # Send button
@@ -141,6 +163,46 @@ class ConsoleView(Gtk.Box):
     def _on_entry_activate(self, entry):
         """Handle Enter key in command entry."""
         self._send_command()
+
+    def _on_entry_changed(self, entry):
+        if self._applying_completion:
+            return
+        self._tab_prefix = ""
+        self._tab_matches = []
+        self._tab_index = -1
+
+    def _on_entry_key_pressed(self, _controller, keyval, _keycode, state):
+        if keyval not in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
+            return False
+
+        text = self._entry.get_text()
+        if not text.strip() or " " in text.strip():
+            return False
+
+        has_slash = text.startswith("/")
+        prefix = text.strip().lstrip("/").lower()
+        if not prefix:
+            return False
+
+        if prefix != self._tab_prefix:
+            self._tab_prefix = prefix
+            self._tab_matches = [cmd for cmd in self._command_words if cmd.startswith(prefix)]
+            self._tab_index = -1
+
+        if not self._tab_matches:
+            return True
+
+        backwards = bool(state & Gdk.ModifierType.SHIFT_MASK)
+        step = -1 if backwards else 1
+        self._tab_index = (self._tab_index + step) % len(self._tab_matches)
+        cmd = self._tab_matches[self._tab_index]
+        completed = f"/{cmd}" if has_slash else cmd
+
+        self._applying_completion = True
+        self._entry.set_text(completed)
+        self._entry.set_position(-1)
+        self._applying_completion = False
+        return True
     
     def _on_send_clicked(self, button):
         """Handle send button click."""
@@ -160,4 +222,7 @@ class ConsoleView(Gtk.Box):
             self.append_text("[Hosty] No server process connected\n")
         
         self._entry.set_text("")
+        self._tab_prefix = ""
+        self._tab_matches = []
+        self._tab_index = -1
     

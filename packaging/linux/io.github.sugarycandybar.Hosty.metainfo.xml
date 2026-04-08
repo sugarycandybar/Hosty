@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.github.hosty.Hosty</id>
+  <id>io.github.sugarycandybar.Hosty</id>
   <name>Hosty</name>
   <summary>Create and manage local Fabric Minecraft servers</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
-  <developer id="com.github.hosty">
-    <name>Hosty Contributors</name>
+  <developer id="io.github.sugarycandybar">
+    <name>Sugarycandybar</name>
   </developer>
   <update_contact>maintainers@hosty.invalid</update_contact>
   <description>
@@ -24,7 +24,7 @@
     <keyword>modrinth</keyword>
     <keyword>java</keyword>
   </keywords>
-  <launchable type="desktop-id">com.github.hosty.Hosty.desktop</launchable>
+  <launchable type="desktop-id">io.github.sugarycandybar.Hosty.desktop</launchable>
   <url type="homepage">https://github.com/sugarycandybar/Hosty</url>
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
   <releases>

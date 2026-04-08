@@ -42,11 +42,17 @@ class CreateServerDialog(Adw.Dialog):
         cancel_btn = Gtk.Button(label="Cancel")
         cancel_btn.connect("clicked", lambda b: self.close())
         header.pack_start(cancel_btn)
+
+        self._back_btn = Gtk.Button(label="Back")
+        self._back_btn.add_css_class("flat")
+        self._back_btn.set_visible(False)
+        self._back_btn.connect("clicked", self._on_back_clicked)
+        header.pack_start(self._back_btn)
         
-        self._create_btn = Gtk.Button(label="Create")
+        self._create_btn = Gtk.Button(label="Next")
         self._create_btn.add_css_class("suggested-action")
         self._create_btn.set_sensitive(False)
-        self._create_btn.connect("clicked", self._on_create_clicked)
+        self._create_btn.connect("clicked", self._on_primary_clicked)
         header.pack_end(self._create_btn)
         
         self._toolbar_view.add_top_bar(header)
@@ -58,10 +64,16 @@ class CreateServerDialog(Adw.Dialog):
         # ===== Configuration Page =====
         config_page = self._build_config_page()
         self._stack.add_named(config_page, "config")
+
+        # ===== EULA Page =====
+        eula_page = self._build_eula_page()
+        self._stack.add_named(eula_page, "eula")
         
         # ===== Progress Page =====
         progress_page = self._build_progress_page()
         self._stack.add_named(progress_page, "progress")
+
+        self._stack.connect("notify::visible-child-name", self._on_page_changed)
         
         self._toolbar_view.set_content(self._stack)
         self.set_child(self._toolbar_view)
@@ -91,14 +103,6 @@ class CreateServerDialog(Adw.Dialog):
         self._seed_entry.set_text("")
         self._seed_entry.set_show_apply_button(False)
         info_group.add(self._seed_entry)
-
-        self._eula_row = Adw.SwitchRow(
-            title="I agree to Minecraft EULA",
-            subtitle="Required to start the server"
-        )
-        self._eula_row.set_active(False)
-        self._eula_row.connect("notify::active", self._validate)
-        info_group.add(self._eula_row)
         
         page.add(info_group)
         
@@ -158,6 +162,32 @@ class CreateServerDialog(Adw.Dialog):
         
         page.add(resources_group)
         
+        scrolled.set_child(page)
+        return scrolled
+
+    def _build_eula_page(self) -> Gtk.Widget:
+        """Build the EULA confirmation page."""
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+        page = Adw.PreferencesPage()
+        group = Adw.PreferencesGroup(
+            title="Minecraft EULA",
+            description=(
+                "You must agree to the Minecraft EULA before Hosty can finish creating "
+                "the server."
+            ),
+        )
+
+        self._eula_row = Adw.SwitchRow(
+            title="I agree to Minecraft EULA",
+            subtitle="Required to complete server creation",
+        )
+        self._eula_row.set_active(False)
+        self._eula_row.connect("notify::active", self._validate)
+        group.add(self._eula_row)
+
+        page.add(group)
         scrolled.set_child(page)
         return scrolled
     
@@ -240,16 +270,51 @@ class CreateServerDialog(Adw.Dialog):
                 self._java_info_row.set_subtitle(
                     f"Java {java_ver} needed — will be downloaded automatically"
                 )
+
+        self._validate()
+
+    def _on_back_clicked(self, button):
+        if self._stack.get_visible_child_name() == "eula":
+            self._stack.set_visible_child_name("config")
+            self._validate()
+
+    def _on_page_changed(self, *_args):
+        self._validate()
     
     def _validate(self, *args):
-        """Validate form and enable/disable create button."""
+        """Validate current step and update primary action state."""
         name = self._name_entry.get_text().strip()
         has_versions = len(self._game_versions) > 0
-        has_eula = self._eula_row.get_active()
-        self._create_btn.set_sensitive(bool(name) and has_versions and has_eula)
-    
-    def _on_create_clicked(self, button):
-        """Start the server creation process."""
+        page = self._stack.get_visible_child_name()
+
+        if page == "config":
+            self._back_btn.set_visible(False)
+            self._create_btn.set_label("Next")
+            self._create_btn.set_sensitive(bool(name) and has_versions)
+            return
+
+        if page == "eula":
+            has_eula = self._eula_row.get_active()
+            self._back_btn.set_visible(True)
+            self._create_btn.set_label("Create")
+            self._create_btn.set_sensitive(bool(name) and has_versions and has_eula)
+            return
+
+        self._back_btn.set_visible(False)
+        self._create_btn.set_label("Create")
+        self._create_btn.set_sensitive(False)
+
+    def _on_primary_clicked(self, button):
+        """Move to EULA step or start creation on the final step."""
+        page = self._stack.get_visible_child_name()
+        if page == "config":
+            self._stack.set_visible_child_name("eula")
+            self._validate()
+            return
+
+        if page != "eula":
+            return
+
         name = self._name_entry.get_text().strip()
         mc_idx = self._mc_version_row.get_selected()
         mc_version = self._game_versions[mc_idx] if mc_idx < len(self._game_versions) else ""
@@ -264,6 +329,7 @@ class CreateServerDialog(Adw.Dialog):
         # Switch to progress page
         self._stack.set_visible_child_name("progress")
         self._create_btn.set_sensitive(False)
+        self._back_btn.set_visible(False)
         
         # Run installation in background
         thread = threading.Thread(

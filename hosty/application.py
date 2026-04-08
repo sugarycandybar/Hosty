@@ -122,8 +122,21 @@ class HostyApplication(Adw.Application):
     
     def _on_server_created(self, dialog, server_id):
         """Handle newly created server."""
-        if self._window:
-            self._window.show_toast("Server created successfully!")
+        if not self._window:
+            return
+
+        self._window.sidebar.select_server(server_id)
+
+        running_id = self._server_manager.get_running_server_id()
+        if running_id and running_id != server_id:
+            self._window.show_toast("Server created, but another server is already running")
+            return
+
+        process = self._server_manager.get_process(server_id)
+        if process and process.start():
+            self._window.show_toast("Server created and started")
+        else:
+            self._window.show_toast("Server created, but failed to start")
     
     def _on_about(self, action, param):
         """Show about dialog."""

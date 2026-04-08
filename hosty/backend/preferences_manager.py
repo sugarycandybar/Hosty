@@ -13,10 +13,10 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 
 DEFAULT_SETTINGS = {
     "default_ram_mb": DEFAULT_RAM_MB,
-    "run_in_background_on_close": True,
+    "run_in_background_on_close": False,
     "open_on_startup": False,
-    "prevent_sleep_while_running": True,
-    "auto_backup_on_stop": False,
+    "prevent_sleep_while_running": False,
+    "auto_backup_on_stop": True,
     "auto_resolve_mod_dependencies": True,
 }
 
@@ -59,7 +59,7 @@ class PreferencesManager:
 
     @property
     def run_in_background_on_close(self) -> bool:
-        return bool(self._settings.get("run_in_background_on_close", True))
+        return bool(self._settings.get("run_in_background_on_close", False))
 
     @run_in_background_on_close.setter
     def run_in_background_on_close(self, value: bool) -> None:
@@ -77,7 +77,7 @@ class PreferencesManager:
 
     @property
     def prevent_sleep_while_running(self) -> bool:
-        return bool(self._settings.get("prevent_sleep_while_running", True))
+        return bool(self._settings.get("prevent_sleep_while_running", False))
 
     @prevent_sleep_while_running.setter
     def prevent_sleep_while_running(self, value: bool) -> None:
@@ -86,7 +86,7 @@ class PreferencesManager:
 
     @property
     def auto_backup_on_stop(self) -> bool:
-        return bool(self._settings.get("auto_backup_on_stop", False))
+        return bool(self._settings.get("auto_backup_on_stop", True))
 
     @auto_backup_on_stop.setter
     def auto_backup_on_stop(self, value: bool) -> None:

@@ -19,9 +19,7 @@ It helps you set up a server, run it, and manage it without juggling lots of sep
 2. Install it:
 	flatpak install --user --from ./Hosty-<version>-x86_64.flatpak
 3. Run it:
-	flatpak run com.github.hosty.Hosty
-
-The Flatpak release bundles Python and app dependencies, so no manual Python or pip setup is required.
+	flatpak run io.github.sugarycandybar.Hosty
 
 ### Windows
 
@@ -53,7 +51,7 @@ Source/development run:
 	1. Bump `APP_VERSION`
 	2. Create and publish a GitHub release tag (for example `v1.0.1`)
 
-Hosty is built for people who want a clean way to host Fabric servers locally. 🚀
+Hosty is built for people who want a clean way to host Fabric servers locally.
 
 ## Showcase
 

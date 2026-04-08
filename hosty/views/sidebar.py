@@ -52,7 +52,7 @@ class ServerRow(Adw.ActionRow):
             self._update_status(process.status)
 
     def _subtitle_text(self) -> str:
-        if self._process:
+        if self._process and self._process.is_running:
             return f"{self.server_info.mc_version} · {self._process.player_count}/{self._process.max_players}"
         return self.server_info.mc_version
     
@@ -71,6 +71,7 @@ class ServerRow(Adw.ActionRow):
     def _on_status_changed(self, process, status):
         """Handle process status change."""
         self._update_status(status)
+        self.set_subtitle(self._subtitle_text())
 
     def _on_players_changed(self, process, player_count, max_players):
         """Handle player count updates from server output."""
@@ -188,8 +189,15 @@ class Sidebar(Gtk.Box):
     def _on_server_removed(self, manager, server_id):
         """Handle server removed."""
         row = self._rows.pop(server_id, None)
+        was_selected = row is not None and self._listbox.get_selected_row() is row
         if row:
             self._listbox.remove(row)
+
+        if was_selected:
+            self._listbox.select_row(None)
+            self.emit('server-selected', "")
+            return
+
         if not self._rows:
             self.emit('server-selected', "")
     

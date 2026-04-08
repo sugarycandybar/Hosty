@@ -164,21 +164,21 @@ class PropertiesView(Gtk.Box):
         scrolled.set_child(page)
         self.append(scrolled)
         
-        # Save button at bottom
-        save_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        save_bar.set_halign(Gtk.Align.END)
-        save_bar.set_margin_top(8)
-        save_bar.set_margin_bottom(12)
-        save_bar.set_margin_end(16)
-        
-        save_btn = Gtk.Button(label="Save Properties")
-        save_btn.add_css_class("suggested-action")
-        save_btn.add_css_class("pill")
-        save_btn.connect("clicked", self._on_save_clicked)
-        self._save_btn = save_btn
-        save_bar.append(save_btn)
-        
-        self.append(save_bar)
+        self._connect_auto_save_signals()
+
+    def _connect_auto_save_signals(self):
+        for widget in self._widgets.values():
+            if isinstance(widget, Adw.EntryRow):
+                widget.connect("changed", self._on_widget_changed)
+            elif isinstance(widget, Adw.SpinRow):
+                widget.connect("changed", self._on_widget_changed)
+            elif isinstance(widget, Adw.SwitchRow):
+                widget.connect("notify::active", self._on_widget_changed)
+            elif isinstance(widget, Adw.ComboRow):
+                widget.connect("notify::selected", self._on_widget_changed)
+
+        if self._ram_row:
+            self._ram_row.connect("changed", self._on_widget_changed)
     
     def _add_entry_row(self, group, title, key, default):
         """Add an Adw.EntryRow to a group."""
@@ -282,7 +282,12 @@ class PropertiesView(Gtk.Box):
         
         self._suppress_changes = False
     
-    def _on_save_clicked(self, button):
+    def _on_widget_changed(self, *_args):
+        if self._suppress_changes:
+            return
+        self._save_properties()
+
+    def _save_properties(self):
         """Save properties to file."""
         if not self._config:
             return
@@ -310,18 +315,21 @@ class PropertiesView(Gtk.Box):
                     self._config.set_value(key, val)
         
         self._config.save()
-        
+        running = False
         if self._server_manager and self._server_info and self._ram_row:
             ram_mb = int(self._ram_row.get_value())
-            self._server_manager.update_server_ram(self._server_info.id, ram_mb)
+            if ram_mb != int(self._server_info.ram_mb):
+                self._server_manager.update_server_ram(self._server_info.id, ram_mb)
 
             process = self._server_manager.get_process(self._server_info.id)
             if process:
                 process.set_max_players(self._config.get_int("max-players", 20))
-        
-        self._banner.set_revealed(True)
+                running = bool(process.is_running)
+
+            self._server_manager.emit_on_main_thread("server-changed", self._server_info.id)
+
+        self._banner.set_revealed(running)
 
     def focus_save_button(self):
-        """Avoid auto-focusing MOTD when entering this tab."""
-        if hasattr(self, "_save_btn") and self._save_btn:
-            self._save_btn.grab_focus()
+        """Compatibility no-op after removing explicit save button."""
+        return

@@ -110,8 +110,18 @@ def search_mods(
     except urllib.error.HTTPError:
         url = f"{API}/search?{urllib.parse.urlencode(base)}"
         data = _request_json(url)
+    raw_hits = data.get("hits", [])
+    if server_side_only:
+        allowed = {"required", "optional"}
+        filtered = []
+        for h in raw_hits:
+            side = str(h.get("server_side", "")).strip().lower()
+            if side in allowed:
+                filtered.append(h)
+        raw_hits = filtered
+
     hits: list[ModrinthHit] = []
-    for h in data.get("hits", []):
+    for h in raw_hits:
         hits.append(
             ModrinthHit(
                 project_id=h["project_id"],

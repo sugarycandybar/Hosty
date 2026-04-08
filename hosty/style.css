@@ -90,8 +90,14 @@
 }
 
 /* ===== Mods UI ===== */
+.mod-results-list {
+    background: transparent;
+}
+
 .mod-card-row {
     border-radius: 12px;
+    background: alpha(currentColor, 0.04);
+    padding: 0;
 }
 
 .mod-icon-frame {

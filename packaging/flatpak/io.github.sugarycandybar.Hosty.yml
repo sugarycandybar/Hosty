@@ -1,4 +1,4 @@
-app-id: com.github.hosty.Hosty
+app-id: io.github.sugarycandybar.Hosty
 branch: stable
 runtime: org.gnome.Platform
 runtime-version: "48"
@@ -45,9 +45,9 @@ modules:
       - cp -a hosty /app/share/hosty/
       - install -Dm755 hosty.py /app/share/hosty/hosty.py
       - install -Dm755 packaging/flatpak/hosty-wrapper.sh /app/bin/hosty
-      - install -Dm644 packaging/linux/com.github.hosty.Hosty.desktop /app/share/applications/com.github.hosty.Hosty.desktop
-      - install -Dm644 packaging/linux/com.github.hosty.Hosty.metainfo.xml /app/share/metainfo/com.github.hosty.Hosty.metainfo.xml
-      - install -Dm644 packaging/linux/com.github.hosty.Hosty.svg /app/share/icons/hicolor/scalable/apps/com.github.hosty.Hosty.svg
+      - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.desktop /app/share/applications/io.github.sugarycandybar.Hosty.desktop
+      - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml /app/share/metainfo/io.github.sugarycandybar.Hosty.metainfo.xml
+      - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.svg /app/share/icons/hicolor/scalable/apps/io.github.sugarycandybar.Hosty.svg
     sources:
       - type: dir
         path: ../..

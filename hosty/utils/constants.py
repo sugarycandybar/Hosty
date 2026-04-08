@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 # Application identity
-APP_ID = "com.github.hosty.Hosty"
+APP_ID = "io.github.sugarycandybar.Hosty"
 APP_NAME = "Hosty"
 APP_VERSION = "1.2.2"
 APP_WEBSITE = "https://github.com/sugarycandybar/Hosty"

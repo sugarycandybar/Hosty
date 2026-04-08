@@ -132,8 +132,8 @@ jobs:
 
       - name: Build Flatpak bundle
         run: |
-          flatpak-builder --user --force-clean --repo=repo build-dir packaging/flatpak/com.github.hosty.Hosty.yml
-          flatpak build-bundle --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo repo "Hosty-${{ steps.version.outputs.version }}-x86_64.flatpak" com.github.hosty.Hosty stable --arch=x86_64
+          flatpak-builder --user --force-clean --repo=repo build-dir packaging/flatpak/io.github.sugarycandybar.Hosty.yml
+          flatpak build-bundle --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo repo "Hosty-${{ steps.version.outputs.version }}-x86_64.flatpak" io.github.sugarycandybar.Hosty stable --arch=x86_64
 
       - name: Upload Flatpak artifact
         uses: actions/upload-artifact@v4

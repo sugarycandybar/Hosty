@@ -73,6 +73,43 @@ def _world_dirs(server_root: Path) -> list[Path]:
     return sorted(out, key=lambda p: p.name.lower())
 
 
+def _world_dimension_dirs(world_dir: Path) -> list[tuple[str, Path]]:
+    dims: list[tuple[str, Path]] = []
+
+    # Main world root typically contains overworld data.
+    if (world_dir / "region").is_dir() or (world_dir / "entities").is_dir():
+        dims.append(("Overworld", world_dir))
+
+    legacy_map = [
+        ("Nether", world_dir / "DIM-1"),
+        ("End", world_dir / "DIM1"),
+    ]
+    for label, path in legacy_map:
+        if path.is_dir():
+            dims.append((label, path))
+
+    modern_root = world_dir / "dimensions"
+    if modern_root.is_dir():
+        for namespace_dir in sorted([p for p in modern_root.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+            for dim_dir in sorted([p for p in namespace_dir.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+                ns = namespace_dir.name
+                dim_name = dim_dir.name.replace("_", " ").title()
+                label = dim_name if ns == "minecraft" else f"{ns}:{dim_dir.name}"
+                dims.append((label, dim_dir))
+
+    # Keep insertion order while de-duplicating by path.
+    seen: set[Path] = set()
+    unique: list[tuple[str, Path]] = []
+    for label, path in dims:
+        rp = path.resolve()
+        if rp in seen:
+            continue
+        seen.add(rp)
+        unique.append((label, path))
+
+    return unique
+
+
 def _is_relative_to(path: Path, parent: Path) -> bool:
     try:
         path.relative_to(parent)
@@ -103,6 +140,15 @@ def _format_compact_count(n: int) -> str:
     if n >= 1_000:
         return f"{n / 1_000:.1f}K"
     return str(n)
+
+
+def _is_descendant_of(widget: Gtk.Widget, ancestor: Gtk.Widget) -> bool:
+    current = widget
+    while current is not None:
+        if current is ancestor:
+            return True
+        current = current.get_parent()
+    return False
 
 
 class FilesView(Gtk.Box):
@@ -185,15 +231,6 @@ class FilesView(Gtk.Box):
         page.add(self._mods_group)
 
         self._players_group = Adw.PreferencesGroup(title="Players")
-        players_row = Adw.ActionRow(
-            title="Whitelist and banned players",
-            subtitle="Manage who can join your server",
-        )
-        players_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
-        players_row.set_activatable(True)
-        players_row.connect("activated", self._push_players_page)
-        self._players_group.add(players_row)
-        page.add(self._players_group)
 
         scroll.set_child(page)
         return scroll
@@ -220,6 +257,107 @@ class FilesView(Gtk.Box):
             return None
         return Path(self._server_info.server_dir)
 
+    def _mod_dependency_state_path(self) -> Optional[Path]:
+        root = self._server_dir()
+        if not root:
+            return None
+        return root / ".hosty-mod-dependencies.json"
+
+    def _read_mod_dependency_state(self) -> dict:
+        path = self._mod_dependency_state_path()
+        if not path or not path.exists():
+            return {"required_by": {}}
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                req = raw.get("required_by")
+                if isinstance(req, dict):
+                    cleaned = {}
+                    for dep_name, parents in req.items():
+                        dep_key = str(dep_name).strip().lower()
+                        if not dep_key:
+                            continue
+                        if not isinstance(parents, list):
+                            continue
+                        parent_keys = sorted(
+                            {
+                                str(p).strip().lower()
+                                for p in parents
+                                if str(p).strip()
+                            }
+                        )
+                        if parent_keys:
+                            cleaned[dep_key] = parent_keys
+                    return {"required_by": cleaned}
+        except Exception:
+            pass
+
+        return {"required_by": {}}
+
+    def _write_mod_dependency_state(self, state: dict) -> bool:
+        path = self._mod_dependency_state_path()
+        if not path:
+            return False
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def _record_dependency_installs(self, parent_filename: str, dep_versions: list) -> None:
+        parent_key = str(parent_filename).strip().lower()
+        if not parent_key or not dep_versions:
+            return
+
+        state = self._read_mod_dependency_state()
+        req = state.setdefault("required_by", {})
+        for dep in dep_versions:
+            dep_key = str(getattr(dep, "filename", "")).strip().lower()
+            if not dep_key or dep_key == parent_key:
+                continue
+            parents = set(req.get(dep_key, []))
+            parents.add(parent_key)
+            req[dep_key] = sorted(parents)
+
+        self._write_mod_dependency_state(state)
+
+    def _remove_mod_from_dependency_state(self, removed_filename: str) -> None:
+        removed_key = str(removed_filename).strip().lower()
+        if not removed_key:
+            return
+
+        state = self._read_mod_dependency_state()
+        req = dict(state.get("required_by", {}))
+        req.pop(removed_key, None)
+
+        new_req = {}
+        for dep_key, parents in req.items():
+            filtered = [p for p in parents if p != removed_key]
+            if filtered:
+                new_req[dep_key] = filtered
+
+        self._write_mod_dependency_state({"required_by": new_req})
+
+    def _dependency_dependents(self, filename: str) -> list[str]:
+        key = str(filename).strip().lower()
+        if not key:
+            return []
+        state = self._read_mod_dependency_state()
+        req = state.get("required_by", {})
+        parents = list(req.get(key, []))
+
+        root = self._server_dir()
+        if not root:
+            return parents
+        mods_dir = root / "mods"
+        installed = {p.name.lower() for p in mods_dir.glob("*.jar")} if mods_dir.is_dir() else set()
+        return [p for p in parents if p in installed]
+
     def _process(self):
         if not self._server_info or not self._server_manager:
             return None
@@ -230,9 +368,10 @@ class FilesView(Gtk.Box):
         return p is not None and p.is_running
 
     def _clear_group_rows(self, group: Adw.PreferencesGroup, rows: list[Gtk.Widget]) -> None:
-        for row in rows:
+        for row in list(rows):
             try:
-                group.remove(row)
+                if _is_descendant_of(row, group):
+                    group.remove(row)
             except Exception:
                 pass
         rows.clear()
@@ -292,26 +431,114 @@ class FilesView(Gtk.Box):
         return b
 
     def _make_world_row(self, path: Path) -> Adw.ActionRow:
+        dims = _world_dimension_dirs(path)
         row = Adw.ActionRow(title=path.name)
-        row.set_activatable(False)
-        open_btn = self._icon_button(
-            "folder-open-symbolic",
-            "Open world folder",
-            lambda *_p, p=path: self._open_target(p),
-        )
+        dim_count = len(dims)
+        row.set_subtitle(f"{dim_count} dimension{'s' if dim_count != 1 else ''}")
+        row.set_activatable(True)
+        row.connect("activated", lambda *_p, p=path: self._open_world_dialog(p))
+        row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         del_btn = self._icon_button(
             "user-trash-symbolic",
             "Delete world",
             lambda *_p, p=path, n=path.name: self._confirm_delete_world(p, n),
             destructive=True,
         )
-        row.add_suffix(open_btn)
         row.add_suffix(del_btn)
         return row
 
+    def _open_world_dialog(self, world_path: Path) -> None:
+        dialog = Adw.AlertDialog()
+        dialog.set_heading(world_path.name)
+        dialog.set_body("Open the world folder or manage dimensions.")
+        dialog.add_response("close", "Close")
+        dialog.set_default_response("close")
+        dialog.set_close_response("close")
+
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_margin_start(12)
+        content.set_margin_end(12)
+        content.set_margin_top(6)
+        content.set_margin_bottom(6)
+
+        open_btn = Gtk.Button(label="Open world folder")
+        open_btn.add_css_class("suggested-action")
+        open_btn.set_halign(Gtk.Align.START)
+        open_btn.connect("clicked", lambda *_p: self._open_target(world_path))
+        content.append(open_btn)
+
+        group = Adw.PreferencesGroup(title="Dimensions")
+        dims = _world_dimension_dirs(world_path)
+        if not dims:
+            none_row = Adw.ActionRow(title="No dimension folders found")
+            none_row.set_activatable(False)
+            group.add(none_row)
+        else:
+            world_root = world_path.resolve()
+            for label, dim_path in dims:
+                row = Adw.ActionRow(title=label)
+                row.set_activatable(False)
+
+                open_dim_btn = self._icon_button(
+                    "folder-open-symbolic",
+                    "Open dimension folder",
+                    lambda *_p, p=dim_path: self._open_target(p),
+                )
+                row.add_suffix(open_dim_btn)
+
+                # Deleting the world root dimension would remove the full world.
+                if dim_path.resolve() != world_root:
+                    delete_btn = self._icon_button(
+                        "user-trash-symbolic",
+                        "Delete dimension",
+                        lambda *_p, w=world_path, p=dim_path, n=label: self._confirm_delete_dimension(w, p, n),
+                        destructive=True,
+                    )
+                    row.add_suffix(delete_btn)
+
+                group.add(row)
+
+        content.append(group)
+        dialog.set_extra_child(content)
+        dialog.present(self.get_root())
+
+    def _confirm_delete_dimension(self, world_path: Path, dim_path: Path, name: str):
+        if self._is_running():
+            self._alert("Server is running", "Stop the server before deleting a dimension.")
+            return
+
+        if dim_path.resolve() == world_path.resolve():
+            self._alert("Cannot delete world root", "Use Delete world to remove the entire world.")
+            return
+
+        dialog = Adw.AlertDialog()
+        dialog.set_heading("Delete dimension?")
+        dialog.set_body(f"Delete dimension “{name}”? This cannot be undone.")
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("delete", "Delete")
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def on_response(_d, response):
+            if response == "delete":
+                try:
+                    shutil.rmtree(dim_path, ignore_errors=False)
+                    self._rebuild_lists()
+                    self._toast(f"Deleted dimension “{name}”")
+                except OSError as e:
+                    self._alert("Could not delete", str(e))
+
+        dialog.connect("response", on_response)
+        dialog.present(self.get_root())
+
     def _make_mod_row(self, jar: Path) -> Adw.ActionRow:
         row = Adw.ActionRow(title=jar.name)
-        row.set_subtitle(_format_size(jar.stat().st_size))
+        subtitle = _format_size(jar.stat().st_size)
+        dependents = self._dependency_dependents(jar.name)
+        if dependents:
+            subtitle = f"{subtitle} · Dependency"
+        row.set_subtitle(subtitle)
         row.set_activatable(False)
         open_btn = self._icon_button(
             "document-open-symbolic",
@@ -913,7 +1140,6 @@ class FilesView(Gtk.Box):
         ]
         cat_dd = Gtk.DropDown.new_from_strings([x[0] for x in category_items])
         cat_dd.set_valign(Gtk.Align.CENTER)
-        controls_row.append(cat_dd)
 
         sort_items = [
             ("Relevance", "relevance"),
@@ -925,15 +1151,10 @@ class FilesView(Gtk.Box):
         sort_dd = Gtk.DropDown.new_from_strings([x[0] for x in sort_items])
         sort_dd.set_valign(Gtk.Align.CENTER)
         sort_dd.set_selected(1)
-        controls_row.append(sort_dd)
-
-        spacer = Gtk.Box()
-        spacer.set_hexpand(True)
-        controls_row.append(spacer)
 
         results = Gtk.ListBox()
         results.set_selection_mode(Gtk.SelectionMode.NONE)
-        results.add_css_class("boxed-list")
+        results.add_css_class("mod-results-list")
         results.set_vexpand(True)
 
         prev_btn = Gtk.Button(icon_name="go-previous-symbolic")
@@ -944,10 +1165,19 @@ class FilesView(Gtk.Box):
         page_label.add_css_class("dim-label")
         results_label = Gtk.Label(label="", xalign=1.0)
         results_label.add_css_class("dim-label")
+        results_label.set_ellipsize(Pango.EllipsizeMode.END)
+        results_label.set_max_width_chars(16)
         controls_row.append(prev_btn)
         controls_row.append(next_btn)
         controls_row.append(page_label)
         controls_row.append(results_label)
+
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        controls_row.append(spacer)
+
+        controls_row.append(cat_dd)
+        controls_row.append(sort_dd)
         outer.append(controls_row)
 
         page_size = 10
@@ -1003,7 +1233,7 @@ class FilesView(Gtk.Box):
             set_busy(False)
             if err:
                 results_label.set_label("Search failed")
-                results.append(self._empty_listbox_row(err))
+                results.append(self._empty_listbox_row("Could not fetch Modrinth results."))
                 return
             state["total"] = int(total)
             update_pager()
@@ -1088,6 +1318,10 @@ class FilesView(Gtk.Box):
         row = Gtk.ListBoxRow()
         row.set_activatable(False)
         label = Gtk.Label(label=title, xalign=0.0)
+        label.set_wrap(True)
+        label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        label.set_ellipsize(Pango.EllipsizeMode.END)
+        label.set_lines(3)
         label.set_margin_start(12)
         label.set_margin_end(12)
         label.set_margin_top(10)
@@ -1137,6 +1371,8 @@ class FilesView(Gtk.Box):
         row = Gtk.ListBoxRow()
         row.set_activatable(False)
         row.add_css_class("mod-card-row")
+        row.add_css_class("card")
+        row.set_margin_bottom(10)
 
         outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         outer.set_margin_start(14)
@@ -1146,26 +1382,45 @@ class FilesView(Gtk.Box):
 
         icon = Gtk.Image.new_from_icon_name("application-x-addon-symbolic")
         icon.set_pixel_size(44)
-        icon_frame = Gtk.Frame()
-        icon_frame.add_css_class("mod-icon-frame")
-        icon_frame.set_child(icon)
-        outer.append(icon_frame)
+        icon.set_valign(Gtk.Align.START)
+        outer.append(icon)
         if hit.icon_url:
             self._load_icon_async(icon, hit.icon_url)
 
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         content.set_hexpand(True)
 
+        top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        title_author = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        title_author.set_hexpand(True)
+
         title = Gtk.Label(label=hit.title, xalign=0.0)
         title.add_css_class("title-4")
-        title.set_wrap(True)
+        title.set_wrap(False)
+        title.set_ellipsize(Pango.EllipsizeMode.END)
         title.set_hexpand(True)
-        content.append(title)
+        title_author.append(title)
 
         author_label = Gtk.Label(label=f"by {hit.author or 'Unknown'}", xalign=0.0)
         author_label.add_css_class("caption")
         author_label.add_css_class("dim-label")
-        content.append(author_label)
+        title_author.append(author_label)
+        top_row.append(title_author)
+
+        downloads_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        downloads_icon = Gtk.Image.new_from_icon_name("folder-download-symbolic")
+        downloads_icon.set_pixel_size(12)
+        downloads_box.append(downloads_icon)
+        downloads_label = Gtk.Label(
+            label=_format_compact_count(int(hit.downloads or 0)),
+            xalign=1.0,
+        )
+        downloads_label.add_css_class("caption")
+        downloads_label.add_css_class("dim-label")
+        downloads_box.append(downloads_label)
+        top_row.append(downloads_box)
+        content.append(top_row)
 
         desc_text = (hit.description or "No description available.").strip()
         desc = Gtk.Label(label=desc_text, xalign=0.0)
@@ -1176,41 +1431,7 @@ class FilesView(Gtk.Box):
         desc.add_css_class("dim-label")
         content.append(desc)
 
-        def chip(text: str, icon_name: str) -> Gtk.Box:
-            hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-            hb.add_css_class("mod-chip")
-            ic = Gtk.Image.new_from_icon_name(icon_name)
-            ic.set_pixel_size(12)
-            hb.append(ic)
-            lab = Gtk.Label(label=text)
-            lab.add_css_class("caption")
-            hb.append(lab)
-            return hb
-
-        category_icons = {
-            "optimization": "system-run-symbolic",
-            "utility": "applications-utilities-symbolic",
-            "technology": "applications-development-symbolic",
-            "adventure": "compass-symbolic",
-            "decoration": "applications-graphics-symbolic",
-            "magic": "starred-symbolic",
-            "storage": "drive-harddisk-symbolic",
-            "worldgen": "map-symbolic",
-            "library": "code-context-symbolic",
-            "fabric": "applications-development-symbolic",
-        }
-
-        chip_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        chip_row.append(chip(f"{_format_compact_count(int(hit.downloads or 0))}", "folder-download-symbolic"))
-        for c in hit.categories[:2]:
-            key = str(c).strip().lower()
-            chip_row.append(chip(str(c), category_icons.get(key, "tag-symbolic")))
-        content.append(chip_row)
-
         version_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        version_label = Gtk.Label(label="Version", xalign=0.0)
-        version_label.add_css_class("dim-label")
-        version_row.append(version_label)
         version_dd = Gtk.DropDown.new_from_strings(["Checking versions…"])
         version_dd.set_hexpand(True)
         version_row.append(version_dd)
@@ -1259,6 +1480,7 @@ class FilesView(Gtk.Box):
                 self._alert("No compatible version", "No compatible server mod version is available.")
                 return
 
+            install_btn.set_label("Installing…")
             install_btn.set_sensitive(False)
 
             def ui_ok(fname: str, dep_count: int):
@@ -1267,14 +1489,16 @@ class FilesView(Gtk.Box):
                 if dep_count > 0:
                     self._toast(f"Installed {dep_count} required dependencies")
                 self._toast(f"Installed {fname}")
-                self._toast("Restart the server for mod changes to apply")
+                if self._is_running():
+                    self._toast("Restart the server for mod changes to apply")
                 self._rebuild_lists()
 
             def ui_err(msg: str):
+                install_btn.set_label("Install")
                 install_btn.set_sensitive(True)
                 self._alert("Install failed", msg)
 
-            def thread_fn():
+            def thread_fn(deps_to_install: list, all_required_deps: list):
                 try:
                     root = self._server_dir()
                     if not root:
@@ -1282,35 +1506,97 @@ class FilesView(Gtk.Box):
 
                     mods_dir = root / "mods"
                     mods_dir.mkdir(parents=True, exist_ok=True)
-                    installed_names = {p.name.lower() for p in mods_dir.glob("*.jar")}
+                    installed_names_local = {p.name.lower() for p in mods_dir.glob("*.jar")}
 
                     installed_dep_count = 0
-                    prefs = self._server_manager.preferences if self._server_manager else None
-                    auto_resolve = prefs.auto_resolve_mod_dependencies if prefs else True
-                    if auto_resolve:
-                        deps = modrinth_client.resolve_required_dependencies(
-                            chosen.version_id,
-                            mc_version,
-                            loader="fabric",
-                        )
-                        for dep in deps:
-                            dep_name = dep.filename.lower()
-                            if dep_name in installed_names:
-                                continue
-                            if dep_name == chosen.filename.lower():
-                                continue
-                            dep_dest = mods_dir / dep.filename
-                            modrinth_client.download_to(dep.download_url, dep_dest)
-                            installed_names.add(dep_name)
-                            installed_dep_count += 1
+                    for dep in deps_to_install:
+                        dep_name = dep.filename.lower()
+                        if dep_name in installed_names_local:
+                            continue
+                        if dep_name == chosen.filename.lower():
+                            continue
+                        dep_dest = mods_dir / dep.filename
+                        modrinth_client.download_to(dep.download_url, dep_dest)
+                        installed_names_local.add(dep_name)
+                        installed_dep_count += 1
 
                     dest = mods_dir / chosen.filename
                     modrinth_client.download_to(chosen.download_url, dest)
+                    self._record_dependency_installs(chosen.filename, all_required_deps)
                     GLib.idle_add(lambda f=chosen.filename, c=installed_dep_count: ui_ok(f, c))
                 except Exception as e:
                     GLib.idle_add(lambda m=str(e): ui_err(m))
 
-            threading.Thread(target=thread_fn, daemon=True).start()
+            def prompt_dependencies(deps_to_install: list, all_required_deps: list):
+                if not deps_to_install:
+                    threading.Thread(
+                        target=thread_fn,
+                        args=([], all_required_deps),
+                        daemon=True,
+                    ).start()
+                    return
+
+                dep_names = [d.filename for d in deps_to_install]
+                preview = "\n".join([f"- {n}" for n in dep_names[:6]])
+                more = ""
+                if len(dep_names) > 6:
+                    more = f"\n- and {len(dep_names) - 6} more"
+
+                dialog = Adw.AlertDialog()
+                dialog.set_heading("Install required dependencies?")
+                dialog.set_body(
+                    "This mod requires additional dependencies:\n\n"
+                    f"{preview}{more}\n\n"
+                    "Install them as well?"
+                )
+                dialog.add_response("cancel", "Cancel")
+                dialog.add_response("install", "Install")
+                dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
+                dialog.set_default_response("install")
+                dialog.set_close_response("cancel")
+
+                def on_response(_d, response):
+                    if response == "install":
+                        threading.Thread(
+                            target=thread_fn,
+                            args=(deps_to_install, all_required_deps),
+                            daemon=True,
+                        ).start()
+                    else:
+                        install_btn.set_label("Install")
+                        install_btn.set_sensitive(True)
+
+                dialog.connect("response", on_response)
+                dialog.present(self.get_root())
+
+            def resolve_and_prompt():
+                try:
+                    root = self._server_dir()
+                    if not root:
+                        raise RuntimeError("No server selected.")
+
+                    mods_dir = root / "mods"
+                    mods_dir.mkdir(parents=True, exist_ok=True)
+                    installed_names_local = {p.name.lower() for p in mods_dir.glob("*.jar")}
+                    deps = modrinth_client.resolve_required_dependencies(
+                        chosen.version_id,
+                        mc_version,
+                        loader="fabric",
+                    )
+                    deps_to_install = []
+                    for dep in deps:
+                        dep_name = dep.filename.lower()
+                        if dep_name in installed_names_local:
+                            continue
+                        if dep_name == chosen.filename.lower():
+                            continue
+                        deps_to_install.append(dep)
+
+                    GLib.idle_add(lambda d=deps_to_install, a=deps: prompt_dependencies(d, a))
+                except Exception as e:
+                    GLib.idle_add(lambda m=str(e): ui_err(m))
+
+            threading.Thread(target=resolve_and_prompt, daemon=True).start()
 
         def load_versions():
             if not mc_version:
@@ -1357,14 +1643,17 @@ class FilesView(Gtk.Box):
 
                 first = version_objs[0]
                 if first.filename.lower() in installed_names:
-                    GLib.idle_add(lambda: install_btn.set_label("Installed"))
+                    dependents = self._dependency_dependents(first.filename)
+                    if dependents:
+                        GLib.idle_add(lambda: install_btn.set_label("Dependency"))
+                    else:
+                        GLib.idle_add(lambda: install_btn.set_label("Installed"))
                     GLib.idle_add(lambda: install_btn.set_sensitive(False))
             except Exception as e:
                 GLib.idle_add(
-                    lambda m=str(e): version_dd.set_model(
-                        Gtk.StringList.new([f"Version lookup failed: {m}"])
-                    )
+                    lambda m=str(e): version_dd.set_model(Gtk.StringList.new(["Version lookup failed"]))
                 )
+                GLib.idle_add(lambda m=str(e): version_dd.set_tooltip_text(m))
 
         open_btn.connect("clicked", on_open_page)
         install_btn.connect("clicked", on_install)
@@ -1425,9 +1714,23 @@ class FilesView(Gtk.Box):
             self._alert("Server is running", "Stop the server before removing mods.")
             return
 
+        dependents = self._dependency_dependents(name)
+
         dialog = Adw.AlertDialog()
-        dialog.set_heading("Delete mod?")
-        dialog.set_body(f"Remove “{name}”?")
+        if dependents:
+            preview = "\n".join([f"- {m}" for m in dependents[:6]])
+            more = ""
+            if len(dependents) > 6:
+                more = f"\n- and {len(dependents) - 6} more"
+            dialog.set_heading("Delete dependency mod?")
+            dialog.set_body(
+                f"The following mods depend on \"{name}\":\n\n"
+                f"{preview}{more}\n\n"
+                "Are you sure you want to proceed?"
+            )
+        else:
+            dialog.set_heading("Delete mod?")
+            dialog.set_body(f"Remove “{name}”?")
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("delete", "Delete")
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
@@ -1438,9 +1741,11 @@ class FilesView(Gtk.Box):
             if response == "delete":
                 try:
                     path.unlink(missing_ok=True)
+                    self._remove_mod_from_dependency_state(name)
                     self._rebuild_lists()
                     self._toast(f"Removed “{name}”")
-                    self._toast("Restart the server for mod changes to apply")
+                    if self._is_running():
+                        self._toast("Restart the server for mod changes to apply")
                 except OSError as e:
                     self._alert("Could not delete", str(e))
 
