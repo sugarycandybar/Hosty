@@ -22,6 +22,28 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Read app version
+        id: version
+        shell: pwsh
+        run: |
+          $version = python -c 'import re; from pathlib import Path; text = Path("hosty/utils/constants.py").read_text(encoding="utf-8"); match = re.search(r"^APP_VERSION\\s*=\\s*\"([^\"]+)\"", text, re.MULTILINE); print(match.group(1) if match else "")'
+          if (-not $version) {
+            Write-Error "APP_VERSION not found"
+            exit 1
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Validate release tag matches APP_VERSION
+        if: github.event_name == 'release'
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $tag = "${{ github.event.release.tag_name }}"
+          if ($tag -ne $version -and $tag -ne "v$version") {
+            Write-Error "Release tag '$tag' does not match APP_VERSION '$version'"
+            exit 1
+          }
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -31,14 +53,19 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed --name Hosty --hidden-import hosty.ui.windows.application --collect-submodules hosty.ui.windows --collect-submodules hosty.backend --exclude-module gi --exclude-module hosty.application hosty.py
 
+      - name: Rename EXE with version
+        shell: pwsh
+        run: |
+          Move-Item -Path "dist/Hosty.exe" -Destination "dist/Hosty-${{ steps.version.outputs.version }}-windows-x86_64.exe"
+
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hosty-windows-exe
-          path: dist/Hosty.exe
+          name: hosty-windows-exe-${{ steps.version.outputs.version }}
+          path: dist/Hosty-${{ steps.version.outputs.version }}-windows-x86_64.exe
 
-  build-linux-rpm:
-    name: Build Linux RPM
+  build-linux-flatpak:
+    name: Build Linux Flatpak
     runs-on: ubuntu-latest
 
     steps:
@@ -55,105 +82,40 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Install packaging tooling
+      - name: Validate release tag matches APP_VERSION
+        if: github.event_name == 'release'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rpm
-          sudo gem install --no-document fpm
-
-      - name: Build RPM payload
-        run: |
-          rm -rf package-root
-          mkdir -p package-root/usr/share/hosty
-          mkdir -p package-root/usr/share/applications
-          mkdir -p package-root/usr/share/icons/hicolor/scalable/apps
-          mkdir -p package-root/usr/bin
-
-          cp -a hosty package-root/usr/share/hosty/
-          cp hosty.py package-root/usr/share/hosty/hosty.py
-          cp packaging/linux/com.github.hosty.Hosty.desktop package-root/usr/share/applications/hosty.desktop
-          cp packaging/linux/com.github.hosty.Hosty.svg package-root/usr/share/icons/hicolor/scalable/apps/com.github.hosty.Hosty.svg
-
-          printf '%s\n' '#!/usr/bin/env sh' 'exec /usr/bin/python3 /usr/share/hosty/hosty.py "$@"' > package-root/usr/bin/hosty
-          chmod +x package-root/usr/bin/hosty
-
-      - name: Build RPM
-        run: |
-          fpm -s dir -t rpm \
-            -n hosty \
-            -v "${{ steps.version.outputs.version }}" \
-            --iteration 1 \
-            --architecture x86_64 \
-            --license GPL-3.0-or-later \
-            --description "Hosty Fabric Minecraft server manager" \
-            --url "https://github.com/${{ github.repository }}" \
-            -d python3 \
-            -d python3-requests \
-            -d python3-psutil \
-            -C package-root \
-            .
-
-      - name: Upload RPM artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hosty-linux-rpm
-          path: ./*.rpm
-
-  build-linux-appimage:
-    name: Build Linux AppImage
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Read app version
-        id: version
-        run: |
-          VERSION=$(python3 -c "import re; from pathlib import Path; text = Path('hosty/utils/constants.py').read_text(encoding='utf-8'); match = re.search(r'^APP_VERSION\\s*=\\s*\"([^\"]+)\"', text, re.MULTILINE); print(match.group(1) if match else '')")
-          if [ -z "$VERSION" ]; then
-            echo "APP_VERSION not found" >&2
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          if [ "$TAG" != "$VERSION" ] && [ "$TAG" != "v$VERSION" ]; then
+            echo "Release tag '$TAG' does not match APP_VERSION '$VERSION'" >&2
             exit 1
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Install AppImage tooling
+      - name: Install Flatpak tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
-          chmod +x appimagetool
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub org.gnome.Platform//48 org.gnome.Sdk//48
 
-      - name: Build AppDir payload
+      - name: Build Flatpak bundle
         run: |
-          rm -rf AppDir
-          mkdir -p AppDir/usr/share/hosty
+          flatpak-builder --user --force-clean --repo=repo build-dir packaging/flatpak/com.github.hosty.Hosty.yml
+          flatpak build-bundle --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo repo "Hosty-${{ steps.version.outputs.version }}-x86_64.flatpak" com.github.hosty.Hosty stable --arch=x86_64
 
-          cp -a hosty AppDir/usr/share/hosty/
-          cp hosty.py AppDir/usr/share/hosty/hosty.py
-          cp packaging/linux/com.github.hosty.Hosty.desktop AppDir/com.github.hosty.Hosty.desktop
-          cp packaging/linux/com.github.hosty.Hosty.svg AppDir/com.github.hosty.Hosty.svg
-
-          printf '%s\n' '#!/usr/bin/env sh' 'HERE="$(dirname "$(readlink -f "$0")")"' 'exec /usr/bin/env python3 "$HERE/usr/share/hosty/hosty.py" "$@"' > AppDir/AppRun
-          chmod +x AppDir/AppRun
-
-      - name: Build AppImage
-        run: |
-          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir "Hosty-${{ steps.version.outputs.version }}-x86_64.AppImage"
-
-      - name: Upload AppImage artifact
+      - name: Upload Flatpak artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hosty-linux-appimage
-          path: ./*.AppImage
+          name: hosty-linux-flatpak
+          path: ./*.flatpak
 
   upload-release-assets:
     name: Upload assets to GitHub Release
     runs-on: ubuntu-latest
     needs:
       - build-windows-exe
-      - build-linux-rpm
-      - build-linux-appimage
+      - build-linux-flatpak
     if: github.event_name == 'release'
 
     steps:
@@ -168,5 +130,4 @@ jobs:
         with:
           files: |
             release-assets/**/*.exe
-            release-assets/**/*.rpm
-            release-assets/**/*.AppImage
+            release-assets/**/*.flatpak

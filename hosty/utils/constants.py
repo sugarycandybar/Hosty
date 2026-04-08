@@ -9,7 +9,7 @@ from pathlib import Path
 APP_ID = "com.github.hosty.Hosty"
 APP_NAME = "Hosty"
 APP_VERSION = "1.0.0"
-APP_WEBSITE = "https://github.com/hosty"
+APP_WEBSITE = "https://github.com/sugarycandybar/Hosty"
 
 # Directories
 

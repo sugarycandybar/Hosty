@@ -15,7 +15,7 @@ modules:
   - name: python-deps
     buildsystem: simple
     build-commands:
-      - python3 -m pip install --prefix=/app --no-build-isolation --no-index --find-links="file://${PWD}" requests psutil
+      - python3 -m pip install --prefix=/app --no-build-isolation --no-index --find-links="file://${PWD}" requests psutil pillow
     sources:
       - type: file
         url: https://files.pythonhosted.org/packages/d7/8e/7540e8a2036f79a125c1d2ebadf69ed7901608859186c856fa0388ef4197/requests-2.33.1-py3-none-any.whl
@@ -35,6 +35,9 @@ modules:
       - type: file
         url: https://files.pythonhosted.org/packages/aa/c6/d1ddf4abb55e93cebc4f2ed8b5d6dbad109ecb8d63748dd2b20ab5e57ebe/psutil-7.2.2.tar.gz
         sha256: 0746f5f8d406af344fd547f1c8daa5f5c33dbc293bb8d6a16d80b4bb88f59372
+      - type: file
+        url: https://files.pythonhosted.org/packages/f3/0d/d0d6dea55cd152ce3d6767bb38a8fc10e33796ba4ba210cbab9354b6d238/pillow-11.3.0.tar.gz
+        sha256: 3828ee7586cd0b2091b6209e5ad53e20d0649bbe87164a459d0676e035e8f523
   - name: hosty
     buildsystem: simple
     build-commands:
