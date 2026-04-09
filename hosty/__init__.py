@@ -1,2 +1,2 @@
 # Hosty - Fabric Minecraft Server Manager
-__version__ = "1.0.0"
+from hosty.version import __version__

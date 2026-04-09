@@ -237,7 +237,18 @@ class ServerDetailView(Gtk.Box):
 
     def _update_toggle_for_selected(self, status: str):
         """Update Start/Stop from the sidebar-selected server's process."""
-        if status in (ServerStatus.RUNNING, ServerStatus.STARTING):
+        self._toggle_btn.remove_css_class("hosty-starting-button")
+
+        if status == ServerStatus.STARTING:
+            self._toggle_btn.set_label("Starting...")
+            self._toggle_btn.remove_css_class("suggested-action")
+            self._toggle_btn.remove_css_class("destructive-action")
+            self._toggle_btn.add_css_class("hosty-starting-button")
+            self._toggle_btn.set_sensitive(False)
+            self._toggle_btn.set_tooltip_text("Wait for the server to finish starting")
+            return
+
+        if status == ServerStatus.RUNNING:
             self._toggle_btn.set_label("Stop")
             self._toggle_btn.remove_css_class("suggested-action")
             self._toggle_btn.add_css_class("destructive-action")
@@ -263,11 +274,15 @@ class ServerDetailView(Gtk.Box):
         if tab_name == "performance":
             self._perf_view.scroll_to_top()
         elif tab_name == "properties":
+            self._props_view.reload_from_disk()
             GLib.idle_add(self._props_view.focus_save_button)
     
     def _on_toggle_clicked(self, button):
         """Handle start/stop button click."""
         if not self._selected_process:
+            return
+
+        if self._selected_process.status == ServerStatus.STARTING:
             return
         
         if self._selected_process.is_running:

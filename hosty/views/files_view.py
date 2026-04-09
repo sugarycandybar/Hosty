@@ -17,6 +17,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import uuid
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -437,20 +438,26 @@ class FilesView(Gtk.Box):
         row.set_subtitle(f"{dim_count} dimension{'s' if dim_count != 1 else ''}")
         row.set_activatable(True)
         row.connect("activated", lambda *_p, p=path: self._open_world_dialog(p))
-        row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
+        open_btn = self._icon_button(
+            "folder-open-symbolic",
+            "Open world folder",
+            lambda *_p, p=path: self._open_target(p),
+        )
         del_btn = self._icon_button(
             "user-trash-symbolic",
             "Delete world",
             lambda *_p, p=path, n=path.name: self._confirm_delete_world(p, n),
             destructive=True,
         )
+        row.add_suffix(open_btn)
         row.add_suffix(del_btn)
+        row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         return row
 
     def _open_world_dialog(self, world_path: Path) -> None:
         dialog = Adw.AlertDialog()
         dialog.set_heading(world_path.name)
-        dialog.set_body("Open the world folder or manage dimensions.")
+        dialog.set_body("Manage dimensions.")
         dialog.add_response("close", "Close")
         dialog.set_default_response("close")
         dialog.set_close_response("close")
@@ -460,12 +467,6 @@ class FilesView(Gtk.Box):
         content.set_margin_end(12)
         content.set_margin_top(6)
         content.set_margin_bottom(6)
-
-        open_btn = Gtk.Button(label="Open world folder")
-        open_btn.add_css_class("suggested-action")
-        open_btn.set_halign(Gtk.Align.START)
-        open_btn.connect("clicked", lambda *_p: self._open_target(world_path))
-        content.append(open_btn)
 
         group = Adw.PreferencesGroup(title="Dimensions")
         dims = _world_dimension_dirs(world_path)
@@ -522,12 +523,11 @@ class FilesView(Gtk.Box):
 
         def on_response(_d, response):
             if response == "delete":
-                try:
-                    shutil.rmtree(dim_path, ignore_errors=False)
-                    self._rebuild_lists()
-                    self._toast(f"Deleted dimension “{name}”")
-                except OSError as e:
-                    self._alert("Could not delete", str(e))
+                self._soft_delete_with_undo(
+                    dim_path,
+                    f"dimension \"{name}\"",
+                    on_refresh=self._rebuild_lists,
+                )
 
         dialog.connect("response", on_response)
         dialog.present(self.get_root())
@@ -540,18 +540,12 @@ class FilesView(Gtk.Box):
             subtitle = f"{subtitle} · Dependency"
         row.set_subtitle(subtitle)
         row.set_activatable(False)
-        open_btn = self._icon_button(
-            "document-open-symbolic",
-            "Open mod location",
-            lambda *_p, p=jar: self._open_target(p),
-        )
         del_btn = self._icon_button(
             "user-trash-symbolic",
             "Delete mod",
             lambda *_p, p=jar, n=jar.name: self._confirm_delete_mod(p, n),
             destructive=True,
         )
-        row.add_suffix(open_btn)
         row.add_suffix(del_btn)
         return row
 
@@ -646,11 +640,6 @@ class FilesView(Gtk.Box):
             "Restore backup",
             lambda *_p, p=zp: self._confirm_restore_backup(p),
         )
-        open_btn = self._icon_button(
-            "folder-open-symbolic",
-            "Open backups folder",
-            lambda *_p: self._open_target(zp.parent),
-        )
         delete_btn = self._icon_button(
             "user-trash-symbolic",
             "Delete backup",
@@ -659,7 +648,6 @@ class FilesView(Gtk.Box):
         )
 
         row.add_suffix(restore_btn)
-        row.add_suffix(open_btn)
         row.add_suffix(delete_btn)
         return row
 
@@ -814,12 +802,11 @@ class FilesView(Gtk.Box):
 
         def on_response(_d, response):
             if response == "delete":
-                try:
-                    zp.unlink(missing_ok=True)
-                    self._refresh_backup_list()
-                    self._toast("Backup deleted")
-                except OSError as e:
-                    self._alert("Could not delete", str(e))
+                self._soft_delete_with_undo(
+                    zp,
+                    f"backup \"{zp.name}\"",
+                    on_refresh=self._refresh_backup_list,
+                )
 
         dialog.connect("response", on_response)
         dialog.present(self.get_root())
@@ -1683,6 +1670,77 @@ class FilesView(Gtk.Box):
         if not _open_path(path):
             self._alert("Could not open path", str(path))
 
+    def _trash_dir(self) -> Optional[Path]:
+        root = self._server_dir()
+        if not root:
+            return None
+        d = root / ".hosty-trash"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _soft_delete_with_undo(
+        self,
+        target: Path,
+        label: str,
+        on_refresh,
+        on_finalize=None,
+        toast_seconds: int = 6,
+    ):
+        trash_dir = self._trash_dir()
+        if not trash_dir:
+            self._alert("No server selected", "Select a server first.")
+            return
+
+        trash_name = f"{target.name}.{uuid.uuid4().hex}.trash"
+        trashed = trash_dir / trash_name
+
+        try:
+            shutil.move(str(target), str(trashed))
+        except OSError as e:
+            self._alert("Could not delete", str(e))
+            return
+
+        state = {"undone": False}
+
+        def undo_delete():
+            if state["undone"]:
+                return
+            state["undone"] = True
+            try:
+                restore_target = target
+                restore_target.parent.mkdir(parents=True, exist_ok=True)
+                if restore_target.exists():
+                    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                    restore_target = restore_target.with_name(f"{restore_target.stem}-restored-{stamp}{restore_target.suffix}")
+                shutil.move(str(trashed), str(restore_target))
+                on_refresh()
+                self._toast(f"Restored {label}")
+            except OSError as e:
+                self._alert("Could not undo", str(e))
+
+        def finalize_delete():
+            if state["undone"]:
+                return False
+            try:
+                if trashed.is_dir():
+                    shutil.rmtree(trashed, ignore_errors=True)
+                else:
+                    trashed.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+            if on_finalize:
+                try:
+                    on_finalize()
+                except Exception:
+                    pass
+
+            return False
+
+        on_refresh()
+        self._toast(f"Deleted {label}", button_label="Undo", on_button=undo_delete, timeout=toast_seconds)
+        GLib.timeout_add_seconds(toast_seconds, finalize_delete)
+
     def _confirm_delete_world(self, path: Path, name: str):
         if self._is_running():
             self._alert("Server is running", "Stop the server before deleting a world.")
@@ -1699,12 +1757,11 @@ class FilesView(Gtk.Box):
 
         def on_response(_d, response):
             if response == "delete":
-                try:
-                    shutil.rmtree(path, ignore_errors=False)
-                    self._rebuild_lists()
-                    self._toast(f"Deleted “{name}”")
-                except OSError as e:
-                    self._alert("Could not delete", str(e))
+                self._soft_delete_with_undo(
+                    path,
+                    f"world \"{name}\"",
+                    on_refresh=self._rebuild_lists,
+                )
 
         dialog.connect("response", on_response)
         dialog.present(self.get_root())
@@ -1715,6 +1772,18 @@ class FilesView(Gtk.Box):
             return
 
         dependents = self._dependency_dependents(name)
+
+        def do_delete():
+            self._soft_delete_with_undo(
+                path,
+                f"mod \"{name}\"",
+                on_refresh=self._rebuild_lists,
+                on_finalize=lambda: self._remove_mod_from_dependency_state(name),
+            )
+
+        if not dependents:
+            do_delete()
+            return
 
         dialog = Adw.AlertDialog()
         if dependents:
@@ -1739,15 +1808,7 @@ class FilesView(Gtk.Box):
 
         def on_response(_d, response):
             if response == "delete":
-                try:
-                    path.unlink(missing_ok=True)
-                    self._remove_mod_from_dependency_state(name)
-                    self._rebuild_lists()
-                    self._toast(f"Removed “{name}”")
-                    if self._is_running():
-                        self._toast("Restart the server for mod changes to apply")
-                except OSError as e:
-                    self._alert("Could not delete", str(e))
+                do_delete()
 
         dialog.connect("response", on_response)
         dialog.present(self.get_root())
@@ -1759,7 +1820,18 @@ class FilesView(Gtk.Box):
         d.add_response("ok", "OK")
         d.present(self.get_root())
 
-    def _toast(self, message: str):
+    def _toast(
+        self,
+        message: str,
+        button_label: str | None = None,
+        on_button=None,
+        timeout: int = 3,
+    ):
         root = self.get_root()
         if root and hasattr(root, "show_toast"):
-            root.show_toast(message)
+            root.show_toast(
+                message,
+                button_label=button_label,
+                on_button=on_button,
+                timeout=timeout,
+            )

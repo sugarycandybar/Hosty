@@ -137,9 +137,6 @@ class PropertiesView(Gtk.Box):
         self._widgets["allow-flight"] = self._add_switch_row(
             players, "Allow Flight", "allow-flight", False, ""
         )
-        self._widgets["white-list"] = self._add_switch_row(
-            players, "Whitelist", "white-list", False, ""
-        )
         
         page.add(players)
         
@@ -239,6 +236,13 @@ class PropertiesView(Gtk.Box):
         if config:
             config.load()
             self._populate()
+
+    def reload_from_disk(self):
+        """Reload properties from server.properties on disk."""
+        if not self._config:
+            return
+        self._config.load()
+        self._populate()
     
     def _populate(self):
         """Populate widgets from config."""
@@ -326,6 +330,7 @@ class PropertiesView(Gtk.Box):
                 process.set_max_players(self._config.get_int("max-players", 20))
                 running = bool(process.is_running)
 
+        if self._server_manager and self._server_info:
             self._server_manager.emit_on_main_thread("server-changed", self._server_info.id)
 
         self._banner.set_revealed(running)

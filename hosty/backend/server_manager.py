@@ -160,6 +160,21 @@ class ServerManager(EventEmitter):
             if proc:
                 proc.ram_mb = ram_mb
             self.emit_on_main_thread('server-changed', server_id)
+
+    def restore_server(self, server_data: dict) -> bool:
+        """Restore a previously deleted server metadata entry."""
+        try:
+            info = ServerInfo(server_data)
+        except Exception:
+            return False
+
+        if not info.id or info.id in self._servers:
+            return False
+
+        self._servers[info.id] = info
+        self._save()
+        self.emit_on_main_thread('server-added', info.id)
+        return True
     
     def delete_server(self, server_id: str, delete_files: bool = True):
         """Delete a server. Optionally delete its files."""

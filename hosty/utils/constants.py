@@ -5,10 +5,12 @@ import os
 import sys
 from pathlib import Path
 
+from hosty.version import __version__
+
 # Application identity
 APP_ID = "io.github.sugarycandybar.Hosty"
 APP_NAME = "Hosty"
-APP_VERSION = "1.2.2"
+APP_VERSION = __version__
 APP_WEBSITE = "https://github.com/sugarycandybar/Hosty"
 
 # Directories

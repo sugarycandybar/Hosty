@@ -2,6 +2,8 @@
 HostyApplication - Main Adw.Application subclass.
 Handles app lifecycle, actions, CSS loading, and dialog management.
 """
+import shutil
+
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
@@ -126,6 +128,9 @@ class HostyApplication(Adw.Application):
             return
 
         self._window.sidebar.select_server(server_id)
+        info = self._server_manager.get_server(server_id)
+        if info:
+            self._window.detail_view.load_server(info)
 
         running_id = self._server_manager.get_running_server_id()
         if running_id and running_id != server_id:
@@ -227,8 +232,41 @@ class HostyApplication(Adw.Application):
         
         def on_response(d, response):
             if response == "delete":
-                self._server_manager.delete_server(server_id, delete_files=True)
-                self._window.show_toast(f"Server \"{server_info.name}\" deleted")
+                server_snapshot = server_info.to_dict()
+                server_dir = server_info.server_dir
+                state = {"undone": False}
+
+                self._server_manager.delete_server(server_id, delete_files=False)
+
+                def undo_delete():
+                    if state["undone"]:
+                        return
+                    state["undone"] = True
+                    if self._server_manager.restore_server(server_snapshot):
+                        self._window.sidebar.select_server(server_id)
+                        info = self._server_manager.get_server(server_id)
+                        if info:
+                            self._window.detail_view.load_server(info)
+                        self._window.show_toast(f"Server \"{server_info.name}\" restored")
+                    else:
+                        self._window.show_toast("Could not restore deleted server")
+
+                def finalize_delete():
+                    if state["undone"]:
+                        return False
+                    try:
+                        shutil.rmtree(server_dir, ignore_errors=True)
+                    except Exception:
+                        pass
+                    return False
+
+                self._window.show_toast(
+                    f"Server \"{server_info.name}\" deleted",
+                    button_label="Undo",
+                    on_button=undo_delete,
+                    timeout=6,
+                )
+                GLib.timeout_add_seconds(6, finalize_delete)
         
         dialog.connect("response", on_response)
         dialog.present(self._window)

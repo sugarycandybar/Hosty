@@ -46,6 +46,7 @@ class HostyWindow(Adw.ApplicationWindow):
             title="Servers",
             child=self._sidebar,
         )
+        self._sidebar_page = sidebar_page
         self._split_view.set_sidebar(sidebar_page)
         
         # ===== Content =====
@@ -222,10 +223,20 @@ class HostyWindow(Adw.ApplicationWindow):
 
         threading.Thread(target=worker, daemon=True).start()
     
-    def show_toast(self, message: str):
+    def show_toast(
+        self,
+        message: str,
+        button_label: str | None = None,
+        on_button=None,
+        timeout: int = 3,
+    ):
         """Show a toast notification."""
         toast = Adw.Toast(title=message)
-        toast.set_timeout(3)
+        toast.set_timeout(max(1, int(timeout)))
+        if button_label:
+            toast.set_button_label(button_label)
+            if on_button:
+                toast.connect("button-clicked", lambda *_args: on_button())
         self._toast_overlay.add_toast(toast)
 
     def pause_playit_auto_start_for_running_server(self, server_id: str):

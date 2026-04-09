@@ -18,6 +18,18 @@
     margin: 0;
 }
 
+button.hosty-starting-button,
+button.hosty-starting-button:disabled {
+    background-color: #e5a50a;
+    color: #2b1a00;
+    opacity: 1;
+}
+
+button.hosty-starting-button:hover,
+button.hosty-starting-button:active {
+    background-color: #d99a00;
+}
+
 /* ===== Status Indicators ===== */
 .status-dot {
     min-width: 10px;
@@ -87,6 +99,11 @@
 .console-input {
     font-family: "Source Code Pro", "JetBrains Mono", "Fira Code", monospace;
     font-size: 13px;
+}
+
+.console-autocomplete-hint {
+    font-size: 11px;
+    opacity: 0.75;
 }
 
 /* ===== Mods UI ===== */

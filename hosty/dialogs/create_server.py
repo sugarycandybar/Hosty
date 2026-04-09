@@ -11,7 +11,7 @@ from hosty.backend.server_manager import ServerManager
 from hosty.backend.download_manager import DownloadManager
 from hosty.backend.java_manager import JavaManager
 from hosty.utils.constants import (
-    DEFAULT_RAM_MB, MIN_RAM_MB, MAX_RAM_MB, get_required_java_version, DEFAULT_SERVER_PROPERTIES
+    MIN_RAM_MB, MAX_RAM_MB, get_required_java_version, DEFAULT_SERVER_PROPERTIES
 )
 
 
@@ -39,15 +39,9 @@ class CreateServerDialog(Adw.Dialog):
         header.set_show_start_title_buttons(False)
         header.set_show_end_title_buttons(False)
         
-        cancel_btn = Gtk.Button(label="Cancel")
-        cancel_btn.connect("clicked", lambda b: self.close())
-        header.pack_start(cancel_btn)
-
-        self._back_btn = Gtk.Button(label="Back")
-        self._back_btn.add_css_class("flat")
-        self._back_btn.set_visible(False)
-        self._back_btn.connect("clicked", self._on_back_clicked)
-        header.pack_start(self._back_btn)
+        self._cancel_btn = Gtk.Button(label="Cancel")
+        self._cancel_btn.connect("clicked", self._on_cancel_clicked)
+        header.pack_start(self._cancel_btn)
         
         self._create_btn = Gtk.Button(label="Next")
         self._create_btn.add_css_class("suggested-action")
@@ -173,10 +167,6 @@ class CreateServerDialog(Adw.Dialog):
         page = Adw.PreferencesPage()
         group = Adw.PreferencesGroup(
             title="Minecraft EULA",
-            description=(
-                "You must agree to the Minecraft EULA before Hosty can finish creating "
-                "the server."
-            ),
         )
 
         self._eula_row = Adw.SwitchRow(
@@ -273,10 +263,12 @@ class CreateServerDialog(Adw.Dialog):
 
         self._validate()
 
-    def _on_back_clicked(self, button):
+    def _on_cancel_clicked(self, button):
         if self._stack.get_visible_child_name() == "eula":
             self._stack.set_visible_child_name("config")
             self._validate()
+            return
+        self.close()
 
     def _on_page_changed(self, *_args):
         self._validate()
@@ -288,19 +280,22 @@ class CreateServerDialog(Adw.Dialog):
         page = self._stack.get_visible_child_name()
 
         if page == "config":
-            self._back_btn.set_visible(False)
+            self._cancel_btn.set_label("Cancel")
+            self._cancel_btn.set_sensitive(True)
             self._create_btn.set_label("Next")
             self._create_btn.set_sensitive(bool(name) and has_versions)
             return
 
         if page == "eula":
             has_eula = self._eula_row.get_active()
-            self._back_btn.set_visible(True)
+            self._cancel_btn.set_label("Back")
+            self._cancel_btn.set_sensitive(True)
             self._create_btn.set_label("Create")
             self._create_btn.set_sensitive(bool(name) and has_versions and has_eula)
             return
 
-        self._back_btn.set_visible(False)
+        self._cancel_btn.set_label("Cancel")
+        self._cancel_btn.set_sensitive(False)
         self._create_btn.set_label("Create")
         self._create_btn.set_sensitive(False)
 
@@ -329,7 +324,6 @@ class CreateServerDialog(Adw.Dialog):
         # Switch to progress page
         self._stack.set_visible_child_name("progress")
         self._create_btn.set_sensitive(False)
-        self._back_btn.set_visible(False)
         
         # Run installation in background
         thread = threading.Thread(

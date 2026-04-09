@@ -11,8 +11,6 @@ from gi.repository import Adw, Gtk
 from hosty.utils.constants import (
     APP_VERSION,
     DATA_DIR,
-    MIN_RAM_MB,
-    MAX_RAM_MB,
 )
 from hosty.backend.preferences_manager import PreferencesManager
 
@@ -59,25 +57,6 @@ def show_preferences_window(parent: Gtk.Window, preferences: PreferencesManager)
 
     dep_row.connect("notify::active", on_dep_toggled)
     group.add(dep_row)
-
-    ram_adj = Gtk.Adjustment(
-        value=preferences.default_ram_mb,
-        lower=MIN_RAM_MB,
-        upper=MAX_RAM_MB,
-        step_increment=256,
-        page_increment=1024,
-    )
-    ram_row = Adw.SpinRow(
-        title="Default RAM (MB)",
-        subtitle="Used when creating new servers",
-        adjustment=ram_adj,
-    )
-
-    def on_ram_changed(row):
-        preferences.default_ram_mb = int(row.get_value())
-
-    ram_row.connect("changed", on_ram_changed)
-    group.add(ram_row)
 
     page.add(group)
     win.add(page)

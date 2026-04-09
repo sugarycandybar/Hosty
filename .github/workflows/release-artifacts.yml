@@ -26,14 +26,14 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = python -c 'import ast; from pathlib import Path; tree = ast.parse(Path("hosty/utils/constants.py").read_text(encoding="utf-8")); print(next((node.value.value for node in tree.body if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id == "APP_VERSION" and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)), ""))'
+          $version = python -c 'import ast; from pathlib import Path; tree = ast.parse(Path("hosty/version.py").read_text(encoding="utf-8")); print(next((node.value.value for node in tree.body if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id == "__version__" and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)), ""))'
           if (-not $version) {
-            Write-Error "APP_VERSION not found"
+            Write-Error "__version__ not found"
             exit 1
           }
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
-      - name: Validate release tag matches APP_VERSION
+      - name: Validate release tag matches app version
         if: github.event_name == 'release'
         shell: pwsh
         run: |
@@ -55,7 +55,7 @@ jobs:
           $normalizedTag = Normalize-Version $tag
 
           if (-not $normalizedVersion -or -not $normalizedTag -or $normalizedTag -ne $normalizedVersion) {
-            Write-Error "Release tag '$tag' does not match APP_VERSION '$version'"
+            Write-Error "Release tag '$tag' does not match app version '$version'"
             exit 1
           }
 
@@ -90,14 +90,14 @@ jobs:
       - name: Read app version
         id: version
         run: |
-          VERSION=$(python3 -c "import re; from pathlib import Path; text = Path('hosty/utils/constants.py').read_text(encoding='utf-8'); match = re.search(r'^APP_VERSION\\s*=\\s*\"([^\"]+)\"', text, re.MULTILINE); print(match.group(1) if match else '')")
+          VERSION=$(python3 -c "import re; from pathlib import Path; text = Path('hosty/version.py').read_text(encoding='utf-8'); match = re.search(r'^__version__\\s*=\\s*\"([^\"]+)\"', text, re.MULTILINE); print(match.group(1) if match else '')")
           if [ -z "$VERSION" ]; then
-            echo "APP_VERSION not found" >&2
+            echo "__version__ not found" >&2
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Validate release tag matches APP_VERSION
+      - name: Validate release tag matches app version
         if: github.event_name == 'release'
         run: |
           TAG="${{ github.event.release.tag_name }}"
@@ -119,7 +119,7 @@ jobs:
           }
 
           if ! NORMALIZED_TAG="$(normalize_version "$TAG")" || ! NORMALIZED_VERSION="$(normalize_version "$VERSION")" || [ "$NORMALIZED_TAG" != "$NORMALIZED_VERSION" ]; then
-            echo "Release tag '$TAG' does not match APP_VERSION '$VERSION'" >&2
+            echo "Release tag '$TAG' does not match app version '$VERSION'" >&2
             exit 1
           fi
 
