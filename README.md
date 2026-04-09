@@ -4,20 +4,15 @@ Hosty is a desktop app for creating, running, and managing Minecraft Fabric serv
 
 It keeps the full server workflow in one app: setup, start/stop, monitoring, mod management, backups, and player access controls.
 
-## Features
+## Why Hosty?
 
-- Guided Fabric server creation with version selection and EULA step
-- Automatic Java runtime handling when required by selected Minecraft version
-- Multi-server library with clear running/starting/stopped status
-- Start/stop controls with safety checks and restart-required notices when needed
-- Console view with command input, command autocomplete, and output history
-- Performance monitoring view for live server resource insight
-- Properties editor with autosave for server.properties and RAM allocation
-- Worlds and dimensions manager with open-folder actions and safe delete flows
-- Backup tools to create, list, restore, and remove world backups
-- Mod manager with Modrinth search/install, dependency resolution, and dependency-aware remove warnings
-- Undo support for destructive actions across servers, worlds, dimensions, mods, backups, and player list removals
-- Connect tools including local IP copy, Playit.gg tunnel setup, and whitelist/ban management
+
+- Easy to use: set up and run a Fabric server without juggling scripts, terminals, or scattered tools.
+- Auto-downloads dependencies: Hosty fetches what your server needs, including Java when it is missing.
+- All in the app: setup, start/stop, live monitoring, mod management, backups, and access controls in one place.
+- Built for real hosting: stream logs, send commands, tweak settings, and manage worlds without leaving Hosty.
+- Less manual maintenance: practical backup and restore tools help you recover quickly when something goes wrong.
+
 
 ## Run Hosty
 
@@ -64,7 +59,7 @@ python hosty.py
 	<img src="images/console.png" alt="Console view" width="900" />
 </p>
 
-- Console: stream logs, send commands, and use autocomplete.
+- Console: stream logs and send commands.
 
 <p align="center">
 	<img src="images/performance.png" alt="Performance view" width="900" />
@@ -88,7 +83,7 @@ python hosty.py
 	<img src="images/mods.png" alt="Mods view" width="900" />
 </p>
 
-- Mods: browse Modrinth, install mods, and manage dependencies.
+- Mods: browse Modrinth, install mods, and auto-manage dependencies.
 
 <p align="center">
 	<img src="images/connect.png" alt="Connect view" width="900" />
@@ -100,9 +95,4 @@ python hosty.py
 	<img src="images/backups.png" alt="Backups view" width="900" />
 </p>
 
-- Backups: create and restore world backups safely.
-
-## Project layout
-
-- hosty.py starts the app
-- hosty/ contains UI, backend logic, dialogs, and utilities
+- Backups: create and restore world backups.

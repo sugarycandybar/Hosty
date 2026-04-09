@@ -101,11 +101,6 @@ button.hosty-starting-button:active {
     font-size: 13px;
 }
 
-.console-autocomplete-hint {
-    font-size: 11px;
-    opacity: 0.75;
-}
-
 /* ===== Mods UI ===== */
 .mod-results-list {
     background: transparent;

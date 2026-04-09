@@ -4,8 +4,7 @@ ConsoleView - Server console/terminal view with command input.
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, GLib, Pango, Gdk
+from gi.repository import Gtk, GLib, Pango
 
 from hosty.backend.server_process import ServerProcess
 
@@ -18,38 +17,6 @@ class ConsoleView(Gtk.Box):
         self._process = None
         self._output_handler_id = None
         self._auto_scroll = True
-        self._tab_context = ""
-        self._tab_matches: list[str] = []
-        self._tab_index = -1
-        self._tab_mode = ""
-        self._tab_base_command = ""
-        self._tab_has_slash = False
-        self._applying_completion = False
-        self._command_words = sorted({
-            "advancement", "attribute", "ban", "ban-ip", "banlist", "bossbar", "clear",
-            "clone", "data", "datapack", "debug", "deop", "difficulty", "effect",
-            "enchant", "execute", "experience", "fill", "forceload", "function",
-            "gamemode", "gamerule", "give", "help", "item", "jfr", "kick", "kill",
-            "list", "locate", "loot", "me", "msg", "op", "pardon", "pardon-ip",
-            "particle", "perf", "place", "playsound", "publish", "recipe", "reload",
-            "save-all", "save-off", "save-on", "say", "schedule", "scoreboard", "seed",
-            "setblock", "setidletimeout", "setworldspawn", "spawnpoint", "spectate",
-            "spreadplayers", "stop", "stopsound", "summon", "tag", "team", "teammsg",
-            "teleport", "tell", "tellraw", "time", "title", "tm", "tp", "trigger",
-            "w", "weather", "whitelist", "worldborder", "xp",
-        })
-        self._subcommand_words = {
-            "banlist": ["ips", "players"],
-            "datapack": ["disable", "enable", "list"],
-            "difficulty": ["easy", "normal", "hard", "peaceful"],
-            "gamerule": ["doDaylightCycle", "keepInventory", "mobGriefing", "doMobSpawning"],
-            "help": ["1", "2", "3", "4", "5"],
-            "save-all": ["flush"],
-            "time": ["add", "query", "set"],
-            "weather": ["clear", "rain", "thunder"],
-            "whitelist": ["add", "list", "off", "on", "reload", "remove"],
-            "worldborder": ["add", "center", "damage", "get", "set", "warning"],
-        }
         
         # ===== Console output area =====
         self._scrolled = Gtk.ScrolledWindow()
@@ -82,19 +49,15 @@ class ConsoleView(Gtk.Box):
         input_bar.add_css_class("console-input-bar")
         input_bar.set_margin_start(8)
         input_bar.set_margin_end(8)
-        input_bar.set_margin_bottom(0)
+        input_bar.set_margin_bottom(8)
         input_bar.set_margin_top(4)
         
         # Command entry
         self._entry = Gtk.Entry()
-        self._entry.set_placeholder_text("Type a command... (Tab to autocomplete)")
+        self._entry.set_placeholder_text("Type a command...")
         self._entry.set_hexpand(True)
         self._entry.add_css_class("console-input")
         self._entry.connect("activate", self._on_entry_activate)
-        self._entry.connect("changed", self._on_entry_changed)
-        key_controller = Gtk.EventControllerKey()
-        key_controller.connect("key-pressed", self._on_entry_key_pressed)
-        self._entry.add_controller(key_controller)
         input_bar.append(self._entry)
         
         # Send button
@@ -104,19 +67,8 @@ class ConsoleView(Gtk.Box):
         send_btn.connect("clicked", self._on_send_clicked)
         input_bar.append(send_btn)
 
-        self._autocomplete_hint = Gtk.Label()
-        self._autocomplete_hint.set_halign(Gtk.Align.START)
-        self._autocomplete_hint.set_xalign(0.0)
-        self._autocomplete_hint.add_css_class("dim-label")
-        self._autocomplete_hint.add_css_class("console-autocomplete-hint")
-        self._autocomplete_hint.set_margin_start(10)
-        self._autocomplete_hint.set_margin_end(10)
-        self._autocomplete_hint.set_margin_bottom(8)
-
         input_shell.append(input_bar)
-        input_shell.append(self._autocomplete_hint)
         self.append(input_shell)
-        self._update_autocomplete_hint("")
     
     def _create_tags(self):
         """Create text tags for console output coloring."""
@@ -191,149 +143,6 @@ class ConsoleView(Gtk.Box):
     def _on_entry_activate(self, entry):
         """Handle Enter key in command entry."""
         self._send_command()
-
-    def _on_entry_changed(self, entry):
-        if self._applying_completion:
-            return
-        self._tab_context = ""
-        self._tab_matches = []
-        self._tab_index = -1
-        self._tab_mode = ""
-        self._tab_base_command = ""
-        self._tab_has_slash = False
-        self._update_autocomplete_hint(entry.get_text())
-
-    def _completion_candidates(self, text: str):
-        stripped = text.strip()
-        if not stripped:
-            return None
-
-        body = stripped[1:] if stripped.startswith("/") else stripped
-        if not body:
-            return None
-
-        ends_with_space = text.endswith(" ")
-        parts = body.split()
-        if not parts:
-            return None
-
-        if len(parts) == 1 and not ends_with_space:
-            prefix = parts[0].lower()
-            matches = [cmd for cmd in self._command_words if cmd.startswith(prefix)]
-            return {
-                "mode": "command",
-                "prefix": prefix,
-                "command": "",
-                "matches": matches,
-            }
-
-        if len(parts) > 2:
-            return None
-
-        command = parts[0].lower()
-        subcommands = self._subcommand_words.get(command, [])
-        if not subcommands:
-            return None
-
-        sub_prefix = "" if ends_with_space or len(parts) == 1 else parts[1].lower()
-        matches = [sub for sub in subcommands if sub.startswith(sub_prefix)]
-        return {
-            "mode": "subcommand",
-            "prefix": sub_prefix,
-            "command": command,
-            "matches": matches,
-        }
-
-    def _update_autocomplete_hint(self, text: str):
-        default_tip = "Tip: Press Tab to autocomplete. Press Shift+Tab to cycle backwards."
-        candidates = self._completion_candidates(text)
-        if not candidates:
-            self._autocomplete_hint.set_label(default_tip)
-            return
-
-        matches = candidates.get("matches", [])
-        if not matches:
-            self._autocomplete_hint.set_label("No autocomplete matches")
-            return
-
-        preview = ", ".join(matches[:4])
-        suffix = "..." if len(matches) > 4 else ""
-        if candidates.get("mode") == "subcommand":
-            cmd = candidates.get("command", "")
-            self._autocomplete_hint.set_label(
-                f"Autocomplete {cmd}: {preview}{suffix}"
-            )
-            return
-        self._autocomplete_hint.set_label(f"Autocomplete commands: {preview}{suffix}")
-
-    def _apply_tab_completion(self, backwards: bool):
-        if not self._tab_matches:
-            return True
-
-        step = -1 if backwards else 1
-        self._tab_index = (self._tab_index + step) % len(self._tab_matches)
-        token = self._tab_matches[self._tab_index]
-
-        if self._tab_mode == "subcommand":
-            completed = f"{self._tab_base_command} {token}".strip()
-        else:
-            completed = token
-
-        if self._tab_has_slash:
-            completed = f"/{completed}"
-
-        self._applying_completion = True
-        self._entry.set_text(completed)
-        self._entry.set_position(-1)
-        self._applying_completion = False
-        return True
-
-    def _prepare_tab_completion(self, text: str) -> bool:
-        stripped = text.strip()
-        if not stripped:
-            return False
-
-        has_slash = stripped.startswith("/")
-        candidates = self._completion_candidates(text)
-        if not candidates:
-            return False
-
-        prefix = str(candidates.get("prefix", ""))
-        command = str(candidates.get("command", ""))
-        matches = list(candidates.get("matches", []))
-        mode = str(candidates.get("mode", ""))
-
-        if not matches:
-            return True
-
-        if mode == "subcommand":
-            self._tab_context = f"sub:{command}:{prefix}:{int(has_slash)}"
-            self._tab_mode = "subcommand"
-            self._tab_base_command = command
-        else:
-            self._tab_context = f"cmd:{prefix}:{int(has_slash)}"
-            self._tab_mode = "command"
-            self._tab_base_command = ""
-
-        self._tab_has_slash = has_slash
-        self._tab_matches = matches
-        self._tab_index = -1
-        return True
-
-    def _on_entry_key_pressed(self, _controller, keyval, _keycode, state):
-        if keyval not in (Gdk.KEY_Tab, Gdk.KEY_ISO_Left_Tab):
-            return False
-
-        text = self._entry.get_text()
-        if not text.strip():
-            return False
-
-        if not self._tab_matches:
-            if not self._prepare_tab_completion(text):
-                return False
-
-        backwards = bool(state & Gdk.ModifierType.SHIFT_MASK)
-        return self._apply_tab_completion(backwards)
     
     def _on_send_clicked(self, button):
         """Handle send button click."""
@@ -353,11 +162,4 @@ class ConsoleView(Gtk.Box):
             self.append_text("[Hosty] No server process connected\n")
         
         self._entry.set_text("")
-        self._tab_context = ""
-        self._tab_matches = []
-        self._tab_index = -1
-        self._tab_mode = ""
-        self._tab_base_command = ""
-        self._tab_has_slash = False
-        self._update_autocomplete_hint("")
     

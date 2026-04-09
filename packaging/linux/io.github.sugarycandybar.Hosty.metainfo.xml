@@ -28,9 +28,9 @@
   <url type="homepage">https://github.com/sugarycandybar/Hosty</url>
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
   <releases>
-    <release version="1.0.0" date="2026-04-06">
+    <release version="1.3.0" date="2026-04-08">
       <description>
-        <p>Initial public release of Hosty.</p>
+        <p>Polish and performance improvements.</p>
       </description>
     </release>
   </releases>
