@@ -34,6 +34,7 @@ class ServerDetailView(Gtk.Box):
         self._selected_status_handler_id = None
         self._running_status_handler_id = None
         self._running_watched_process: Optional[ServerProcess] = None
+        self._mods_operation_handler_id = None
         
         self._toolbar_view = Adw.ToolbarView()
         self._toolbar_view.set_hexpand(True)
@@ -111,6 +112,10 @@ class ServerDetailView(Gtk.Box):
         )
         self._toolbar_view.add_bottom_bar(self._switcher_bar)
         GLib.idle_add(self._sync_switcher_bar_reveal)
+
+        self._mods_operation_handler_id = self._server_manager.connect(
+            "mods-operation-changed", self._on_mods_operation_changed
+        )
 
     def _on_switcher_title_visible_changed(self, *_args):
         """Reveal the bottom switcher only in compact layouts."""
@@ -248,6 +253,8 @@ class ServerDetailView(Gtk.Box):
     def _update_toggle_for_selected(self, status: str):
         """Update Start/Stop from the sidebar-selected server's process."""
         self._toggle_btn.remove_css_class("hosty-starting-button")
+        selected_id = self._current_server.id if self._current_server else ""
+        mods_busy = bool(selected_id) and self._server_manager.is_mod_operation_active(selected_id)
 
         if status == ServerStatus.STARTING:
             self._toggle_btn.set_label("Starting...")
@@ -273,10 +280,21 @@ class ServerDetailView(Gtk.Box):
                 and self._selected_process is not None
                 and not self._selected_process.is_running
             )
-            self._toggle_btn.set_sensitive(not blocked)
-            self._toggle_btn.set_tooltip_text(
-                "Another server is already running" if blocked else None
-            )
+            self._toggle_btn.set_sensitive((not blocked) and (not mods_busy))
+            if mods_busy:
+                self._toggle_btn.set_tooltip_text("Mods are currently installing/updating")
+            elif blocked:
+                self._toggle_btn.set_tooltip_text("Another server is already running")
+            else:
+                self._toggle_btn.set_tooltip_text(None)
+
+    def _on_mods_operation_changed(self, _manager, server_id: str, _active: bool, _count: int):
+        if not self._current_server:
+            return
+        if self._current_server.id != server_id:
+            return
+        status = self._selected_process.status if self._selected_process else ServerStatus.STOPPED
+        self._update_toggle_for_selected(status)
 
     def _on_tab_changed(self, stack, _pspec):
         """Keep tab navigation predictable when changing pages."""
@@ -298,6 +316,15 @@ class ServerDetailView(Gtk.Box):
         if self._selected_process.is_running:
             self._selected_process.stop()
         else:
+            if self._current_server and self._server_manager.is_mod_operation_active(self._current_server.id):
+                dialog = Adw.AlertDialog.new(
+                    "Cannot Start Server",
+                    "Mods are currently being installed or updated. Please wait for the operation to finish.",
+                )
+                dialog.add_response("ok", "OK")
+                dialog.present(self.get_root())
+                return
+
             if self._server_manager.is_any_server_running():
                 dialog = Adw.AlertDialog.new(
                     "Cannot Start Server",

@@ -67,6 +67,7 @@ class ServerManager(EventEmitter):
         super().__init__()
         self._servers: dict[str, ServerInfo] = {}
         self._processes: dict[str, ServerProcess] = {}
+        self._mods_operation_counts: dict[str, int] = {}
         self.java_manager = JavaManager()
         self.download_manager = DownloadManager()
         self.playit_manager = PlayitManager()
@@ -245,6 +246,34 @@ class ServerManager(EventEmitter):
             if process.is_running:
                 return server_id
         return None
+
+    def begin_mod_operation(self, server_id: str) -> None:
+        """Mark a server as having an active mod install/update operation."""
+        if not server_id:
+            return
+        count = int(self._mods_operation_counts.get(server_id, 0)) + 1
+        self._mods_operation_counts[server_id] = count
+        self.emit_on_main_thread("mods-operation-changed", server_id, True, count)
+
+    def end_mod_operation(self, server_id: str) -> None:
+        """Clear one active mod install/update operation for a server."""
+        if not server_id:
+            return
+        count = int(self._mods_operation_counts.get(server_id, 0)) - 1
+        if count <= 0:
+            self._mods_operation_counts.pop(server_id, None)
+            count = 0
+            active = False
+        else:
+            self._mods_operation_counts[server_id] = count
+            active = True
+        self.emit_on_main_thread("mods-operation-changed", server_id, active, count)
+
+    def is_mod_operation_active(self, server_id: str) -> bool:
+        """True while any mod install/update operation is active for this server."""
+        if not server_id:
+            return False
+        return int(self._mods_operation_counts.get(server_id, 0)) > 0
         
     def stop_all(self):
         """Stop all running servers."""

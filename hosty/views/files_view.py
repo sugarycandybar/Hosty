@@ -167,6 +167,8 @@ class FilesView(Gtk.Box):
         self._check_updates_row: Optional[Adw.ActionRow] = None
         self._mods_update_busy = False
         self._modpack_version_enrich_busy = False
+        self._active_mod_operation_tokens: dict[str, str] = {}
+        self._mod_operation_lock = threading.Lock()
         self._players_group: Optional[Adw.PreferencesGroup] = None
         self._world_rows: list[Gtk.Widget] = []
         self._mod_rows: list[Gtk.Widget] = []
@@ -236,7 +238,6 @@ class FilesView(Gtk.Box):
 
         check_updates_row = Adw.ActionRow(
             title="Check for mod updates",
-            subtitle="Update modpacks and standalone mods safely",
         )
         check_updates_row.add_prefix(Gtk.Image.new_from_icon_name("software-update-available-symbolic"))
         check_updates_row.set_activatable(True)
@@ -271,6 +272,27 @@ class FilesView(Gtk.Box):
         if not self._server_info:
             return None
         return Path(self._server_info.server_dir)
+
+    def _begin_mod_operation(self) -> Optional[str]:
+        if not self._server_info or not self._server_manager:
+            return None
+        server_id = str(self._server_info.id)
+        if not server_id:
+            return None
+        token = uuid.uuid4().hex
+        with self._mod_operation_lock:
+            self._active_mod_operation_tokens[token] = server_id
+        self._server_manager.begin_mod_operation(server_id)
+        return token
+
+    def _end_mod_operation(self, token: Optional[str]) -> None:
+        if not token:
+            return
+        server_id = None
+        with self._mod_operation_lock:
+            server_id = self._active_mod_operation_tokens.pop(token, None)
+        if server_id and self._server_manager:
+            self._server_manager.end_mod_operation(server_id)
 
     def _mod_dependency_state_path(self) -> Optional[Path]:
         root = self._server_dir()
@@ -763,32 +785,26 @@ class FilesView(Gtk.Box):
         mods_dir.mkdir(parents=True, exist_ok=True)
         jars = sorted(mods_dir.glob("*.jar"), key=lambda p: p.name.lower())
         entries = self._modpack_entries()
-        managed_map = self._modpack_managed_mod_map()
-        managed_set = set(managed_map.keys())
+        managed_set = set(self._modpack_managed_mod_map().keys())
 
-        if entries:
-            self._mod_rows.append(self._add_info_row(self._mods_group, "Modpack installs"))
-            for project_id, entry in sorted(
-                entries.items(),
-                key=lambda item: (str(item[1].get("title", "")).strip() or item[0]).lower(),
-            ):
-                row = self._make_modpack_row(project_id, entry)
-                self._mods_group.add(row)
-                self._mod_rows.append(row)
+        for project_id, entry in sorted(
+            entries.items(),
+            key=lambda item: (str(item[1].get("title", "")).strip() or item[0]).lower(),
+        ):
+            row = self._make_modpack_row(project_id, entry)
+            self._mods_group.add(row)
+            self._mod_rows.append(row)
 
         standalone_jars = [jar for jar in jars if jar.name.lower() not in managed_set]
 
         if not standalone_jars and not entries:
             self._mod_rows.append(self._add_info_row(self._mods_group, "No mods installed"))
-        elif not standalone_jars and entries:
-            self._mod_rows.append(self._add_info_row(self._mods_group, "No standalone mods"))
-        else:
-            if entries:
-                self._mod_rows.append(self._add_info_row(self._mods_group, "Standalone mods"))
-            for jar in standalone_jars:
-                row = self._make_mod_row(jar)
-                self._mods_group.add(row)
-                self._mod_rows.append(row)
+            return
+
+        for jar in standalone_jars:
+            row = self._make_mod_row(jar)
+            self._mods_group.add(row)
+            self._mod_rows.append(row)
 
     def _add_info_row(self, group: Adw.PreferencesGroup, title: str) -> Adw.ActionRow:
         row = Adw.ActionRow(title=title)
@@ -954,24 +970,103 @@ class FilesView(Gtk.Box):
             "Open modpack page",
             lambda *_p, pid=project_id: _open_uri(f"https://modrinth.com/modpack/{pid}"),
         )
+        delete_btn = self._icon_button(
+            "user-trash-symbolic",
+            "Delete modpack",
+            lambda *_p, pid=project_id, t=title: self._confirm_delete_modpack(pid, t),
+            destructive=True,
+        )
         row.add_suffix(view_btn)
         row.add_suffix(open_btn)
+        row.add_suffix(delete_btn)
         return row
+
+    def _confirm_delete_modpack(self, project_id: str, title: str) -> None:
+        if self._is_running():
+            self._alert("Server is running", "Stop the server before deleting a modpack.")
+            return
+
+        dialog = Adw.AlertDialog()
+        dialog.set_heading("Delete modpack?")
+        dialog.set_body(
+            f"Remove \"{title}\" and delete its managed mod files from this server?"
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("delete", "Delete")
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def on_response(_d, response):
+            if response == "delete":
+                self._delete_modpack(project_id, title)
+
+        dialog.connect("response", on_response)
+        dialog.present(self.get_root())
+
+    def _delete_modpack(self, project_id: str, title: str) -> None:
+        entry = self._modpack_entries().get(project_id)
+        if not entry:
+            return
+
+        root = self._server_dir()
+        if not root:
+            self._alert("No server selected", "Select a server before deleting a modpack.")
+            return
+
+        mods_dir = root / "mods"
+        removed_count = 0
+        for mod_name in [str(m).strip() for m in (entry.get("mods") or []) if str(m).strip()]:
+            target = self._find_mod_jar_path(mods_dir, mod_name)
+            if target and target.exists():
+                target.unlink(missing_ok=True)
+                removed_count += 1
+            self._remove_mod_from_mod_states(mod_name)
+
+        state = self._read_modpack_state()
+        projects = state.get("installed_projects", {})
+        if isinstance(projects, dict):
+            projects.pop(project_id, None)
+            self._write_modpack_state({"installed_projects": projects})
+
+        self._rebuild_lists()
+        self._toast(f"Deleted {title} ({removed_count} mod files removed)")
 
     def _show_modpack_mods_dialog(self, modpack_title: str, mods: list[str]) -> None:
         d = Adw.AlertDialog()
         d.set_heading(modpack_title)
-        if not mods:
+        cleaned = []
+        for item in mods:
+            name = str(item).strip()
+            if name.startswith("- "):
+                name = name[2:].strip()
+            if name:
+                cleaned.append(name)
+
+        if not cleaned:
             d.set_body("No tracked mod files for this modpack yet.")
             d.add_response("ok", "OK")
             d.present(self.get_root())
             return
 
-        preview = "\n".join([f"- {m}" for m in mods[:24]])
-        extra = ""
-        if len(mods) > 24:
-            extra = f"\n- and {len(mods) - 24} more"
-        d.set_body(f"Managed mods:\n\n{preview}{extra}")
+        cleaned = sorted(set(cleaned), key=str.lower)
+        d.set_body(f"{len(cleaned)} managed mods")
+
+        listbox = Gtk.ListBox()
+        listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        listbox.add_css_class("boxed-list")
+        for name in cleaned:
+            row = Adw.ActionRow(title=name)
+            row.set_activatable(False)
+            row.add_prefix(Gtk.Image.new_from_icon_name("application-x-addon-symbolic"))
+            listbox.append(row)
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        sw.set_min_content_height(360)
+        sw.set_child(listbox)
+        d.set_extra_child(sw)
+
         d.add_response("ok", "OK")
         d.present(self.get_root())
 
@@ -1056,31 +1151,31 @@ class FilesView(Gtk.Box):
                         self._toast("All tracked mods are up to date")
                     return False
 
-                dialog = Adw.AlertDialog()
-                dialog.set_heading("Install available updates?")
-
                 lines: list[str] = []
                 if modpack_updates:
                     lines.append("Modpacks:")
-                    for _pid, entry, newer in modpack_updates[:10]:
-                        title = str(entry.get("title", "")).strip() or _pid
+                    for pid, entry, newer in modpack_updates[:12]:
+                        title = str(entry.get("title", "")).strip() or pid
                         vn = str(newer.version_number or newer.version_id)
                         lines.append(f"- {title} -> {vn}")
-                    if len(modpack_updates) > 10:
-                        lines.append(f"- and {len(modpack_updates) - 10} more modpacks")
+                    if len(modpack_updates) > 12:
+                        lines.append(f"- and {len(modpack_updates) - 12} more modpacks")
 
                 if standalone_updates:
                     if lines:
                         lines.append("")
                     lines.append("Standalone mods:")
-                    for pid, meta, latest, _deps in standalone_updates[:14]:
+                    for pid, meta, newer, _deps in standalone_updates[:14]:
                         title = str((meta or {}).get("title", "")).strip() or pid
-                        vn = str(latest.version_number or latest.version_id)
+                        vn = str(newer.version_number or newer.version_id)
                         lines.append(f"- {title} -> {vn}")
                     if len(standalone_updates) > 14:
                         lines.append(f"- and {len(standalone_updates) - 14} more mods")
 
                 listing = "\n".join(lines)
+
+                dialog = Adw.AlertDialog()
+                dialog.set_heading("Install available updates?")
                 dialog.set_body(
                     f"Found {len(modpack_updates)} modpack update(s) and "
                     f"{len(standalone_updates)} standalone mod update(s)."
@@ -1099,41 +1194,20 @@ class FilesView(Gtk.Box):
                         self._set_mod_update_row_subtitle("Update check complete")
                         return
 
-                    total_work = max(1, len(modpack_updates) + len(standalone_updates))
-                    progress_dialog = Adw.AlertDialog()
-                    progress_dialog.set_heading("Updating mods")
-                    progress_dialog.set_body("Installing selected updates...")
-                    progress_dialog.add_response("close", "Close")
-                    progress_dialog.set_default_response("close")
-                    progress_dialog.set_close_response("close")
+                    op_token = self._begin_mod_operation()
+                    if not op_token:
+                        self._mods_update_busy = False
+                        self._set_mod_update_row_subtitle("Update check complete")
+                        self._alert("No server selected", "Select a server before updating mods.")
+                        return
 
-                    progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-                    progress_label = Gtk.Label(label=f"0/{total_work}", xalign=0.0)
-                    progress_label.add_css_class("dim-label")
-                    progress_bar = Gtk.ProgressBar()
-                    progress_bar.set_fraction(0.0)
-                    progress_box.append(progress_label)
-                    progress_box.append(progress_bar)
-                    progress_dialog.set_extra_child(progress_box)
-                    progress_dialog.present(self.get_root())
-
-                    def on_progress(done: int, total: int, text: str):
-                        total_safe = max(1, int(total))
-                        done_safe = max(0, min(int(done), total_safe))
-                        progress_bar.set_fraction(done_safe / total_safe)
-                        if text:
-                            progress_label.set_label(f"{done_safe}/{total_safe} · {text}")
-                        else:
-                            progress_label.set_label(f"{done_safe}/{total_safe}")
-
-                    def on_finish(applied: int, failed: int):
-                        progress_bar.set_fraction(1.0)
-                        progress_label.set_label(f"Done · {applied} applied, {failed} failed")
-                        progress_dialog.set_body("Update run complete.")
-
+                    self._set_mod_update_row_subtitle("Updating mods...")
+                    self._toast(
+                        f"Updating {len(modpack_updates)} modpack(s) and {len(standalone_updates)} mod(s)"
+                    )
                     threading.Thread(
                         target=self._apply_mod_updates,
-                        args=(modpack_updates, standalone_updates, on_progress, on_finish),
+                        args=(modpack_updates, standalone_updates, op_token),
                         daemon=True,
                     ).start()
 
@@ -1149,8 +1223,7 @@ class FilesView(Gtk.Box):
         self,
         modpack_updates: list,
         standalone_updates: list,
-        progress_callback=None,
-        finish_callback=None,
+        mod_operation_token: Optional[str] = None,
     ) -> None:
         from hosty.backend import modrinth_client
 
@@ -1159,6 +1232,7 @@ class FilesView(Gtk.Box):
             GLib.idle_add(lambda: self._alert("No server selected", "Select a server to update mods."))
             GLib.idle_add(lambda: self._set_mod_update_row_subtitle("Update check complete"))
             GLib.idle_add(lambda: setattr(self, "_mods_update_busy", False))
+            GLib.idle_add(lambda t=mod_operation_token: self._end_mod_operation(t))
             return
 
         mods_dir = root / "mods"
@@ -1166,16 +1240,6 @@ class FilesView(Gtk.Box):
 
         applied = 0
         failed = 0
-        total_tasks = max(1, len(modpack_updates) + len(standalone_updates))
-        completed_tasks = 0
-
-        def notify_progress(text: str):
-            if progress_callback:
-                GLib.idle_add(
-                    lambda d=completed_tasks, t=total_tasks, m=text: progress_callback(d, t, m)
-                )
-
-        notify_progress("Starting updates")
 
         # Apply modpack updates first so pack-managed versions remain authoritative.
         for index, (project_id, entry, newer_version) in enumerate(modpack_updates, start=1):
@@ -1191,25 +1255,27 @@ class FilesView(Gtk.Box):
                     for m in (entry.get("mods") or [])
                     if str(m).strip().lower().endswith(".jar")
                 }
-                downloaded_mods: set[str] = set()
 
                 def on_progress(done: int, total: int, rel_path: str):
-                    rel = str(rel_path or "").replace("\\", "/")
-                    if rel.lower().startswith("mods/") and rel.lower().endswith(".jar"):
-                        downloaded_mods.add(Path(rel).name.lower())
                     GLib.idle_add(
                         lambda d=done, t=total: self._set_mod_update_row_subtitle(
                             f"Updating {pack_title}: {d}/{t}"
                         )
                     )
 
-                modrinth_client.install_modpack(
+                result = modrinth_client.install_modpack(
                     newer_version.version_id,
                     root,
                     progress_callback=on_progress,
                 )
 
-                removed = previous_mods - downloaded_mods
+                new_managed_mods = {
+                    str(m).strip().lower()
+                    for m in (result.managed_mod_files or [])
+                    if str(m).strip().lower().endswith(".jar")
+                }
+
+                removed = previous_mods - new_managed_mods
                 for name in removed:
                     old_path = self._find_mod_jar_path(mods_dir, name)
                     if old_path and old_path.exists():
@@ -1221,14 +1287,11 @@ class FilesView(Gtk.Box):
                     newer_version.version_id,
                     version_number=newer_version.version_number,
                     title=pack_title,
-                    mod_files=sorted(downloaded_mods),
+                    mod_files=sorted(new_managed_mods),
                 )
                 applied += 1
             except Exception:
                 failed += 1
-
-            completed_tasks += 1
-            notify_progress(f"Updated modpack: {pack_title}")
 
         managed_mods = set(self._modpack_managed_mod_map().keys())
 
@@ -1268,15 +1331,11 @@ class FilesView(Gtk.Box):
             except Exception:
                 failed += 1
 
-            completed_tasks += 1
-            notify_progress(f"Updated standalone mod: {mod_title}")
-
         def finish_ui():
             self._mods_update_busy = False
             self._set_mod_update_row_subtitle("Update check complete")
+            self._end_mod_operation(mod_operation_token)
             self._rebuild_lists()
-            if finish_callback:
-                finish_callback(applied, failed)
             if failed == 0:
                 self._toast(f"Applied {applied} update(s)")
             else:
@@ -2241,14 +2300,18 @@ class FilesView(Gtk.Box):
                 self._alert("No compatible version", "No compatible server version is available.")
                 return
 
+            op_token = self._begin_mod_operation()
+            if not op_token:
+                self._alert("No server selected", "Select a server before installing mods.")
+                return
+
             install_btn.set_label("Installing…")
             install_btn.set_sensitive(False)
 
             if is_modpack:
-                install_btn.set_label("0/0")
-                downloaded_mods: set[str] = set()
+                install_btn.set_label("Installing...")
 
-                def ui_ok_pack(downloaded_count: int, override_count: int):
+                def ui_ok_pack(downloaded_count: int, override_count: int, managed_mods: list[str]):
                     install_btn.set_label("Installed")
                     install_btn.set_sensitive(False)
                     self._record_modpack_install(
@@ -2256,25 +2319,37 @@ class FilesView(Gtk.Box):
                         chosen.version_id,
                         version_number=chosen.version_number,
                         title=hit.title,
-                        mod_files=sorted(downloaded_mods),
+                        mod_files=sorted(
+                            {
+                                str(name).strip().lower()
+                                for name in managed_mods
+                                if str(name).strip().lower().endswith(".jar")
+                            }
+                        ),
                     )
                     self._toast(
-                        f"Installed modpack ({downloaded_count} files, {override_count} overrides)"
+                        f"Installed modpack ({downloaded_count} files)"
                     )
+                    self._end_mod_operation(op_token)
                     self._rebuild_lists()
 
                 def ui_err_pack(msg: str):
                     if self._is_modpack_installed(hit.project_id):
                         install_btn.set_label("Installed")
                         install_btn.set_sensitive(False)
+                        self._end_mod_operation(op_token)
                         self._alert("Install failed", msg)
                         return
                     install_btn.set_label("Install pack")
                     install_btn.set_sensitive(True)
+                    self._end_mod_operation(op_token)
                     self._alert("Install failed", msg)
 
                 def ui_progress_pack(done: int, total: int):
-                    install_btn.set_label(f"{done}/{total}")
+                    if int(total) <= 0:
+                        install_btn.set_label("Installing...")
+                    else:
+                        install_btn.set_label(f"{done}/{total}")
 
                 def install_pack_thread():
                     try:
@@ -2283,9 +2358,6 @@ class FilesView(Gtk.Box):
                             raise RuntimeError("No server selected.")
 
                         def on_pack_progress(d: int, t: int, rel_path: str):
-                            rel = str(rel_path or "").replace("\\", "/")
-                            if rel.lower().startswith("mods/") and rel.lower().endswith(".jar"):
-                                downloaded_mods.add(Path(rel).name.lower())
                             GLib.idle_add(lambda dd=d, tt=t: ui_progress_pack(dd, tt))
 
                         result = modrinth_client.install_modpack(
@@ -2294,7 +2366,7 @@ class FilesView(Gtk.Box):
                             progress_callback=on_pack_progress,
                         )
                         GLib.idle_add(
-                            lambda d=result.downloaded_files, o=result.extracted_override_files: ui_ok_pack(d, o)
+                            lambda d=result.downloaded_files, o=result.extracted_override_files, m=result.managed_mod_files: ui_ok_pack(d, o, m)
                         )
                     except Exception as e:
                         GLib.idle_add(lambda m=str(e): ui_err_pack(m))
@@ -2316,11 +2388,13 @@ class FilesView(Gtk.Box):
                 self._toast(f"Installed {fname}")
                 if self._is_running():
                     self._toast("Restart the server for mod changes to apply")
+                self._end_mod_operation(op_token)
                 self._rebuild_lists()
 
             def ui_err(msg: str):
                 install_btn.set_label("Install")
                 install_btn.set_sensitive(True)
+                self._end_mod_operation(op_token)
                 self._alert("Install failed", msg)
 
             def thread_fn(deps_to_install: list, all_required_deps: list):
@@ -2390,6 +2464,7 @@ class FilesView(Gtk.Box):
                     else:
                         install_btn.set_label("Install")
                         install_btn.set_sensitive(True)
+                        self._end_mod_operation(op_token)
 
                 dialog.connect("response", on_response)
                 dialog.present(self.get_root())

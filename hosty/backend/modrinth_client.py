@@ -48,6 +48,7 @@ class ModrinthVersion:
 class ModpackInstallResult:
     downloaded_files: int
     extracted_override_files: int
+    managed_mod_files: list[str]
 
 
 def _version_to_model(ver: dict[str, Any]) -> Optional[ModrinthVersion]:
@@ -385,6 +386,7 @@ def install_modpack(
 
     downloaded = 0
     extracted = 0
+    managed_mods: set[str] = set()
     with zipfile.ZipFile(io.BytesIO(pack_bytes)) as zf:
         try:
             manifest = json.loads(zf.read("modrinth.index.json").decode("utf-8"))
@@ -424,6 +426,10 @@ def install_modpack(
             if not target:
                 continue
 
+            rel_norm = str(rel_path).replace("\\", "/").lstrip("/")
+            if rel_norm.lower().startswith("mods/") and rel_norm.lower().endswith(".jar"):
+                managed_mods.add(Path(rel_norm).name.lower())
+
             payload = _download_bytes(dl_url, timeout=timeout)
             hashes = entry.get("hashes") or {}
             if not _verify_hash(payload, hashes):
@@ -453,4 +459,12 @@ def install_modpack(
                     target.write_bytes(src.read())
                 extracted += 1
 
-    return ModpackInstallResult(downloaded_files=downloaded, extracted_override_files=extracted)
+                rel_norm = rel.replace("\\", "/").lstrip("/")
+                if rel_norm.lower().startswith("mods/") and rel_norm.lower().endswith(".jar"):
+                    managed_mods.add(Path(rel_norm).name.lower())
+
+    return ModpackInstallResult(
+        downloaded_files=downloaded,
+        extracted_override_files=extracted,
+        managed_mod_files=sorted(managed_mods),
+    )

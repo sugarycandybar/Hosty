@@ -206,7 +206,7 @@ class CreateServerDialog(Adw.Dialog):
         )
         self._optimise_row = Adw.SwitchRow(
             title="Install server-optimising mods",
-            subtitle="Includes Lithium, FerriteCore, Fast Noise, Very Many Players, ScalableLux, and more",
+            subtitle="Installs compatible performance mods",
         )
         self._optimise_row.set_active(False)
         mods_group.add(self._optimise_row)
@@ -299,6 +299,7 @@ class CreateServerDialog(Adw.Dialog):
 
     def _on_cancel_clicked(self, button):
         if self._stack.get_visible_child_name() == "runtime":
+            self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_RIGHT)
             self._stack.set_visible_child_name("details")
             self._validate()
             return
@@ -369,6 +370,7 @@ class CreateServerDialog(Adw.Dialog):
         """Move to next step or start creation on the final step."""
         page = self._stack.get_visible_child_name()
         if page == "details":
+            self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
             self._stack.set_visible_child_name("runtime")
             self._validate()
             return
@@ -390,6 +392,7 @@ class CreateServerDialog(Adw.Dialog):
             return
 
         # Switch to progress page
+        self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
         self._stack.set_visible_child_name("progress")
         self._create_btn.set_sensitive(False)
 
