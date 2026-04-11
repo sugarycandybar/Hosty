@@ -131,17 +131,7 @@ class HostyApplication(Adw.Application):
         info = self._server_manager.get_server(server_id)
         if info:
             self._window.detail_view.load_server(info)
-
-        running_id = self._server_manager.get_running_server_id()
-        if running_id and running_id != server_id:
-            self._window.show_toast("Server created, but another server is already running")
-            return
-
-        process = self._server_manager.get_process(server_id)
-        if process and process.start():
-            self._window.show_toast("Server created and started")
-        else:
-            self._window.show_toast("Server created, but failed to start")
+        self._window.show_toast("Server created")
     
     def _on_about(self, action, param):
         """Show about dialog."""

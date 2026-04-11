@@ -1,18 +1,31 @@
 """
 CreateServerDialog - Multi-step dialog for creating a new Fabric server.
 """
+from pathlib import Path
 import threading
+
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib, GObject
+from gi.repository import Gtk, Adw, GLib, GObject, Gio
 
 from hosty.backend.server_manager import ServerManager
-from hosty.backend.download_manager import DownloadManager
-from hosty.backend.java_manager import JavaManager
+from hosty.utils.image_utils import convert_to_png
 from hosty.utils.constants import (
     MIN_RAM_MB, MAX_RAM_MB, get_required_java_version, DEFAULT_SERVER_PROPERTIES
 )
+
+
+OPTIMISATION_MODS = [
+    ("lithium", "Lithium"),
+    ("ferrite-core", "FerriteCore"),
+    ("c2me-fabric", "Concurrent Chunk Management Engine"),
+    ("fast-noise", "Fast Noise"),
+    ("vmp-fabric", "Very Many Players"),
+    ("scalablelux", "ScalableLux"),
+    ("krypton", "Krypton"),
+    ("modernfix", "ModernFix"),
+]
 
 
 class CreateServerDialog(Adw.Dialog):
@@ -27,6 +40,7 @@ class CreateServerDialog(Adw.Dialog):
         self._server_manager = server_manager
         self._game_versions: list[str] = []
         self._loader_versions: list[str] = []
+        self._icon_source_path: str = ""
         
         self.set_title("Create Server")
         self.set_content_width(500)
@@ -55,13 +69,13 @@ class CreateServerDialog(Adw.Dialog):
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
         
-        # ===== Configuration Page =====
-        config_page = self._build_config_page()
-        self._stack.add_named(config_page, "config")
+        # ===== First Step =====
+        details_page = self._build_details_page()
+        self._stack.add_named(details_page, "details")
 
-        # ===== EULA Page =====
-        eula_page = self._build_eula_page()
-        self._stack.add_named(eula_page, "eula")
+        # ===== Second Step =====
+        runtime_page = self._build_runtime_page()
+        self._stack.add_named(runtime_page, "runtime")
         
         # ===== Progress Page =====
         progress_page = self._build_progress_page()
@@ -75,19 +89,18 @@ class CreateServerDialog(Adw.Dialog):
         # Fetch versions
         self._fetch_versions()
     
-    def _build_config_page(self) -> Gtk.Widget:
-        """Build the configuration form page."""
+    def _build_details_page(self) -> Gtk.Widget:
+        """Build step 1: basic identity and legal confirmation."""
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        
+
         page = Adw.PreferencesPage()
-        
-        # Server Info group
+
         info_group = Adw.PreferencesGroup(
             title="Server Info",
-            description="Give your server a name"
+            description="Name your server and configure initial world details",
         )
-        
+
         self._name_entry = Adw.EntryRow(title="Server Name")
         self._name_entry.set_text("My Server")
         self._name_entry.connect("changed", self._validate)
@@ -97,49 +110,81 @@ class CreateServerDialog(Adw.Dialog):
         self._seed_entry.set_text("")
         self._seed_entry.set_show_apply_button(False)
         info_group.add(self._seed_entry)
-        
-        page.add(info_group)
-        
-        # Version group
-        version_group = Adw.PreferencesGroup(
-            title="Version",
-            description="Select Minecraft and Fabric versions"
+
+        self._icon_row = Adw.ActionRow(
+            title="Server Icon",
+            subtitle="No icon selected",
         )
-        
-        # MC version dropdown
+        choose_icon_btn = Gtk.Button(label="Choose…")
+        choose_icon_btn.add_css_class("pill")
+        choose_icon_btn.connect("clicked", self._on_choose_icon)
+        self._icon_row.add_suffix(choose_icon_btn)
+        self._icon_row.set_activatable_widget(choose_icon_btn)
+        info_group.add(self._icon_row)
+
+        page.add(info_group)
+
+        legal_group = Adw.PreferencesGroup(
+            title="Minecraft EULA",
+        )
+
+        self._eula_row = Adw.SwitchRow(
+            title="I agree to Minecraft EULA",
+            subtitle="Required to complete server creation",
+        )
+        self._eula_row.set_active(False)
+        self._eula_row.connect("notify::active", self._validate)
+        legal_group.add(self._eula_row)
+
+        page.add(legal_group)
+
+        scrolled.set_child(page)
+        return scrolled
+
+    def _build_runtime_page(self) -> Gtk.Widget:
+        """Build step 2: versions, runtime, and optional optimizations."""
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+        page = Adw.PreferencesPage()
+
+        version_group = Adw.PreferencesGroup(
+            title="Runtime",
+            description="Choose Minecraft and Fabric versions",
+        )
+
         self._mc_version_list = Gtk.StringList.new(["Loading..."])
         self._mc_version_row = Adw.ComboRow(
-            title="Minecraft Version",
-            model=self._mc_version_list
+            title="Minecraft version",
+            model=self._mc_version_list,
         )
         self._mc_version_row.set_sensitive(False)
         self._mc_version_row.connect("notify::selected", self._on_mc_version_changed)
         version_group.add(self._mc_version_row)
-        
-        # Loader version (auto-latest)
-        self._loader_label_row = Adw.ActionRow(
-            title="Fabric Loader",
-            subtitle="Latest (auto)"
+
+        self._loader_version_list = Gtk.StringList.new(["Loading..."])
+        self._loader_version_row = Adw.ComboRow(
+            title="Fabric loader",
+            model=self._loader_version_list,
         )
-        self._loader_label_row.set_activatable(False)
-        version_group.add(self._loader_label_row)
-        
-        # Java info row
+        self._loader_version_row.set_sensitive(False)
+        self._loader_version_row.connect("notify::selected", self._validate)
+        version_group.add(self._loader_version_row)
+
         self._java_info_row = Adw.ActionRow(
             title="Java Runtime",
-            subtitle="Detecting..."
+            subtitle="Detecting...",
         )
         self._java_info_row.set_activatable(False)
         version_group.add(self._java_info_row)
-        
+
         page.add(version_group)
-        
-        # Resources group
+
         resources_group = Adw.PreferencesGroup(
             title="Resources",
-            description="Server resource allocation"
+            description="Server resource allocation",
         )
-        
+
         ram_adj = Gtk.Adjustment(
             value=self._server_manager.preferences.default_ram_mb,
             lower=MIN_RAM_MB,
@@ -150,34 +195,23 @@ class CreateServerDialog(Adw.Dialog):
         self._ram_row = Adw.SpinRow(
             title="RAM (MB)",
             subtitle="Memory allocated to the server",
-            adjustment=ram_adj
+            adjustment=ram_adj,
         )
         resources_group.add(self._ram_row)
-        
+
         page.add(resources_group)
-        
-        scrolled.set_child(page)
-        return scrolled
 
-    def _build_eula_page(self) -> Gtk.Widget:
-        """Build the EULA confirmation page."""
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-
-        page = Adw.PreferencesPage()
-        group = Adw.PreferencesGroup(
-            title="Minecraft EULA",
+        mods_group = Adw.PreferencesGroup(
+            title="Optional setup",
         )
-
-        self._eula_row = Adw.SwitchRow(
-            title="I agree to Minecraft EULA",
-            subtitle="Required to complete server creation",
+        self._optimise_row = Adw.SwitchRow(
+            title="Install server-optimising mods",
+            subtitle="Includes Lithium, FerriteCore, Fast Noise, Very Many Players, ScalableLux, and more",
         )
-        self._eula_row.set_active(False)
-        self._eula_row.connect("notify::active", self._validate)
-        group.add(self._eula_row)
+        self._optimise_row.set_active(False)
+        mods_group.add(self._optimise_row)
+        page.add(mods_group)
 
-        page.add(group)
         scrolled.set_child(page)
         return scrolled
     
@@ -225,18 +259,18 @@ class CreateServerDialog(Adw.Dialog):
     def _populate_versions(self):
         """Populate version dropdowns (called on main thread)."""
         if self._game_versions:
-            # Rebuild string list
             new_list = Gtk.StringList.new(self._game_versions)
             self._mc_version_row.set_model(new_list)
             self._mc_version_row.set_sensitive(True)
             self._mc_version_row.set_selected(0)
             self._on_mc_version_changed(self._mc_version_row, None)
-        
+
         if self._loader_versions:
-            self._loader_label_row.set_subtitle(
-                f"Latest: {self._loader_versions[0]}"
-            )
-        
+            loader_list = Gtk.StringList.new(self._loader_versions)
+            self._loader_version_row.set_model(loader_list)
+            self._loader_version_row.set_sensitive(True)
+            self._loader_version_row.set_selected(0)
+
         self._validate()
     
     def _on_mc_version_changed(self, row, _pspec):
@@ -264,11 +298,42 @@ class CreateServerDialog(Adw.Dialog):
         self._validate()
 
     def _on_cancel_clicked(self, button):
-        if self._stack.get_visible_child_name() == "eula":
-            self._stack.set_visible_child_name("config")
+        if self._stack.get_visible_child_name() == "runtime":
+            self._stack.set_visible_child_name("details")
             self._validate()
             return
         self.close()
+
+    def _on_choose_icon(self, *_args):
+        dialog = Gtk.FileDialog()
+        dialog.set_title("Select Server Icon")
+
+        image_filter = Gtk.FileFilter()
+        image_filter.set_name("Images")
+        image_filter.add_mime_type("image/png")
+        image_filter.add_mime_type("image/jpeg")
+        image_filter.add_mime_type("image/webp")
+        image_filter.add_mime_type("image/bmp")
+
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(image_filter)
+        dialog.set_filters(filters)
+        dialog.set_default_filter(image_filter)
+
+        dialog.open(self.get_root(), None, self._on_icon_file_chosen)
+
+    def _on_icon_file_chosen(self, dialog, result):
+        try:
+            selected = dialog.open_finish(result)
+            if not selected:
+                return
+            path = selected.get_path() or ""
+            if not path:
+                return
+            self._icon_source_path = path
+            self._icon_row.set_subtitle(Path(path).name)
+        except GLib.Error:
+            return
 
     def _on_page_changed(self, *_args):
         self._validate()
@@ -277,21 +342,22 @@ class CreateServerDialog(Adw.Dialog):
         """Validate current step and update primary action state."""
         name = self._name_entry.get_text().strip()
         has_versions = len(self._game_versions) > 0
+        has_loaders = len(self._loader_versions) > 0
         page = self._stack.get_visible_child_name()
 
-        if page == "config":
+        if page == "details":
+            has_eula = self._eula_row.get_active()
             self._cancel_btn.set_label("Cancel")
             self._cancel_btn.set_sensitive(True)
             self._create_btn.set_label("Next")
-            self._create_btn.set_sensitive(bool(name) and has_versions)
+            self._create_btn.set_sensitive(bool(name) and has_eula)
             return
 
-        if page == "eula":
-            has_eula = self._eula_row.get_active()
+        if page == "runtime":
             self._cancel_btn.set_label("Back")
             self._cancel_btn.set_sensitive(True)
             self._create_btn.set_label("Create")
-            self._create_btn.set_sensitive(bool(name) and has_versions and has_eula)
+            self._create_btn.set_sensitive(bool(name) and has_versions and has_loaders)
             return
 
         self._cancel_btn.set_label("Cancel")
@@ -300,106 +366,125 @@ class CreateServerDialog(Adw.Dialog):
         self._create_btn.set_sensitive(False)
 
     def _on_primary_clicked(self, button):
-        """Move to EULA step or start creation on the final step."""
+        """Move to next step or start creation on the final step."""
         page = self._stack.get_visible_child_name()
-        if page == "config":
-            self._stack.set_visible_child_name("eula")
+        if page == "details":
+            self._stack.set_visible_child_name("runtime")
             self._validate()
             return
 
-        if page != "eula":
+        if page != "runtime":
             return
 
         name = self._name_entry.get_text().strip()
         mc_idx = self._mc_version_row.get_selected()
+        loader_idx = self._loader_version_row.get_selected()
         mc_version = self._game_versions[mc_idx] if mc_idx < len(self._game_versions) else ""
-        loader_version = self._loader_versions[0] if self._loader_versions else ""
+        loader_version = self._loader_versions[loader_idx] if loader_idx < len(self._loader_versions) else ""
         ram_mb = int(self._ram_row.get_value())
         seed = self._seed_entry.get_text().strip()
         eula_accepted = self._eula_row.get_active()
-        
-        if not name or not mc_version or not eula_accepted:
+        install_optimisations = bool(self._optimise_row.get_active())
+
+        if not name or not mc_version or not loader_version or not eula_accepted:
             return
-        
+
         # Switch to progress page
         self._stack.set_visible_child_name("progress")
         self._create_btn.set_sensitive(False)
-        
+
         # Run installation in background
         thread = threading.Thread(
             target=self._install_thread,
-            args=(name, mc_version, loader_version, ram_mb, seed, eula_accepted),
+            args=(
+                name,
+                mc_version,
+                loader_version,
+                ram_mb,
+                seed,
+                eula_accepted,
+                self._icon_source_path,
+                install_optimisations,
+            ),
             daemon=True,
         )
         thread.start()
-    
-    def _install_thread(self, name, mc_version, loader_version, ram_mb, seed, eula_accepted):
+
+    def _install_thread(
+        self,
+        name,
+        mc_version,
+        loader_version,
+        ram_mb,
+        seed,
+        eula_accepted,
+        icon_source_path,
+        install_optimisations,
+    ):
         """Background installation thread."""
         try:
             java_ver = get_required_java_version(mc_version)
             java_mgr = self._server_manager.java_manager
             dl_mgr = self._server_manager.download_manager
-            
+
             # Step 1: Ensure JRE is available
             if not java_mgr.is_java_available(java_ver):
-                self._update_progress(0.1, "Downloading Java Runtime...",
-                                       f"JRE {java_ver} for MC {mc_version}")
-                
+                self._update_progress(0.05, "Downloading Java Runtime...", f"JRE {java_ver} for MC {mc_version}")
+
                 success, msg = java_mgr.download_jre_sync(
                     java_ver,
                     progress_callback=lambda frac, msg: self._update_progress(
-                        0.1 + frac * 0.3, msg, f"JRE {java_ver}"
-                    )
+                        0.05 + frac * 0.20, msg, f"JRE {java_ver}"
+                    ),
                 )
-                
+
                 if not success:
                     self._show_error(f"Failed to download JRE: {msg}")
                     return
-            
-            self._update_progress(0.4, "Downloading Fabric installer...", "")
-            
+
+            self._update_progress(0.28, "Downloading Fabric installer...", "")
+
             # Step 2: Download Fabric installer
             installer_path = dl_mgr.download_installer(
                 progress_callback=lambda frac, msg: self._update_progress(
-                    0.4 + frac * 0.2, msg, ""
-                )
+                    0.28 + frac * 0.14, msg, ""
+                ),
             )
-            
+
             if not installer_path:
                 self._show_error("Failed to download Fabric installer")
                 return
-            
+
             # Step 3: Create server entry
-            self._update_progress(0.6, "Creating server...", "")
+            self._update_progress(0.44, "Creating server...", "")
             server_info = self._server_manager.add_server(
                 name=name,
                 mc_version=mc_version,
                 loader_version=loader_version,
                 ram_mb=ram_mb,
             )
-            
+
             # Step 3.5: Download vanilla server.jar from Mojang
-            self._update_progress(0.6, "Downloading Minecraft server.jar...", f"MC {mc_version}")
+            self._update_progress(0.48, "Downloading Minecraft server.jar...", f"MC {mc_version}")
             success, msg = dl_mgr.download_server_jar(
                 mc_version=mc_version,
                 server_dir=str(server_info.server_dir),
                 progress_callback=lambda frac, msg: self._update_progress(
-                    0.6 + frac * 0.05, msg, f"MC {mc_version}"
-                )
+                    0.48 + frac * 0.12, msg, f"MC {mc_version}"
+                ),
             )
-            
+
             if not success:
                 self._show_error(f"Failed to download server.jar: {msg}")
                 return
-            
+
             # Step 4: Install Fabric
-            self._update_progress(0.65, "Installing Fabric server...",
-                                   f"MC {mc_version}")
-            
+            self._update_progress(0.62, "Installing Fabric server...", f"MC {mc_version}")
+
             java_path = java_mgr.get_java_path(java_ver)
             if not java_path:
                 java_path = java_mgr.get_java_for_mc(mc_version) or "java"
-            
+
             success, msg = dl_mgr.install_fabric_server(
                 java_path=java_path,
                 installer_jar=installer_path,
@@ -407,16 +492,16 @@ class CreateServerDialog(Adw.Dialog):
                 server_dir=str(server_info.server_dir),
                 loader_version=loader_version if loader_version else None,
                 progress_callback=lambda frac, msg: self._update_progress(
-                    0.65 + frac * 0.25, msg, ""
-                )
+                    0.62 + frac * 0.24, msg, ""
+                ),
             )
-            
+
             if not success:
                 self._show_error(f"Fabric installation failed: {msg}")
                 return
-            
+
             # Step 5: Accept EULA
-            self._update_progress(0.95, "Accepting EULA...", "")
+            self._update_progress(0.88, "Applying server settings...", "")
             from hosty.backend.config_manager import ConfigManager
             config = ConfigManager(str(server_info.server_dir))
             config.load()
@@ -424,12 +509,68 @@ class CreateServerDialog(Adw.Dialog):
             config.set_value("level-seed", seed)
             config.save()
             config.set_eula(bool(eula_accepted))
-            
+
+            # Step 6: Save icon if selected
+            if icon_source_path:
+                self._update_progress(0.92, "Applying server icon...", "")
+                try:
+                    icon_output = server_info.server_dir / "icon.png"
+                    convert_to_png(icon_source_path, str(icon_output), size=128)
+                    self._server_manager.set_server_icon(server_info.id, str(icon_output))
+                except Exception:
+                    pass
+
+            # Step 7: Optional performance mods
+            if install_optimisations:
+                self._update_progress(0.94, "Installing server-optimising mods...", "0/0")
+                self._install_optimising_mods(server_info.server_dir, mc_version)
+
             # Done!
             self._show_success(server_info.id)
-            
+
         except Exception as e:
             self._show_error(f"Unexpected error: {e}")
+
+    def _install_optimising_mods(self, server_dir: Path, mc_version: str) -> None:
+        from hosty.backend import modrinth_client
+
+        mods_dir = Path(server_dir) / "mods"
+        mods_dir.mkdir(parents=True, exist_ok=True)
+        installed = {p.name.lower() for p in mods_dir.glob("*.jar")}
+
+        total = len(OPTIMISATION_MODS)
+        done = 0
+        for slug, title in OPTIMISATION_MODS:
+            done += 1
+            progress = 0.94 + (done / max(1, total)) * 0.05
+            self._update_progress(progress, "Installing server-optimising mods...", f"{done}/{total} · {title}")
+            try:
+                version = self._find_supported_optimisation_version(
+                    modrinth_client,
+                    slug,
+                    mc_version,
+                )
+                if not version:
+                    continue
+                if version.filename.lower() in installed:
+                    continue
+                modrinth_client.download_to(version.download_url, mods_dir / version.filename)
+                installed.add(version.filename.lower())
+            except Exception:
+                continue
+
+    def _find_supported_optimisation_version(self, modrinth_client, project_id: str, mc_version: str):
+        """Return a Fabric version only when it explicitly supports the selected MC version."""
+        versions = modrinth_client.get_project_versions(project_id)
+        if not versions:
+            return None
+
+        for version in versions:
+            has_mc = mc_version in (version.game_versions or [])
+            has_loader = "fabric" in [x.lower() for x in (version.loaders or [])]
+            if has_mc and has_loader:
+                return version
+        return None
     
     def _update_progress(self, fraction, title, detail):
         """Update progress on the main thread."""

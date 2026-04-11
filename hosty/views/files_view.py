@@ -4,6 +4,7 @@ FilesView — folders, worlds, backups, and Modrinth integration (per selected s
 from __future__ import annotations
 
 import json
+import ast
 import os
 import shutil
 import subprocess
@@ -16,7 +17,7 @@ import webbrowser
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 import uuid
 
 import gi
@@ -163,6 +164,9 @@ class FilesView(Gtk.Box):
 
         self._worlds_group: Optional[Adw.PreferencesGroup] = None
         self._mods_group: Optional[Adw.PreferencesGroup] = None
+        self._check_updates_row: Optional[Adw.ActionRow] = None
+        self._mods_update_busy = False
+        self._modpack_version_enrich_busy = False
         self._players_group: Optional[Adw.PreferencesGroup] = None
         self._world_rows: list[Gtk.Widget] = []
         self._mod_rows: list[Gtk.Widget] = []
@@ -223,12 +227,22 @@ class FilesView(Gtk.Box):
 
         modrinth_row = Adw.ActionRow(
             title="Modrinth",
-            subtitle="Discover and install compatible mods",
+            subtitle="Discover and install compatible mods and modpacks",
         )
         modrinth_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         modrinth_row.set_activatable(True)
         modrinth_row.connect("activated", self._push_modrinth_page)
         self._mods_group.add(modrinth_row)
+
+        check_updates_row = Adw.ActionRow(
+            title="Check for mod updates",
+            subtitle="Update modpacks and standalone mods safely",
+        )
+        check_updates_row.add_prefix(Gtk.Image.new_from_icon_name("software-update-available-symbolic"))
+        check_updates_row.set_activatable(True)
+        check_updates_row.connect("activated", self._on_check_mod_updates)
+        self._mods_group.add(check_updates_row)
+        self._check_updates_row = check_updates_row
         page.add(self._mods_group)
 
         self._players_group = Adw.PreferencesGroup(title="Players")
@@ -263,6 +277,350 @@ class FilesView(Gtk.Box):
         if not root:
             return None
         return root / ".hosty-mod-dependencies.json"
+
+    def _modpack_state_path(self) -> Optional[Path]:
+        root = self._server_dir()
+        if not root:
+            return None
+        return root / ".hosty-modpacks.json"
+
+    def _individual_mod_state_path(self) -> Optional[Path]:
+        root = self._server_dir()
+        if not root:
+            return None
+        return root / ".hosty-mod-installs.json"
+
+    def _read_modpack_state(self) -> dict:
+        path = self._modpack_state_path()
+        if not path or not path.exists():
+            return {"installed_projects": {}}
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                projects = raw.get("installed_projects")
+                if isinstance(projects, dict):
+                    normalized: dict[str, dict[str, Any]] = {}
+                    for project_id, value in projects.items():
+                        pid = str(project_id).strip()
+                        if not pid:
+                            continue
+
+                        item = value
+                        # Recover from older buggy state where a dict was stringified.
+                        if isinstance(item, str):
+                            text = item.strip()
+                            if text.startswith("{") and text.endswith("}"):
+                                try:
+                                    recovered = ast.literal_eval(text)
+                                    if isinstance(recovered, dict):
+                                        item = recovered
+                                except Exception:
+                                    pass
+
+                        if isinstance(item, dict):
+                            version_id = str(item.get("version_id", "")).strip()
+                            version_number = str(item.get("version_number", "")).strip()
+                            title = str(item.get("title", "")).strip()
+                            mods_raw = item.get("mods") if isinstance(item.get("mods"), list) else []
+                            mods = sorted(
+                                {
+                                    str(Path(str(m)).name).strip().lower()
+                                    for m in mods_raw
+                                    if str(m).strip().lower().endswith(".jar")
+                                }
+                            )
+                            normalized[pid] = {
+                                "version_id": version_id,
+                                "version_number": version_number,
+                                "title": title,
+                                "mods": mods,
+                            }
+                        else:
+                            # Legacy minimal state: project -> version_id
+                            normalized[pid] = {
+                                "version_id": str(item).strip(),
+                                "version_number": "",
+                                "title": "",
+                                "mods": [],
+                            }
+                    return {"installed_projects": normalized}
+        except Exception:
+            pass
+
+        return {"installed_projects": {}}
+
+    def _modpack_entries(self) -> dict[str, dict[str, Any]]:
+        state = self._read_modpack_state()
+        projects = state.get("installed_projects", {})
+        if not isinstance(projects, dict):
+            return {}
+
+        out: dict[str, dict[str, Any]] = {}
+        for project_id, value in projects.items():
+            pid = str(project_id).strip()
+            if not pid:
+                continue
+
+            if isinstance(value, dict):
+                version_id = str(value.get("version_id", "")).strip()
+                version_number = str(value.get("version_number", "")).strip()
+                title = str(value.get("title", "")).strip()
+                mods_raw = value.get("mods") if isinstance(value.get("mods"), list) else []
+                mods = sorted(
+                    {
+                        str(Path(str(m)).name).strip().lower()
+                        for m in mods_raw
+                        if str(m).strip().lower().endswith(".jar")
+                    }
+                )
+            else:
+                version_id = str(value).strip()
+                version_number = ""
+                title = ""
+                mods = []
+
+            out[pid] = {
+                "version_id": version_id,
+                "version_number": version_number,
+                "title": title,
+                "mods": mods,
+            }
+
+        return out
+
+    def _modpack_managed_mod_map(self) -> dict[str, list[str]]:
+        managed: dict[str, list[str]] = {}
+        for project_id, entry in self._modpack_entries().items():
+            label = str(entry.get("title", "")).strip() or project_id
+            for mod_name in entry.get("mods", []):
+                key = str(mod_name).strip().lower()
+                if not key:
+                    continue
+                names = managed.setdefault(key, [])
+                if label not in names:
+                    names.append(label)
+        return managed
+
+    def _read_individual_mod_state(self) -> dict:
+        path = self._individual_mod_state_path()
+        if not path or not path.exists():
+            return {"mods": {}}
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if not isinstance(raw, dict):
+                return {"mods": {}}
+
+            mods_raw = raw.get("mods") if isinstance(raw.get("mods"), dict) else {}
+            cleaned: dict[str, dict[str, str]] = {}
+            for project_id, item in mods_raw.items():
+                pid = str(project_id).strip()
+                if not pid or not isinstance(item, dict):
+                    continue
+
+                title = str(item.get("title", "")).strip()
+                version_id = str(item.get("version_id", "")).strip()
+                filename = str(item.get("filename", "")).strip()
+                if not filename:
+                    continue
+
+                cleaned[pid] = {
+                    "title": title,
+                    "version_id": version_id,
+                    "filename": filename,
+                }
+
+            return {"mods": cleaned}
+        except Exception:
+            return {"mods": {}}
+
+    def _write_individual_mod_state(self, state: dict) -> bool:
+        path = self._individual_mod_state_path()
+        if not path:
+            return False
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def _record_individual_mod_install(
+        self,
+        project_id: str,
+        title: str,
+        version_id: str,
+        filename: str,
+    ) -> None:
+        pid = str(project_id).strip()
+        if not pid:
+            return
+
+        state = self._read_individual_mod_state()
+        mods = state.setdefault("mods", {})
+        mods[pid] = {
+            "title": str(title or "").strip(),
+            "version_id": str(version_id or "").strip(),
+            "filename": str(filename or "").strip(),
+        }
+        self._write_individual_mod_state(state)
+
+    def _write_modpack_state(self, state: dict) -> bool:
+        path = self._modpack_state_path()
+        if not path:
+            return False
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def _record_modpack_install(
+        self,
+        project_id: str,
+        version_id: str,
+        version_number: str = "",
+        title: str = "",
+        mod_files: Optional[list[str]] = None,
+    ) -> None:
+        pid = str(project_id).strip()
+        if not pid:
+            return
+        state = self._read_modpack_state()
+        projects = state.setdefault("installed_projects", {})
+        normalized_mods = sorted(
+            {
+                str(Path(str(m)).name).strip().lower()
+                for m in (mod_files or [])
+                if str(m).strip().lower().endswith(".jar")
+            }
+        )
+        projects[pid] = {
+            "version_id": str(version_id).strip(),
+            "version_number": str(version_number or "").strip(),
+            "title": str(title or "").strip(),
+            "mods": normalized_mods,
+        }
+        self._write_modpack_state(state)
+
+    def _is_modpack_installed(self, project_id: str) -> bool:
+        pid = str(project_id).strip()
+        if not pid:
+            return False
+        entries = self._modpack_entries()
+        return pid in entries
+
+    def _find_mod_jar_path(self, mods_dir: Path, filename: str) -> Optional[Path]:
+        """Resolve a jar path by filename, with case-insensitive fallback."""
+        name = str(filename).strip()
+        if not name:
+            return None
+
+        direct = mods_dir / name
+        if direct.exists():
+            return direct
+
+        name_l = name.lower()
+        for jar in mods_dir.glob("*.jar"):
+            if jar.name.lower() == name_l:
+                return jar
+        return None
+
+    def _remove_mod_from_mod_states(self, removed_filename: str) -> None:
+        key = str(removed_filename).strip().lower()
+        if not key:
+            return
+
+        self._remove_mod_from_dependency_state(removed_filename)
+
+        # Remove from standalone install tracking.
+        standalone = self._read_individual_mod_state()
+        mods = dict(standalone.get("mods", {}))
+        kept = {}
+        for project_id, meta in mods.items():
+            fname = str((meta or {}).get("filename", "")).strip().lower()
+            if fname == key:
+                continue
+            kept[project_id] = meta
+        self._write_individual_mod_state({"mods": kept})
+
+        # Remove from any modpack-managed mod list if manually deleted.
+        entries = self._modpack_entries()
+        projects_payload: dict[str, dict[str, Any]] = {}
+        for project_id, entry in entries.items():
+            mods = [m for m in entry.get("mods", []) if str(m).strip().lower() != key]
+            projects_payload[project_id] = {
+                "version_id": str(entry.get("version_id", "")).strip(),
+                "version_number": str(entry.get("version_number", "")).strip(),
+                "title": str(entry.get("title", "")).strip(),
+                "mods": mods,
+            }
+        self._write_modpack_state({"installed_projects": projects_payload})
+
+    def _ensure_modpack_version_numbers_async(self) -> None:
+        if self._modpack_version_enrich_busy:
+            return
+
+        entries = self._modpack_entries()
+        missing = [
+            (project_id, entry)
+            for project_id, entry in entries.items()
+            if not str(entry.get("version_number", "")).strip()
+            and str(entry.get("version_id", "")).strip()
+        ]
+        if not missing:
+            return
+
+        self._modpack_version_enrich_busy = True
+
+        def worker():
+            from hosty.backend import modrinth_client
+
+            latest_entries = self._modpack_entries()
+            changed = False
+            payload: dict[str, dict[str, Any]] = {}
+
+            for project_id, entry in latest_entries.items():
+                version_id = str(entry.get("version_id", "")).strip()
+                version_number = str(entry.get("version_number", "")).strip()
+                if not version_number and version_id:
+                    raw = modrinth_client.get_version(version_id)
+                    if isinstance(raw, dict):
+                        version_number = (
+                            str(raw.get("version_number", "")).strip()
+                            or str(raw.get("name", "")).strip()
+                        )
+                    if version_number:
+                        changed = True
+
+                payload[project_id] = {
+                    "version_id": version_id,
+                    "version_number": version_number,
+                    "title": str(entry.get("title", "")).strip(),
+                    "mods": [
+                        str(m).strip().lower()
+                        for m in (entry.get("mods") or [])
+                        if str(m).strip().lower().endswith(".jar")
+                    ],
+                }
+
+            def finish_ui():
+                self._modpack_version_enrich_busy = False
+                if changed:
+                    self._write_modpack_state({"installed_projects": payload})
+                    self._rebuild_lists()
+                return False
+
+            GLib.idle_add(finish_ui)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _read_mod_dependency_state(self) -> dict:
         path = self._mod_dependency_state_path()
@@ -381,6 +739,8 @@ class FilesView(Gtk.Box):
         if not self._worlds_group or not self._mods_group:
             return
 
+        self._ensure_modpack_version_numbers_async()
+
         self._clear_group_rows(self._worlds_group, self._world_rows)
         self._clear_group_rows(self._mods_group, self._mod_rows)
 
@@ -402,10 +762,30 @@ class FilesView(Gtk.Box):
         mods_dir = root / "mods"
         mods_dir.mkdir(parents=True, exist_ok=True)
         jars = sorted(mods_dir.glob("*.jar"), key=lambda p: p.name.lower())
-        if not jars:
+        entries = self._modpack_entries()
+        managed_map = self._modpack_managed_mod_map()
+        managed_set = set(managed_map.keys())
+
+        if entries:
+            self._mod_rows.append(self._add_info_row(self._mods_group, "Modpack installs"))
+            for project_id, entry in sorted(
+                entries.items(),
+                key=lambda item: (str(item[1].get("title", "")).strip() or item[0]).lower(),
+            ):
+                row = self._make_modpack_row(project_id, entry)
+                self._mods_group.add(row)
+                self._mod_rows.append(row)
+
+        standalone_jars = [jar for jar in jars if jar.name.lower() not in managed_set]
+
+        if not standalone_jars and not entries:
             self._mod_rows.append(self._add_info_row(self._mods_group, "No mods installed"))
+        elif not standalone_jars and entries:
+            self._mod_rows.append(self._add_info_row(self._mods_group, "No standalone mods"))
         else:
-            for jar in jars:
+            if entries:
+                self._mod_rows.append(self._add_info_row(self._mods_group, "Standalone mods"))
+            for jar in standalone_jars:
                 row = self._make_mod_row(jar)
                 self._mods_group.add(row)
                 self._mod_rows.append(row)
@@ -548,6 +928,362 @@ class FilesView(Gtk.Box):
         )
         row.add_suffix(del_btn)
         return row
+
+    def _make_modpack_row(self, project_id: str, entry: dict[str, Any]) -> Adw.ActionRow:
+        title = str(entry.get("title", "")).strip() or project_id
+        mods = [str(m).strip() for m in (entry.get("mods") or []) if str(m).strip()]
+        version_id = str(entry.get("version_id", "")).strip()
+        version_number = str(entry.get("version_number", "")).strip()
+
+        row = Adw.ActionRow(title=title)
+        subtitle_bits = [f"{len(mods)} managed mods"]
+        if version_number:
+            subtitle_bits.append(f"version {version_number}")
+        elif version_id:
+            subtitle_bits.append(f"version {version_id[:8]}")
+        row.set_subtitle(" · ".join(subtitle_bits))
+        row.set_activatable(False)
+
+        view_btn = self._icon_button(
+            "view-list-symbolic",
+            "View managed mods",
+            lambda *_p, t=title, m=mods: self._show_modpack_mods_dialog(t, m),
+        )
+        open_btn = self._icon_button(
+            "web-browser-symbolic",
+            "Open modpack page",
+            lambda *_p, pid=project_id: _open_uri(f"https://modrinth.com/modpack/{pid}"),
+        )
+        row.add_suffix(view_btn)
+        row.add_suffix(open_btn)
+        return row
+
+    def _show_modpack_mods_dialog(self, modpack_title: str, mods: list[str]) -> None:
+        d = Adw.AlertDialog()
+        d.set_heading(modpack_title)
+        if not mods:
+            d.set_body("No tracked mod files for this modpack yet.")
+            d.add_response("ok", "OK")
+            d.present(self.get_root())
+            return
+
+        preview = "\n".join([f"- {m}" for m in mods[:24]])
+        extra = ""
+        if len(mods) > 24:
+            extra = f"\n- and {len(mods) - 24} more"
+        d.set_body(f"Managed mods:\n\n{preview}{extra}")
+        d.add_response("ok", "OK")
+        d.present(self.get_root())
+
+    def _set_mod_update_row_subtitle(self, subtitle: str) -> None:
+        if self._check_updates_row:
+            self._check_updates_row.set_subtitle(subtitle)
+
+    def _on_check_mod_updates(self, *_args) -> None:
+        if self._mods_update_busy:
+            self._toast("Mod update check already running")
+            return
+        if self._is_running():
+            self._alert("Server is running", "Stop the server before checking for mod updates.")
+            return
+        if not self._server_info or not self._server_info.mc_version:
+            self._alert("Unknown version", "Could not determine Minecraft version for this server.")
+            return
+
+        self._mods_update_busy = True
+        self._set_mod_update_row_subtitle("Checking for updates...")
+
+        def worker():
+            from hosty.backend import modrinth_client
+
+            mc_version = self._server_info.mc_version if self._server_info else ""
+            modpack_entries = self._modpack_entries()
+            managed_mods = set(self._modpack_managed_mod_map().keys())
+            individual_state = self._read_individual_mod_state().get("mods", {})
+
+            modpack_updates = []
+            for project_id, entry in modpack_entries.items():
+                current_version = str(entry.get("version_id", "")).strip()
+                current_version_number = str(entry.get("version_number", "")).strip()
+                versions = modrinth_client.get_project_versions(project_id)
+                compatible = [v for v in versions if mc_version in (v.game_versions or [])]
+                if not compatible:
+                    continue
+                latest = compatible[0]
+
+                latest_id = str(latest.version_id).strip()
+                latest_number = str(latest.version_number).strip()
+                same_id = current_version and (latest_id == current_version)
+                same_number = current_version_number and (latest_number == current_version_number)
+                newer = None if (same_id or same_number) else latest
+                if newer:
+                    modpack_updates.append((project_id, entry, newer))
+
+            standalone_updates = []
+            blocked = 0
+            for project_id, meta in individual_state.items():
+                current_version = str((meta or {}).get("version_id", "")).strip()
+                latest = modrinth_client.find_compatible_version(
+                    project_id,
+                    mc_version,
+                    loader="fabric",
+                )
+                if not latest:
+                    continue
+                if str(latest.version_id).strip() == current_version:
+                    continue
+
+                deps = modrinth_client.resolve_required_dependencies(
+                    latest.version_id,
+                    mc_version,
+                    loader="fabric",
+                )
+                dep_hits_modpack = any(str(dep.filename).strip().lower() in managed_mods for dep in deps)
+                if dep_hits_modpack:
+                    blocked += 1
+                    continue
+
+                standalone_updates.append((project_id, meta, latest, deps))
+
+            def show_result():
+                total_updates = len(modpack_updates) + len(standalone_updates)
+                if total_updates == 0:
+                    self._mods_update_busy = False
+                    self._set_mod_update_row_subtitle("Update check complete")
+                    if blocked > 0:
+                        self._toast(f"No safe updates found ({blocked} blocked by modpack-managed dependencies)")
+                    else:
+                        self._toast("All tracked mods are up to date")
+                    return False
+
+                dialog = Adw.AlertDialog()
+                dialog.set_heading("Install available updates?")
+
+                lines: list[str] = []
+                if modpack_updates:
+                    lines.append("Modpacks:")
+                    for _pid, entry, newer in modpack_updates[:10]:
+                        title = str(entry.get("title", "")).strip() or _pid
+                        vn = str(newer.version_number or newer.version_id)
+                        lines.append(f"- {title} -> {vn}")
+                    if len(modpack_updates) > 10:
+                        lines.append(f"- and {len(modpack_updates) - 10} more modpacks")
+
+                if standalone_updates:
+                    if lines:
+                        lines.append("")
+                    lines.append("Standalone mods:")
+                    for pid, meta, latest, _deps in standalone_updates[:14]:
+                        title = str((meta or {}).get("title", "")).strip() or pid
+                        vn = str(latest.version_number or latest.version_id)
+                        lines.append(f"- {title} -> {vn}")
+                    if len(standalone_updates) > 14:
+                        lines.append(f"- and {len(standalone_updates) - 14} more mods")
+
+                listing = "\n".join(lines)
+                dialog.set_body(
+                    f"Found {len(modpack_updates)} modpack update(s) and "
+                    f"{len(standalone_updates)} standalone mod update(s)."
+                    + (f"\n\n{blocked} standalone update(s) were skipped because dependencies are managed by a modpack." if blocked else "")
+                    + (f"\n\n{listing}" if listing else "")
+                )
+                dialog.add_response("cancel", "Cancel")
+                dialog.add_response("update", "Update")
+                dialog.set_response_appearance("update", Adw.ResponseAppearance.SUGGESTED)
+                dialog.set_default_response("update")
+                dialog.set_close_response("cancel")
+
+                def on_response(_d, response):
+                    if response != "update":
+                        self._mods_update_busy = False
+                        self._set_mod_update_row_subtitle("Update check complete")
+                        return
+
+                    total_work = max(1, len(modpack_updates) + len(standalone_updates))
+                    progress_dialog = Adw.AlertDialog()
+                    progress_dialog.set_heading("Updating mods")
+                    progress_dialog.set_body("Installing selected updates...")
+                    progress_dialog.add_response("close", "Close")
+                    progress_dialog.set_default_response("close")
+                    progress_dialog.set_close_response("close")
+
+                    progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+                    progress_label = Gtk.Label(label=f"0/{total_work}", xalign=0.0)
+                    progress_label.add_css_class("dim-label")
+                    progress_bar = Gtk.ProgressBar()
+                    progress_bar.set_fraction(0.0)
+                    progress_box.append(progress_label)
+                    progress_box.append(progress_bar)
+                    progress_dialog.set_extra_child(progress_box)
+                    progress_dialog.present(self.get_root())
+
+                    def on_progress(done: int, total: int, text: str):
+                        total_safe = max(1, int(total))
+                        done_safe = max(0, min(int(done), total_safe))
+                        progress_bar.set_fraction(done_safe / total_safe)
+                        if text:
+                            progress_label.set_label(f"{done_safe}/{total_safe} · {text}")
+                        else:
+                            progress_label.set_label(f"{done_safe}/{total_safe}")
+
+                    def on_finish(applied: int, failed: int):
+                        progress_bar.set_fraction(1.0)
+                        progress_label.set_label(f"Done · {applied} applied, {failed} failed")
+                        progress_dialog.set_body("Update run complete.")
+
+                    threading.Thread(
+                        target=self._apply_mod_updates,
+                        args=(modpack_updates, standalone_updates, on_progress, on_finish),
+                        daemon=True,
+                    ).start()
+
+                dialog.connect("response", on_response)
+                dialog.present(self.get_root())
+                return False
+
+            GLib.idle_add(show_result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_mod_updates(
+        self,
+        modpack_updates: list,
+        standalone_updates: list,
+        progress_callback=None,
+        finish_callback=None,
+    ) -> None:
+        from hosty.backend import modrinth_client
+
+        root = self._server_dir()
+        if not root:
+            GLib.idle_add(lambda: self._alert("No server selected", "Select a server to update mods."))
+            GLib.idle_add(lambda: self._set_mod_update_row_subtitle("Update check complete"))
+            GLib.idle_add(lambda: setattr(self, "_mods_update_busy", False))
+            return
+
+        mods_dir = root / "mods"
+        mods_dir.mkdir(parents=True, exist_ok=True)
+
+        applied = 0
+        failed = 0
+        total_tasks = max(1, len(modpack_updates) + len(standalone_updates))
+        completed_tasks = 0
+
+        def notify_progress(text: str):
+            if progress_callback:
+                GLib.idle_add(
+                    lambda d=completed_tasks, t=total_tasks, m=text: progress_callback(d, t, m)
+                )
+
+        notify_progress("Starting updates")
+
+        # Apply modpack updates first so pack-managed versions remain authoritative.
+        for index, (project_id, entry, newer_version) in enumerate(modpack_updates, start=1):
+            pack_title = str(entry.get("title", "")).strip() or project_id
+            GLib.idle_add(
+                lambda i=index, total=len(modpack_updates), t=pack_title: self._set_mod_update_row_subtitle(
+                    f"Updating modpack {i}/{total}: {t}"
+                )
+            )
+            try:
+                previous_mods = {
+                    str(m).strip().lower()
+                    for m in (entry.get("mods") or [])
+                    if str(m).strip().lower().endswith(".jar")
+                }
+                downloaded_mods: set[str] = set()
+
+                def on_progress(done: int, total: int, rel_path: str):
+                    rel = str(rel_path or "").replace("\\", "/")
+                    if rel.lower().startswith("mods/") and rel.lower().endswith(".jar"):
+                        downloaded_mods.add(Path(rel).name.lower())
+                    GLib.idle_add(
+                        lambda d=done, t=total: self._set_mod_update_row_subtitle(
+                            f"Updating {pack_title}: {d}/{t}"
+                        )
+                    )
+
+                modrinth_client.install_modpack(
+                    newer_version.version_id,
+                    root,
+                    progress_callback=on_progress,
+                )
+
+                removed = previous_mods - downloaded_mods
+                for name in removed:
+                    old_path = self._find_mod_jar_path(mods_dir, name)
+                    if old_path and old_path.exists():
+                        old_path.unlink(missing_ok=True)
+                    self._remove_mod_from_mod_states(name)
+
+                self._record_modpack_install(
+                    project_id,
+                    newer_version.version_id,
+                    version_number=newer_version.version_number,
+                    title=pack_title,
+                    mod_files=sorted(downloaded_mods),
+                )
+                applied += 1
+            except Exception:
+                failed += 1
+
+            completed_tasks += 1
+            notify_progress(f"Updated modpack: {pack_title}")
+
+        managed_mods = set(self._modpack_managed_mod_map().keys())
+
+        # Apply standalone updates, installing required dependencies first.
+        for index, (project_id, meta, latest, deps) in enumerate(standalone_updates, start=1):
+            mod_title = str((meta or {}).get("title", "")).strip() or project_id
+            GLib.idle_add(
+                lambda i=index, total=len(standalone_updates), t=mod_title: self._set_mod_update_row_subtitle(
+                    f"Updating standalone mod {i}/{total}: {t}"
+                )
+            )
+            try:
+                deps_to_install = [
+                    dep
+                    for dep in deps
+                    if str(dep.filename).strip().lower() not in managed_mods
+                ]
+                for dep in deps_to_install:
+                    modrinth_client.download_to(dep.download_url, mods_dir / dep.filename)
+
+                modrinth_client.download_to(latest.download_url, mods_dir / latest.filename)
+                old_name = str((meta or {}).get("filename", "")).strip()
+                if old_name and old_name.lower() != latest.filename.lower():
+                    old_path = self._find_mod_jar_path(mods_dir, old_name)
+                    if old_path and old_path.exists():
+                        old_path.unlink(missing_ok=True)
+                    self._remove_mod_from_mod_states(old_name)
+
+                self._record_individual_mod_install(
+                    project_id,
+                    mod_title,
+                    latest.version_id,
+                    latest.filename,
+                )
+                self._record_dependency_installs(latest.filename, deps_to_install)
+                applied += 1
+            except Exception:
+                failed += 1
+
+            completed_tasks += 1
+            notify_progress(f"Updated standalone mod: {mod_title}")
+
+        def finish_ui():
+            self._mods_update_busy = False
+            self._set_mod_update_row_subtitle("Update check complete")
+            self._rebuild_lists()
+            if finish_callback:
+                finish_callback(applied, failed)
+            if failed == 0:
+                self._toast(f"Applied {applied} update(s)")
+            else:
+                self._toast(f"Applied {applied} update(s), {failed} failed")
+            return False
+
+        GLib.idle_add(finish_ui)
 
     def _backups_dir(self) -> Optional[Path]:
         root = self._server_dir()
@@ -1095,7 +1831,7 @@ class FilesView(Gtk.Box):
         search_header.set_hexpand(True)
         entry = Gtk.Entry()
         entry.set_hexpand(True)
-        entry.set_placeholder_text("Search Fabric mods…")
+        entry.set_placeholder_text("Search Modrinth…")
         btn = Gtk.Button(label="Search")
         btn.add_css_class("suggested-action")
         search_header.append(entry)
@@ -1112,6 +1848,13 @@ class FilesView(Gtk.Box):
         mc_ver = self._server_info.mc_version if self._server_info else ""
 
         controls_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        project_type_items = [
+            ("Mods", "mod"),
+            ("Modpacks", "modpack"),
+        ]
+        type_dd = Gtk.DropDown.new_from_strings([x[0] for x in project_type_items])
+        type_dd.set_valign(Gtk.Align.CENTER)
 
         category_items = [
             ("Any category", ""),
@@ -1163,6 +1906,7 @@ class FilesView(Gtk.Box):
         spacer.set_hexpand(True)
         controls_row.append(spacer)
 
+        controls_row.append(type_dd)
         controls_row.append(cat_dd)
         controls_row.append(sort_dd)
         outer.append(controls_row)
@@ -1175,6 +1919,12 @@ class FilesView(Gtk.Box):
             if idx < 0 or idx >= len(category_items):
                 return ""
             return category_items[idx][1]
+
+        def selected_project_type() -> str:
+            idx = int(type_dd.get_selected())
+            if idx < 0 or idx >= len(project_type_items):
+                return "mod"
+            return project_type_items[idx][1]
 
         def selected_sort() -> str:
             idx = int(sort_dd.get_selected())
@@ -1196,9 +1946,16 @@ class FilesView(Gtk.Box):
             state["busy"] = busy
             entry.set_sensitive(not busy)
             btn.set_sensitive(not busy)
+            type_dd.set_sensitive(not busy)
             cat_dd.set_sensitive(not busy)
             sort_dd.set_sensitive(not busy)
             update_pager()
+
+        def update_search_hint() -> None:
+            if selected_project_type() == "modpack":
+                entry.set_placeholder_text("Search Fabric modpacks…")
+            else:
+                entry.set_placeholder_text("Search Fabric mods…")
 
         def clear_results():
             while True:
@@ -1245,6 +2002,7 @@ class FilesView(Gtk.Box):
             offset = int(state["offset"])
             category = selected_category() or None
             sort_key = selected_sort()
+            project_type = selected_project_type()
 
             def thread_fn():
                 try:
@@ -1257,6 +2015,7 @@ class FilesView(Gtk.Box):
                         category=category,
                         loader="fabric",
                         server_side_only=True,
+                        project_type=project_type,
                     )
                     GLib.idle_add(
                         lambda h=hits, t=total, v=mc_version, qq=qtxt: finish_search(
@@ -1285,6 +2044,7 @@ class FilesView(Gtk.Box):
         # Explicitly propagate events after triggering search to avoid
         # accidentally consuming default focus handling on text widgets.
         def trigger_search(*_):
+            update_search_hint()
             do_search(reset=True)
             return False
 
@@ -1292,6 +2052,7 @@ class FilesView(Gtk.Box):
         entry.connect("activate", trigger_search)
         prev_btn.connect("clicked", on_prev)
         next_btn.connect("clicked", on_next)
+        type_dd.connect("notify::selected", trigger_search)
         cat_dd.connect("notify::selected", trigger_search)
         sort_dd.connect("notify::selected", trigger_search)
 
@@ -1302,6 +2063,7 @@ class FilesView(Gtk.Box):
         outer.append(sw)
 
         # Run initial discovery search when opening the page.
+        update_search_hint()
         update_pager()
         GLib.idle_add(lambda: do_search(reset=True) or False)
         tv.set_content(outer)
@@ -1360,6 +2122,8 @@ class FilesView(Gtk.Box):
 
     def _make_modrinth_row(self, hit, mc_version: str, installed_names: set[str]) -> Gtk.ListBoxRow:
         from hosty.backend import modrinth_client
+
+        is_modpack = str(getattr(hit, "project_type", "mod")).lower() == "modpack"
 
         row = Gtk.ListBoxRow()
         row.set_activatable(False)
@@ -1429,10 +2193,13 @@ class FilesView(Gtk.Box):
         version_dd.set_hexpand(True)
         version_row.append(version_dd)
 
-        install_btn = Gtk.Button(label="Install")
+        install_btn = Gtk.Button(label=("Install pack" if is_modpack else "Install"))
         install_btn.add_css_class("suggested-action")
         install_btn.set_halign(Gtk.Align.START)
-        if self._looks_installed(hit, installed_names):
+        if is_modpack and self._is_modpack_installed(hit.project_id):
+            install_btn.set_label("Installed")
+            install_btn.set_sensitive(False)
+        elif (not is_modpack) and self._looks_installed(hit, installed_names):
             install_btn.set_label("Installed")
             install_btn.set_sensitive(False)
         version_row.append(install_btn)
@@ -1449,7 +2216,8 @@ class FilesView(Gtk.Box):
 
         def on_open_page(*_):
             slug = hit.slug or hit.project_id
-            if not _open_uri(f"https://modrinth.com/mod/{slug}"):
+            route = "modpack" if is_modpack else "mod"
+            if not _open_uri(f"https://modrinth.com/{route}/{slug}"):
                 self._alert("Could not open browser", "Unable to open the Modrinth page.")
 
         def selected_version():
@@ -1470,15 +2238,79 @@ class FilesView(Gtk.Box):
 
             chosen = selected_version()
             if not chosen:
-                self._alert("No compatible version", "No compatible server mod version is available.")
+                self._alert("No compatible version", "No compatible server version is available.")
                 return
 
             install_btn.set_label("Installing…")
             install_btn.set_sensitive(False)
 
+            if is_modpack:
+                install_btn.set_label("0/0")
+                downloaded_mods: set[str] = set()
+
+                def ui_ok_pack(downloaded_count: int, override_count: int):
+                    install_btn.set_label("Installed")
+                    install_btn.set_sensitive(False)
+                    self._record_modpack_install(
+                        hit.project_id,
+                        chosen.version_id,
+                        version_number=chosen.version_number,
+                        title=hit.title,
+                        mod_files=sorted(downloaded_mods),
+                    )
+                    self._toast(
+                        f"Installed modpack ({downloaded_count} files, {override_count} overrides)"
+                    )
+                    self._rebuild_lists()
+
+                def ui_err_pack(msg: str):
+                    if self._is_modpack_installed(hit.project_id):
+                        install_btn.set_label("Installed")
+                        install_btn.set_sensitive(False)
+                        self._alert("Install failed", msg)
+                        return
+                    install_btn.set_label("Install pack")
+                    install_btn.set_sensitive(True)
+                    self._alert("Install failed", msg)
+
+                def ui_progress_pack(done: int, total: int):
+                    install_btn.set_label(f"{done}/{total}")
+
+                def install_pack_thread():
+                    try:
+                        root = self._server_dir()
+                        if not root:
+                            raise RuntimeError("No server selected.")
+
+                        def on_pack_progress(d: int, t: int, rel_path: str):
+                            rel = str(rel_path or "").replace("\\", "/")
+                            if rel.lower().startswith("mods/") and rel.lower().endswith(".jar"):
+                                downloaded_mods.add(Path(rel).name.lower())
+                            GLib.idle_add(lambda dd=d, tt=t: ui_progress_pack(dd, tt))
+
+                        result = modrinth_client.install_modpack(
+                            chosen.version_id,
+                            root,
+                            progress_callback=on_pack_progress,
+                        )
+                        GLib.idle_add(
+                            lambda d=result.downloaded_files, o=result.extracted_override_files: ui_ok_pack(d, o)
+                        )
+                    except Exception as e:
+                        GLib.idle_add(lambda m=str(e): ui_err_pack(m))
+
+                threading.Thread(target=install_pack_thread, daemon=True).start()
+                return
+
             def ui_ok(fname: str, dep_count: int):
                 install_btn.set_label("Installed")
                 install_btn.set_sensitive(False)
+                self._record_individual_mod_install(
+                    hit.project_id,
+                    hit.title,
+                    chosen.version_id,
+                    chosen.filename,
+                )
                 if dep_count > 0:
                     self._toast(f"Installed {dep_count} required dependencies")
                 self._toast(f"Installed {fname}")
@@ -1635,7 +2467,7 @@ class FilesView(Gtk.Box):
                 GLib.idle_add(ui_set_versions)
 
                 first = version_objs[0]
-                if first.filename.lower() in installed_names:
+                if (not is_modpack) and first.filename.lower() in installed_names:
                     dependents = self._dependency_dependents(first.filename)
                     if dependents:
                         GLib.idle_add(lambda: install_btn.set_label("Dependency"))
@@ -1784,7 +2616,7 @@ class FilesView(Gtk.Box):
                 path,
                 f"mod \"{name}\"",
                 on_refresh=self._rebuild_lists,
-                on_finalize=lambda: self._remove_mod_from_dependency_state(name),
+                on_finalize=lambda: self._remove_mod_from_mod_states(name),
             )
 
         if not dependents:

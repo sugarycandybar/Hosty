@@ -10,7 +10,9 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
-  - --filesystem=home
+  # Removed broad home access to avoid exposing the user's full $HOME.
+  # Hosty stores data under XDG_DATA_HOME (e.g. ~/.local/share/hosty)
+  # inside the Flatpak sandbox and does not require --filesystem=home.
 modules:
   - name: python-deps
     buildsystem: simple

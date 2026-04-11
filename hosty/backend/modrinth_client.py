@@ -1,15 +1,18 @@
 """
-Modrinth API v2 — search and download Fabric mods (stdlib only).
+Modrinth API v2 — search and download Fabric mods and modpacks (stdlib only).
 """
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 USER_AGENT = "Hosty/1.0 (+https://github.com/hosty)"
 API = "https://api.modrinth.com/v2"
@@ -26,6 +29,7 @@ class ModrinthHit:
     downloads: int
     author: str
     categories: list[str]
+    project_type: str
 
 
 @dataclass
@@ -38,6 +42,12 @@ class ModrinthVersion:
     published: str
     download_url: str
     filename: str
+
+
+@dataclass
+class ModpackInstallResult:
+    downloaded_files: int
+    extracted_override_files: int
 
 
 def _version_to_model(ver: dict[str, Any]) -> Optional[ModrinthVersion]:
@@ -74,6 +84,50 @@ def _pick_primary_file(files: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
     return jar if jar else (files[0] if files else None)
 
 
+def _pick_mrpack_file(files: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    primary_pack = next(
+        (f for f in files if f.get("primary") and str(f.get("filename", "")).endswith(".mrpack")),
+        None,
+    )
+    if primary_pack:
+        return primary_pack
+    pack = next((f for f in files if str(f.get("filename", "")).endswith(".mrpack")), None)
+    return pack if pack else (files[0] if files else None)
+
+
+def _download_bytes(url: str, timeout: float = 120.0) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+
+def _safe_target(root: Path, relative_path: str) -> Optional[Path]:
+    rel = str(relative_path or "").replace("\\", "/").lstrip("/")
+    if not rel:
+        return None
+
+    target = (root / rel).resolve()
+    root_resolved = root.resolve()
+    try:
+        target.relative_to(root_resolved)
+    except ValueError:
+        return None
+    return target
+
+
+def _verify_hash(data: bytes, hashes: dict[str, Any]) -> bool:
+    if not isinstance(hashes, dict) or not hashes:
+        return True
+
+    for algo in ("sha512", "sha1", "sha256"):
+        expected = str(hashes.get(algo, "")).strip().lower()
+        if not expected:
+            continue
+        actual = hashlib.new(algo, data).hexdigest().lower()
+        return actual == expected
+    return True
+
+
 def search_mods(
     query: str,
     limit: int = 20,
@@ -83,6 +137,7 @@ def search_mods(
     category: Optional[str] = None,
     loader: str = "fabric",
     server_side_only: bool = True,
+    project_type: str = "mod",
 ) -> tuple[list[ModrinthHit], int]:
     """Search Modrinth with optional filters and pagination.
 
@@ -96,8 +151,14 @@ def search_mods(
     qtext = query.strip()
     if qtext:
         base["query"] = qtext
-    facets_raw: list[list[str]] = [["project_type:mod"], [f"categories:{loader}"]]
-    if server_side_only:
+    ptype = (project_type or "mod").strip().lower()
+    if ptype not in {"mod", "modpack"}:
+        ptype = "mod"
+
+    facets_raw: list[list[str]] = [[f"project_type:{ptype}"], [f"categories:{loader}"]]
+    if ptype == "modpack":
+        facets_raw.append(["server_side:required", "server_side:optional", "server_side:unknown"])
+    elif server_side_only and ptype == "mod":
         facets_raw.append(["server_side:required", "server_side:optional"])
     if category:
         facets_raw.append([f"categories:{category}"])
@@ -111,13 +172,22 @@ def search_mods(
         url = f"{API}/search?{urllib.parse.urlencode(base)}"
         data = _request_json(url)
     raw_hits = data.get("hits", [])
-    if server_side_only:
+    if server_side_only and ptype == "mod":
         allowed = {"required", "optional"}
         filtered = []
         for h in raw_hits:
             side = str(h.get("server_side", "")).strip().lower()
             if side in allowed:
                 filtered.append(h)
+        raw_hits = filtered
+    elif ptype == "modpack":
+        disallowed = {"unsupported", "client_only", "client-only", "client", "none"}
+        filtered = []
+        for h in raw_hits:
+            side = str(h.get("server_side", "")).strip().lower()
+            if side in disallowed:
+                continue
+            filtered.append(h)
         raw_hits = filtered
 
     hits: list[ModrinthHit] = []
@@ -133,6 +203,7 @@ def search_mods(
                 downloads=int(h.get("downloads") or 0),
                 author=h.get("author", ""),
                 categories=[str(c) for c in (h.get("categories") or [])],
+                project_type=str(h.get("project_type") or ptype),
             )
         )
     total_hits = int(data.get("total_hits") or len(hits))
@@ -278,7 +349,108 @@ def find_compatible_version_file(
 
 def download_to(url: str, dest: Path, timeout: float = 120.0) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = resp.read()
+    data = _download_bytes(url, timeout=timeout)
     dest.write_bytes(data)
+
+
+def install_modpack(
+    version_id: str,
+    server_dir: Path,
+    timeout: float = 120.0,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+) -> ModpackInstallResult:
+    """
+    Download and install a Modrinth modpack version into a server directory.
+
+    - Downloads files from modrinth.index.json where server env is not unsupported.
+    - Extracts overrides and server-overrides into the server root.
+    """
+    raw = get_version(version_id)
+    if not raw:
+        raise RuntimeError("Could not fetch selected modpack version.")
+
+    files = raw.get("files") or []
+    pack_file = _pick_mrpack_file(files)
+    if not pack_file:
+        raise RuntimeError("Selected version has no downloadable modpack file.")
+
+    pack_url = str(pack_file.get("url", "")).strip()
+    if not pack_url:
+        raise RuntimeError("Selected version has no download URL.")
+
+    server_root = Path(server_dir)
+    server_root.mkdir(parents=True, exist_ok=True)
+
+    pack_bytes = _download_bytes(pack_url, timeout=timeout)
+
+    downloaded = 0
+    extracted = 0
+    with zipfile.ZipFile(io.BytesIO(pack_bytes)) as zf:
+        try:
+            manifest = json.loads(zf.read("modrinth.index.json").decode("utf-8"))
+        except KeyError as e:
+            raise RuntimeError("Invalid modpack: missing modrinth.index.json") from e
+
+        manifest_files = manifest.get("files") or []
+        download_entries: list[tuple[str, str, dict[str, Any]]] = []
+
+        for entry in manifest_files:
+            if not isinstance(entry, dict):
+                continue
+
+            env = entry.get("env") or {}
+            server_env = str(env.get("server", "required")).strip().lower()
+            if server_env == "unsupported":
+                continue
+
+            rel_path = str(entry.get("path", "")).strip()
+            downloads = entry.get("downloads") or []
+            dl_url = next((str(u) for u in downloads if str(u).startswith(("https://", "http://"))), "")
+            if not dl_url:
+                continue
+
+            target = _safe_target(server_root, rel_path)
+            if not target:
+                continue
+
+            download_entries.append((rel_path, dl_url, entry))
+
+        total_downloads = len(download_entries)
+        if progress_callback:
+            progress_callback(0, total_downloads, "")
+
+        for idx, (rel_path, dl_url, entry) in enumerate(download_entries, start=1):
+            target = _safe_target(server_root, rel_path)
+            if not target:
+                continue
+
+            payload = _download_bytes(dl_url, timeout=timeout)
+            hashes = entry.get("hashes") or {}
+            if not _verify_hash(payload, hashes):
+                raise RuntimeError(f"Checksum mismatch for {rel_path}")
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+            downloaded += 1
+            if progress_callback:
+                progress_callback(downloaded, total_downloads, rel_path)
+
+        for prefix in ("overrides/", "server-overrides/"):
+            for zinfo in zf.infolist():
+                name = zinfo.filename
+                if zinfo.is_dir() or not name.startswith(prefix):
+                    continue
+                rel = name[len(prefix):]
+                if not rel:
+                    continue
+
+                target = _safe_target(server_root, rel)
+                if not target:
+                    continue
+
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(zinfo, "r") as src:
+                    target.write_bytes(src.read())
+                extracted += 1
+
+    return ModpackInstallResult(downloaded_files=downloaded, extracted_override_files=extracted)
