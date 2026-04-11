@@ -10,10 +10,10 @@ from typing import Optional
 from gi.repository import Gtk, Adw, GLib
 
 from hosty.views.console_view import ConsoleView
-from hosty.views.connect_view import ConnectView
+from hosty.views.connect import ConnectView
 from hosty.views.performance_view import PerformanceView
 from hosty.views.properties_view import PropertiesView
-from hosty.views.files_view import FilesView
+from hosty.views.files import FilesView
 from hosty.backend.server_manager import ServerManager, ServerInfo
 from hosty.backend.server_process import ServerProcess
 from hosty.utils.constants import ServerStatus
