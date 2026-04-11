@@ -1282,12 +1282,18 @@ class FilesView(Gtk.Box):
                 state["offset"] += page_size
                 do_search(reset=False)
 
-        btn.connect("clicked", lambda *_: do_search(reset=True))
-        entry.connect("activate", lambda *_: do_search(reset=True))
+        # Explicitly propagate events after triggering search to avoid
+        # accidentally consuming default focus handling on text widgets.
+        def trigger_search(*_):
+            do_search(reset=True)
+            return False
+
+        btn.connect("clicked", trigger_search)
+        entry.connect("activate", trigger_search)
         prev_btn.connect("clicked", on_prev)
         next_btn.connect("clicked", on_next)
-        cat_dd.connect("notify::selected", lambda *_: do_search(reset=True))
-        sort_dd.connect("notify::selected", lambda *_: do_search(reset=True))
+        cat_dd.connect("notify::selected", trigger_search)
+        sort_dd.connect("notify::selected", trigger_search)
 
         sw = Gtk.ScrolledWindow()
         sw.set_vexpand(True)

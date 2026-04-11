@@ -105,11 +105,21 @@ class ServerDetailView(Gtk.Box):
         # Bottom view switcher bar (for narrow layouts)
         self._switcher_bar = Adw.ViewSwitcherBar()
         self._switcher_bar.set_stack(self._view_stack)
+        self._switcher_bar.set_reveal(False)
         self._view_switcher_title.connect(
-            "notify::title-visible",
-            lambda t, _: self._switcher_bar.set_reveal(t.get_title_visible())
+            "notify::title-visible", self._on_switcher_title_visible_changed
         )
         self._toolbar_view.add_bottom_bar(self._switcher_bar)
+        GLib.idle_add(self._sync_switcher_bar_reveal)
+
+    def _on_switcher_title_visible_changed(self, *_args):
+        """Reveal the bottom switcher only in compact layouts."""
+        self._sync_switcher_bar_reveal()
+
+    def _sync_switcher_bar_reveal(self):
+        """Keep bottom switcher visibility in sync with title visibility."""
+        self._switcher_bar.set_reveal(self._view_switcher_title.get_title_visible())
+        return False
     
     def load_server(self, server_info: ServerInfo):
         """Load a server's details into the view."""
