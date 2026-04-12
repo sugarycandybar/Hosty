@@ -178,6 +178,7 @@ class PropertiesMixin:
         spin.setRange(min_v, max_v)
         spin.setSingleStep(step)
         spin.setValue(default)
+        spin.setCursor(Qt.CursorShape.PointingHandCursor)
         spin.setProperty("_prop_key", key)
         spin.wheelEvent = lambda e: e.ignore()
         spin.valueChanged.connect(self._schedule_save)
@@ -190,6 +191,7 @@ class PropertiesMixin:
         row.addWidget(QLabel(label))
         combo = QComboBox()
         combo.addItems(options)
+        combo.setCursor(Qt.CursorShape.PointingHandCursor)
         combo.setProperty("_prop_key", key)
         combo.setProperty("_options", options)
         try:
@@ -205,6 +207,7 @@ class PropertiesMixin:
 
     def _add_prop_check(self, layout, label: str, key: str, default: bool) -> QCheckBox:
         check = QCheckBox(label)
+        check.setCursor(Qt.CursorShape.PointingHandCursor)
         check.setChecked(default)
         check.setProperty("_prop_key", key)
         check.stateChanged.connect(self._schedule_save)

@@ -155,16 +155,26 @@ _LIGHT = {
 
 def _build_qss(c: dict) -> str:
     """Build a complete QSS stylesheet from a color token dict."""
-    check_svg_path = Path(__file__).parent / "assets" / "check.svg"
-    check_svg_path.parent.mkdir(parents=True, exist_ok=True)
+    assets_dir = Path(__file__).parent / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    check_svg_path = assets_dir / "check.svg"
     check_svg_path.write_text("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'><path d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z'/></svg>")
     check_url = check_svg_path.as_posix()
+
+    down_svg_path = assets_dir / "down.svg"
+    down_svg_path.write_text(f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='{c['text_secondary']}'><path d='M7 10l5 5 5-5z'/></svg>")
+    down_url = down_svg_path.as_posix()
+
+    up_svg_path = assets_dir / "up.svg"
+    up_svg_path.write_text(f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='{c['text_secondary']}'><path d='M7 14l5-5 5 5z'/></svg>")
+    up_url = up_svg_path.as_posix()
 
     return f"""
 /* ===== Global ===== */
 * {{
-    font-family: "Nunito", "Quicksand", "Segoe UI Variable", "Segoe UI", "Inter", sans-serif;
-    font-size: 14px;
+    font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 13px;
     outline: none;
 }}
 
@@ -364,18 +374,14 @@ QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
     background: {c["btn_default_hover"]};
 }}
 QSpinBox::up-arrow {{
-    image: none;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-bottom: 5px solid {c["text_secondary"]};
-    width: 0px; height: 0px;
+    image: url("{up_url}");
+    width: 12px;
+    height: 12px;
 }}
 QSpinBox::down-arrow {{
-    image: none;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid {c["text_secondary"]};
-    width: 0px; height: 0px;
+    image: url("{down_url}");
+    width: 12px;
+    height: 12px;
 }}
 
 /* ===== ComboBox ===== */
@@ -396,10 +402,9 @@ QComboBox::drop-down {{
     width: 28px;
 }}
 QComboBox::down-arrow {{
-    image: none;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid {c["text_secondary"]};
+    image: url("{down_url}");
+    width: 14px;
+    height: 14px;
     margin-right: 8px;
 }}
 QComboBox QAbstractItemView {{
@@ -644,6 +649,21 @@ QWidget[class="sidebar"] {{
     background: {c["bg_sidebar"]};
     border-right: 2px solid {c["border"]};
 }}
+
+ServerListItemWidget {{
+    background: transparent;
+}}
+
+ServerListItemWidget QLabel#server_name {{
+    font-weight: 700;
+    font-size: 14px;
+    color: {c["text"]};
+}}
+
+ServerListItemWidget QLabel#server_subtitle {{
+    font-size: 12px;
+    color: {c["text_secondary"]};
+}}
 """
 
 
@@ -663,33 +683,33 @@ def _load_custom_fonts() -> None:
     fonts_dir = Path(__file__).parent / "fonts"
     fonts_dir.mkdir(parents=True, exist_ok=True)
 
-    nunito_reg = fonts_dir / "Nunito-Regular.ttf"
-    nunito_bold = fonts_dir / "Nunito-Bold.ttf"
+    jb_reg = fonts_dir / "JetBrainsMono-Regular.ttf"
+    jb_bold = fonts_dir / "JetBrainsMono-Bold.ttf"
     material = fonts_dir / "MaterialSymbolsRounded.ttf"
     
     # Load them into Qt immediately if they exist (sync)
-    if nunito_reg.exists():
-        QFontDatabase.addApplicationFont(str(nunito_reg))
-    if nunito_bold.exists():
-        QFontDatabase.addApplicationFont(str(nunito_bold))
+    if jb_reg.exists():
+        QFontDatabase.addApplicationFont(str(jb_reg))
+    if jb_bold.exists():
+        QFontDatabase.addApplicationFont(str(jb_bold))
     if material.exists():
         QFontDatabase.addApplicationFont(str(material))
 
-    # Material Symbols URL
+    # URLs
     mat_url = "https://github.com/google/material-design-icons/raw/master/variablefont/MaterialSymbolsRounded%5BFILL%2CGRAD%2Copsz%2Cwght%5D.ttf"
-    nun_reg_url = "https://github.com/google/fonts/raw/main/ofl/nunito/static/Nunito-Regular.ttf"
-    nun_bold_url = "https://github.com/google/fonts/raw/main/ofl/nunito/static/Nunito-Bold.ttf"
+    jb_reg_url = "https://github.com/google/fonts/raw/main/ofl/jetbrainsmono/static/JetBrainsMono-Regular.ttf"
+    jb_bold_url = "https://github.com/google/fonts/raw/main/ofl/jetbrainsmono/static/JetBrainsMono-Bold.ttf"
 
     def worker():
-        _download_font(nun_reg_url, nunito_reg)
-        _download_font(nun_bold_url, nunito_bold)
+        _download_font(jb_reg_url, jb_reg)
+        _download_font(jb_bold_url, jb_bold)
         _download_font(mat_url, material)
         
         # Load again in case they were just downloaded
-        if nunito_reg.exists():
-            QFontDatabase.addApplicationFont(str(nunito_reg))
-        if nunito_bold.exists():
-            QFontDatabase.addApplicationFont(str(nunito_bold))
+        if jb_reg.exists():
+            QFontDatabase.addApplicationFont(str(jb_reg))
+        if jb_bold.exists():
+            QFontDatabase.addApplicationFont(str(jb_bold))
         if material.exists():
             QFontDatabase.addApplicationFont(str(material))
 

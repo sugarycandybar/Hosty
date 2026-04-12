@@ -125,6 +125,7 @@ class HostyMainWindow(
         header_layout.addStretch(1)
 
         self._toggle_btn = QPushButton("Start", content)
+        self._toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._toggle_btn.setProperty("class", "start")
         self._toggle_btn.setEnabled(False)
         self._toggle_btn.setMinimumWidth(100)

@@ -279,6 +279,7 @@ class CreateServerDialog(QDialog):
         btn_layout.setContentsMargins(0, 0, 0, 0)
 
         self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._cancel_btn.clicked.connect(self._on_cancel)
         btn_layout.addWidget(self._cancel_btn)
 
@@ -286,6 +287,7 @@ class CreateServerDialog(QDialog):
 
         self._primary_btn = QPushButton("Next")
         self._primary_btn.setProperty("class", "accent")
+        self._primary_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._primary_btn.setEnabled(False)
         self._primary_btn.clicked.connect(self._on_primary)
         btn_layout.addWidget(self._primary_btn)
@@ -332,6 +334,7 @@ class CreateServerDialog(QDialog):
         self._icon_label.setProperty("class", "dim")
         icon_row.addWidget(self._icon_label, 1)
         icon_btn = QPushButton("Choose…")
+        icon_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         icon_btn.clicked.connect(self._on_choose_icon)
         icon_row.addWidget(icon_btn)
         info_layout.addLayout(icon_row)
@@ -343,6 +346,7 @@ class CreateServerDialog(QDialog):
         eula_layout = QVBoxLayout(eula_group)
 
         self._eula_check = QCheckBox("I agree to the Minecraft EULA")
+        self._eula_check.setCursor(Qt.CursorShape.PointingHandCursor)
         self._eula_check.setToolTip("Required to complete server creation")
         self._eula_check.toggled.connect(self._validate)
         eula_layout.addWidget(self._eula_check)
@@ -376,6 +380,7 @@ class CreateServerDialog(QDialog):
         mc_row = QHBoxLayout()
         mc_row.addWidget(QLabel("Minecraft version"))
         self._mc_combo = QComboBox()
+        self._mc_combo.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mc_combo.addItem("Loading versions...")
         self._mc_combo.setEnabled(False)
         self._mc_combo.currentIndexChanged.connect(self._on_mc_changed)
@@ -385,6 +390,7 @@ class CreateServerDialog(QDialog):
         loader_row = QHBoxLayout()
         loader_row.addWidget(QLabel("Fabric loader"))
         self._loader_combo = QComboBox()
+        self._loader_combo.setCursor(Qt.CursorShape.PointingHandCursor)
         self._loader_combo.addItem("Loading...")
         self._loader_combo.setEnabled(False)
         loader_row.addWidget(self._loader_combo, 1)
@@ -406,6 +412,7 @@ class CreateServerDialog(QDialog):
         ram_row = QHBoxLayout()
         ram_row.addWidget(QLabel("RAM (MB)"))
         self._ram_spin = QSpinBox()
+        self._ram_spin.setCursor(Qt.CursorShape.PointingHandCursor)
         self._ram_spin.setRange(MIN_RAM_MB, MAX_RAM_MB)
         self._ram_spin.setSingleStep(256)
         self._ram_spin.setValue(self._server_manager.preferences.default_ram_mb)
@@ -420,6 +427,7 @@ class CreateServerDialog(QDialog):
         opt_layout = QVBoxLayout(opt_group)
 
         self._optimise_check = QCheckBox("Install server-optimising mods")
+        self._optimise_check.setCursor(Qt.CursorShape.PointingHandCursor)
         self._optimise_check.setToolTip("Installs compatible performance mods from Modrinth")
         opt_layout.addWidget(self._optimise_check)
 

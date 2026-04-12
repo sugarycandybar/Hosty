@@ -2,6 +2,7 @@
 Image utility functions for Hosty.
 Handles image cropping, conversion, and loading for GTK display.
 """
+from __future__ import annotations
 from pathlib import Path
 from PIL import Image
 import io
@@ -16,7 +17,10 @@ try:
         gi.require_version('GdkPixbuf', '2.0')
         from gi.repository import GdkPixbuf, Gdk, Gtk
 except ImportError:
-    pass
+    gi = None
+    GdkPixbuf = None
+    Gdk = None
+    Gtk = None
 
 
 def crop_to_square(input_path: str, x: int, y: int, size: int) -> Image.Image:
@@ -60,8 +64,10 @@ def convert_to_png(input_path: str, output_path: str, size: int = 128,
     return output_path
 
 
-def load_pixbuf(path: str, size: int = 128) -> GdkPixbuf.Pixbuf:
+def load_pixbuf(path: str, size: int = 128) -> GdkPixbuf.Pixbuf | None:
     """Load an image file as a GdkPixbuf at the given size."""
+    if GdkPixbuf is None:
+        return None
     try:
         pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
             str(path), size, size, True
@@ -71,8 +77,10 @@ def load_pixbuf(path: str, size: int = 128) -> GdkPixbuf.Pixbuf:
         return None
 
 
-def create_texture_from_file(path: str, size: int = 128) -> Gdk.Texture:
+def create_texture_from_file(path: str, size: int = 128) -> Gdk.Texture | None:
     """Load an image file as a Gdk.Texture."""
+    if Gdk is None:
+        return None
     try:
         pixbuf = load_pixbuf(path, size)
         if pixbuf:
@@ -82,8 +90,10 @@ def create_texture_from_file(path: str, size: int = 128) -> Gdk.Texture:
     return None
 
 
-def get_default_server_icon_pixbuf(size: int = 48) -> GdkPixbuf.Pixbuf:
+def get_default_server_icon_pixbuf(size: int = 48) -> GdkPixbuf.Pixbuf | None:
     """Create a default server icon (simple colored square)."""
+    if GdkPixbuf is None:
+        return None
     # Create a simple colored pixbuf as default
     pixbuf = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, True, 8, size, size)
     # Fill with a nice purple/blue color

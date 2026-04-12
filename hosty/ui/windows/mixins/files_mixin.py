@@ -68,12 +68,14 @@ class FilesMixin:
         # Actually I can just add icon later. 
         open_srv.setIcon(get_material_icon("folder_open", "#eecaa4"))
         open_srv.setProperty("class", "flat")
+        open_srv.setCursor(Qt.CursorShape.PointingHandCursor)
         open_srv.clicked.connect(self._open_server_folder)
         btn_row.addWidget(open_srv)
         
         open_mods = QPushButton(" Open Mods Folder")
         open_mods.setIcon(get_material_icon("folder_open", "#eecaa4"))
         open_mods.setProperty("class", "flat")
+        open_mods.setCursor(Qt.CursorShape.PointingHandCursor)
         open_mods.clicked.connect(self._open_mods_folder)
         btn_row.addWidget(open_mods)
         
@@ -125,6 +127,7 @@ class FilesMixin:
         nav_btn.setIcon(get_material_icon("arrow_forward", "#c4b891", 20))
         nav_btn.setProperty("class", "flat")
         nav_btn.setFixedSize(36, 36)
+        nav_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         nav_btn.clicked.connect(callback)
         layout.addWidget(nav_btn)
         
