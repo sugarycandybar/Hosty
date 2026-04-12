@@ -59,6 +59,7 @@ class BackupsPage(QWidget):
 
         back_btn = QPushButton("← Back")
         back_btn.setProperty("class", "flat")
+        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         back_btn.clicked.connect(back_callback)
         header_layout.addWidget(back_btn)
 
@@ -70,10 +71,18 @@ class BackupsPage(QWidget):
         
         self._create_btn = QPushButton("Create Backup")
         self._create_btn.setProperty("class", "accent")
+        self._create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._create_btn.clicked.connect(self._create_backup)
         header_layout.addWidget(self._create_btn)
 
         layout.addWidget(header)
+
+        # Status label (replaces modal popups)
+        self._status_lbl = QLabel("")
+        self._status_lbl.setProperty("class", "dim")
+        self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_lbl.setContentsMargins(24, 4, 24, 4)
+        layout.addWidget(self._status_lbl)
 
         # Backup List Content
         self._scroll = SmoothScrollArea()
@@ -93,6 +102,7 @@ class BackupsPage(QWidget):
         self._server_info = info
         self._create_btn.setText("Create Backup")
         self._create_btn.setEnabled(True)
+        self._status_lbl.setText("")
         self._refresh()
 
     def _refresh(self) -> None:
@@ -141,11 +151,13 @@ class BackupsPage(QWidget):
 
         restore_btn = QPushButton("Restore")
         restore_btn.setProperty("class", "flat")
+        restore_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         restore_btn.clicked.connect(lambda *_args, p=zip_path: self._restore_backup(p))
         layout.addWidget(restore_btn)
 
         del_btn = QPushButton("Delete")
         del_btn.setProperty("class", "destructive")
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         del_btn.clicked.connect(lambda *_args, p=zip_path: self._delete_backup(p))
         layout.addWidget(del_btn)
 
@@ -157,6 +169,7 @@ class BackupsPage(QWidget):
 
         self._create_btn.setEnabled(False)
         self._create_btn.setText("Creating...")
+        self._status_lbl.setText("Creating backup…")
 
         server_id = self._server_info.id
 
@@ -167,9 +180,9 @@ class BackupsPage(QWidget):
                 self._create_btn.setEnabled(True)
                 self._create_btn.setText("Create Backup")
                 if ok:
-                    QMessageBox.information(self, "Backup Status", f"Backup created successfully:\n{msg}")
+                    self._status_lbl.setText(f"✓ Backup created: {msg}")
                 else:
-                    QMessageBox.warning(self, "Backup Status", f"Failed to create backup:\n{msg}")
+                    self._status_lbl.setText(f"✗ Failed: {msg}")
                 self._refresh()
 
             dispatch_on_main_thread(ui_done)
@@ -182,15 +195,13 @@ class BackupsPage(QWidget):
 
         proc = self._server_manager.get_process(self._server_info.id)
         if proc and proc.is_running:
-            QMessageBox.warning(
-                self, "Server Running", "You must stop the server before restoring a backup."
-            )
+            self._status_lbl.setText("⚠ Stop the server before restoring a backup.")
             return
 
         reply = QMessageBox.question(
             self,
             "Restore Backup",
-            f"Are you sure you want to restore '{zip_path.name}'?\n\nThis will completely overwrite the existing world files and CANNOT be undone.",
+            f"Are you sure you want to restore '{zip_path.name}'?\n\nThis will overwrite existing world files.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
@@ -198,6 +209,7 @@ class BackupsPage(QWidget):
 
         self._create_btn.setEnabled(False)
         self._create_btn.setText("Restoring...")
+        self._status_lbl.setText("Restoring backup…")
 
         server_id = self._server_info.id
 
@@ -208,9 +220,9 @@ class BackupsPage(QWidget):
                 self._create_btn.setEnabled(True)
                 self._create_btn.setText("Create Backup")
                 if ok:
-                    QMessageBox.information(self, "Restore Status", "Backup restored successfully.")
+                    self._status_lbl.setText("✓ Backup restored successfully.")
                 else:
-                    QMessageBox.warning(self, "Restore Status", f"Failed to restore backup:\n{msg}")
+                    self._status_lbl.setText(f"✗ Restore failed: {msg}")
                 self._refresh()
 
             dispatch_on_main_thread(ui_done)

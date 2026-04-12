@@ -1,14 +1,21 @@
 """
-Connect mixin — local network info and Playit.gg tunnel controls.
+Connect mixin — local network info, Playit.gg tunnel controls,
+and player management (whitelist + ban).
+
+Matches the Linux ConnectView feature set.
 """
 
 from __future__ import annotations
 
+import json
 import socket
 import threading
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import urllib.parse
+import urllib.request
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
@@ -16,6 +23,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -33,7 +41,7 @@ PLAYIT_DASHBOARD_URL = "https://playit.gg/account/tunnels"
 
 
 class ConnectMixin:
-    """Mixin providing LAN IP display and Playit.gg tunnel controls."""
+    """Mixin providing LAN IP display, Playit.gg tunnel controls, and player management."""
 
     def _build_connect_tab(self) -> None:
         tab = QWidget(self._tabs)
@@ -49,7 +57,7 @@ class ConnectMixin:
         layout.setSpacing(16)
         layout.setContentsMargins(24, 24, 24, 24)
 
-        # Local network
+        # ===== Local network group =====
         local_group = QGroupBox("Local Network")
         local_layout = QVBoxLayout(local_group)
         local_layout.setSpacing(8)
@@ -60,6 +68,13 @@ class ConnectMixin:
         self._lan_ip_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         self._lan_ip_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         ip_row.addWidget(self._lan_ip_label)
+
+        copy_ip_btn = QPushButton("Copy")
+        copy_ip_btn.setProperty("class", "flat")
+        copy_ip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        copy_ip_btn.clicked.connect(self._copy_lan_ip)
+        ip_row.addWidget(copy_ip_btn)
+
         local_layout.addLayout(ip_row)
 
         port_row = QHBoxLayout()
@@ -77,7 +92,7 @@ class ConnectMixin:
 
         layout.addWidget(local_group)
 
-        # Playit group
+        # ===== Playit group =====
         playit_group = QGroupBox("Playit.gg Tunnel")
         playit_layout = QVBoxLayout(playit_group)
         playit_layout.setSpacing(10)
@@ -116,6 +131,66 @@ class ConnectMixin:
 
         layout.addWidget(playit_group)
 
+        # ===== Players group =====
+        players_group = QGroupBox("Players")
+        players_layout = QVBoxLayout(players_group)
+        players_layout.setSpacing(10)
+
+        # Player name input
+        name_row = QHBoxLayout()
+        name_row.setSpacing(8)
+        self._player_name_input = QLineEdit()
+        self._player_name_input.setPlaceholderText("Player name…")
+        name_row.addWidget(self._player_name_input, 1)
+
+        add_whitelist_btn = QPushButton("Add to Whitelist")
+        add_whitelist_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_whitelist_btn.setProperty("class", "accent")
+        add_whitelist_btn.clicked.connect(self._on_add_whitelist)
+        name_row.addWidget(add_whitelist_btn)
+
+        ban_btn = QPushButton("Ban")
+        ban_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        ban_btn.setProperty("class", "destructive")
+        ban_btn.clicked.connect(self._on_ban_player)
+        name_row.addWidget(ban_btn)
+
+        players_layout.addLayout(name_row)
+
+        self._player_status_label = QLabel("")
+        self._player_status_label.setProperty("class", "dim")
+        players_layout.addWidget(self._player_status_label)
+
+        layout.addWidget(players_group)
+
+        # ===== Whitelist group =====
+        self._whitelist_enabled_check = QCheckBox("Whitelist enabled (only whitelisted players can join)")
+        self._whitelist_enabled_check.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._whitelist_enabled_check.toggled.connect(self._on_whitelist_toggled)
+        self._suppress_whitelist_toggle = False
+
+        whitelist_group = QGroupBox("Whitelist")
+        whitelist_layout = QVBoxLayout(whitelist_group)
+        whitelist_layout.setSpacing(8)
+        whitelist_layout.addWidget(self._whitelist_enabled_check)
+
+        self._whitelist_container = QVBoxLayout()
+        self._whitelist_container.setSpacing(6)
+        whitelist_layout.addLayout(self._whitelist_container)
+
+        layout.addWidget(whitelist_group)
+
+        # ===== Banned group =====
+        banned_group = QGroupBox("Banned Players")
+        banned_layout = QVBoxLayout(banned_group)
+        banned_layout.setSpacing(8)
+
+        self._banned_container = QVBoxLayout()
+        self._banned_container.setSpacing(6)
+        banned_layout.addLayout(self._banned_container)
+
+        layout.addWidget(banned_group)
+
         layout.addStretch()
         scroll.setWidget(content)
         outer.addWidget(scroll)
@@ -130,8 +205,9 @@ class ConnectMixin:
         # Detect LAN IP
         self._detect_lan_ip()
 
+    # ===== LAN IP =====
+
     def _detect_lan_ip(self) -> None:
-        """Detect the local IP address."""
         def worker():
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -140,10 +216,27 @@ class ConnectMixin:
                 s.close()
             except Exception:
                 ip = "Not available"
-
             dispatch_on_main_thread(lambda: self._lan_ip_label.setText(ip))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _copy_lan_ip(self) -> None:
+        ip = self._lan_ip_label.text().strip()
+        if not ip or ip in ("Detecting…", "Not available"):
+            return
+        try:
+            from PySide6.QtWidgets import QApplication
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(ip)
+                self._player_status_label.setText("✓ IP copied to clipboard")
+                QTimer.singleShot(3000, lambda: (
+                    self._player_status_label.setText("") if "copied" in self._player_status_label.text() else None
+                ))
+        except Exception:
+            pass
+
+    # ===== Playit =====
 
     def _is_setup_complete(self) -> bool:
         if not self._server_manager:
@@ -158,18 +251,13 @@ class ConnectMixin:
         )
 
     def _refresh_connect(self, info: ServerInfo) -> None:
-        """Refresh the connect tab for the given server."""
         self._connect_server_info = info
         self._suppress_connect_changes = True
 
-        # Load playit config
         self._connect_cfg = load_playit_config(info.server_dir)
-        enabled = self._connect_cfg.get("enabled", False)
         auto_start = self._connect_cfg.get("auto_start", True)
-
         self._auto_start_check.setChecked(auto_start)
 
-        # Update status
         playit = self._server_manager.playit_manager
         if self._playit_status_id is not None:
             try:
@@ -180,6 +268,10 @@ class ConnectMixin:
         self._refresh_playit_ui()
 
         self._suppress_connect_changes = False
+
+        # Refresh player lists
+        self._refresh_whitelist_status()
+        self._refresh_player_lists()
 
     def _refresh_playit_ui(self) -> None:
         playit = self._server_manager.playit_manager
@@ -213,8 +305,6 @@ class ConnectMixin:
     def _on_tunnel_toggle(self) -> None:
         if not self._connect_server_info:
             return
-
-        # If playit setup is not complete, redirect to setup
         if not self._is_setup_complete():
             self._on_setup_playit()
             return
@@ -249,11 +339,9 @@ class ConnectMixin:
 
     def _on_setup_playit(self) -> None:
         if not self._connect_server_info:
-            QMessageBox.information(self, "Playit Setup", "Select a server first.")
             return
 
         from hosty.ui.windows.dialogs.playit_setup import PlayitSetupDialog
-        # Pass dummy True for server_running to keep signature compatible
         dialog = PlayitSetupDialog(
             self._server_manager,
             self._connect_server_info,
@@ -261,7 +349,267 @@ class ConnectMixin:
         )
         dialog.start_setup()
         dialog.exec()
-        
-        # After dialog closes, refresh status if completed
+
         if dialog.setup_completed():
             self._refresh_connect(self._connect_server_info)
+
+    # ===== Player Management =====
+
+    def _player_list_paths(self):
+        if not self._connect_server_info:
+            return None, None
+        root = Path(self._connect_server_info.server_dir)
+        return root / "whitelist.json", root / "banned-players.json"
+
+    def _read_player_list(self, path: Optional[Path]) -> list:
+        if not path or not path.exists():
+            return []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+        except Exception:
+            return []
+        if not isinstance(raw, list):
+            return []
+        out = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "")).strip()
+            if not name:
+                continue
+            out.append(item)
+        return sorted(out, key=lambda e: str(e.get("name", "")).lower())
+
+    def _write_player_list(self, path: Optional[Path], entries: list) -> bool:
+        if not path:
+            return False
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(entries, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def _refresh_whitelist_status(self) -> None:
+        enabled = False
+        if self._server_manager and self._connect_server_info:
+            cfg = self._server_manager.get_config(self._connect_server_info.id)
+            if cfg:
+                cfg.load()
+                enabled = cfg.get_bool("white-list", False)
+
+        self._suppress_whitelist_toggle = True
+        self._whitelist_enabled_check.setChecked(enabled)
+        self._suppress_whitelist_toggle = False
+
+    def _on_whitelist_toggled(self, checked: bool) -> None:
+        if self._suppress_whitelist_toggle:
+            return
+        if not self._server_manager or not self._connect_server_info:
+            return
+
+        cfg = self._server_manager.get_config(self._connect_server_info.id)
+        if cfg:
+            cfg.load()
+            cfg.set_value("white-list", checked)
+            cfg.save()
+
+        process = self._server_manager.get_process(self._connect_server_info.id)
+        if process and process.is_running:
+            self._player_status_label.setText("⚠ Restart the server to apply whitelist changes")
+
+    def _refresh_player_lists(self) -> None:
+        # Clear existing
+        self._clear_layout(self._whitelist_container)
+        self._clear_layout(self._banned_container)
+
+        whitelist_path, banned_path = self._player_list_paths()
+        if not whitelist_path or not banned_path:
+            return
+
+        whitelist = self._read_player_list(whitelist_path)
+        banned = self._read_player_list(banned_path)
+
+        if not whitelist:
+            lbl = QLabel("No whitelisted players")
+            lbl.setProperty("class", "dim")
+            self._whitelist_container.addWidget(lbl)
+        else:
+            for entry in whitelist:
+                name = str(entry.get("name", "")).strip()
+                uuid_str = str(entry.get("uuid", "")).strip()
+                row = self._build_player_row(name, uuid_str, is_whitelist=True)
+                self._whitelist_container.addWidget(row)
+
+        if not banned:
+            lbl = QLabel("No banned players")
+            lbl.setProperty("class", "dim")
+            self._banned_container.addWidget(lbl)
+        else:
+            for entry in banned:
+                name = str(entry.get("name", "")).strip()
+                reason = str(entry.get("reason", "Banned")).strip()
+                row = self._build_player_row(name, reason, is_whitelist=False)
+                self._banned_container.addWidget(row)
+
+    def _build_player_row(self, name: str, subtitle: str, is_whitelist: bool) -> QWidget:
+        row = QWidget()
+        row.setProperty("class", "card")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
+
+        name_lbl = QLabel(name)
+        name_lbl.setStyleSheet("font-weight: 700;")
+        layout.addWidget(name_lbl, 1)
+
+        sub_lbl = QLabel(subtitle)
+        sub_lbl.setProperty("class", "dim")
+        layout.addWidget(sub_lbl)
+
+        remove_btn = QPushButton("Remove" if is_whitelist else "Pardon")
+        remove_btn.setProperty("class", "flat")
+        remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        if is_whitelist:
+            remove_btn.clicked.connect(lambda *_, n=name: self._remove_whitelist_player(n))
+        else:
+            remove_btn.clicked.connect(lambda *_, n=name: self._remove_banned_player(n))
+        layout.addWidget(remove_btn)
+
+        return row
+
+    def _clear_layout(self, layout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _resolve_profile(self, name: str):
+        try:
+            quoted = urllib.parse.quote(name)
+            req = urllib.request.Request(
+                f"https://api.mojang.com/users/profiles/minecraft/{quoted}",
+                headers={"User-Agent": "Hosty/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=8.0) as resp:
+                if resp.status == 204:
+                    return name, ""
+                data = json.loads(resp.read().decode("utf-8"))
+            resolved_name = str(data.get("name", name)).strip() or name
+            raw_uuid = str(data.get("id", "")).strip()
+            if len(raw_uuid) == 32:
+                resolved_uuid = f"{raw_uuid[0:8]}-{raw_uuid[8:12]}-{raw_uuid[12:16]}-{raw_uuid[16:20]}-{raw_uuid[20:32]}"
+            else:
+                resolved_uuid = raw_uuid
+            return resolved_name, resolved_uuid
+        except Exception:
+            return name, ""
+
+    def _on_add_whitelist(self) -> None:
+        name = self._player_name_input.text().strip()
+        if not name:
+            self._player_status_label.setText("⚠ Enter a player name first.")
+            return
+        self._add_player("whitelist", name)
+
+    def _on_ban_player(self) -> None:
+        name = self._player_name_input.text().strip()
+        if not name:
+            self._player_status_label.setText("⚠ Enter a player name first.")
+            return
+        self._add_player("banned", name)
+
+    def _add_player(self, list_type: str, name: str) -> None:
+        whitelist_path, banned_path = self._player_list_paths()
+        path = whitelist_path if list_type == "whitelist" else banned_path
+        if not path:
+            return
+
+        self._player_status_label.setText(f"Resolving {name}…")
+
+        # Send command to running server if applicable
+        process = None
+        if self._server_manager and self._connect_server_info:
+            process = self._server_manager.get_process(self._connect_server_info.id)
+        if process and process.is_running:
+            if list_type == "whitelist":
+                process.send_command(f"whitelist add {name}")
+            else:
+                process.send_command(f"ban {name}")
+
+        def worker():
+            resolved_name, resolved_uuid = self._resolve_profile(name)
+
+            def ui_apply():
+                entries = self._read_player_list(path)
+                if any(str(e.get("name", "")).lower() == resolved_name.lower() for e in entries):
+                    self._player_status_label.setText(f"{resolved_name} is already listed")
+                    return
+
+                if list_type == "whitelist":
+                    entries.append({"uuid": resolved_uuid, "name": resolved_name})
+                    saved = self._write_player_list(path, entries)
+                    if saved:
+                        self._player_status_label.setText(f"✓ Added {resolved_name} to whitelist")
+                else:
+                    entries.append({
+                        "uuid": resolved_uuid,
+                        "name": resolved_name,
+                        "created": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S +0000"),
+                        "source": "Hosty",
+                        "expires": "forever",
+                        "reason": "Banned by Hosty",
+                    })
+                    saved = self._write_player_list(path, entries)
+                    if saved:
+                        self._player_status_label.setText(f"✓ Banned {resolved_name}")
+
+                if saved:
+                    self._refresh_player_lists()
+                    self._player_name_input.clear()
+                else:
+                    self._player_status_label.setText("✗ Failed to save player list")
+
+            dispatch_on_main_thread(ui_apply)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _remove_whitelist_player(self, name: str) -> None:
+        whitelist_path, _ = self._player_list_paths()
+        if not whitelist_path:
+            return
+
+        entries = self._read_player_list(whitelist_path)
+        new_entries = [e for e in entries if str(e.get("name", "")).lower() != name.lower()]
+        if len(new_entries) == len(entries):
+            return
+
+        if self._write_player_list(whitelist_path, new_entries):
+            process = None
+            if self._server_manager and self._connect_server_info:
+                process = self._server_manager.get_process(self._connect_server_info.id)
+            if process and process.is_running:
+                process.send_command(f"whitelist remove {name}")
+            self._refresh_player_lists()
+            self._player_status_label.setText(f"✓ Removed {name} from whitelist")
+
+    def _remove_banned_player(self, name: str) -> None:
+        _, banned_path = self._player_list_paths()
+        if not banned_path:
+            return
+
+        entries = self._read_player_list(banned_path)
+        new_entries = [e for e in entries if str(e.get("name", "")).lower() != name.lower()]
+        if len(new_entries) == len(entries):
+            return
+
+        if self._write_player_list(banned_path, new_entries):
+            process = None
+            if self._server_manager and self._connect_server_info:
+                process = self._server_manager.get_process(self._connect_server_info.id)
+            if process and process.is_running:
+                process.send_command(f"pardon {name}")
+            self._refresh_player_lists()
+            self._player_status_label.setText(f"✓ Pardoned {name}")

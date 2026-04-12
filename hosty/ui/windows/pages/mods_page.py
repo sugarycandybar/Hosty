@@ -52,6 +52,7 @@ class ModsPage(QWidget):
 
         back_btn = QPushButton("← Back")
         back_btn.setProperty("class", "flat")
+        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         back_btn.clicked.connect(back_callback)
         header_layout.addWidget(back_btn)
 
@@ -63,10 +64,18 @@ class ModsPage(QWidget):
 
         open_folder = QPushButton("Open Folder")
         open_folder.setProperty("class", "accent")
+        open_folder.setCursor(Qt.CursorShape.PointingHandCursor)
         open_folder.clicked.connect(self._open_mods_folder)
         header_layout.addWidget(open_folder)
 
         layout.addWidget(header)
+
+        # Status label (replaces popups)
+        self._status_lbl = QLabel("")
+        self._status_lbl.setProperty("class", "dim")
+        self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_lbl.setContentsMargins(24, 4, 24, 4)
+        layout.addWidget(self._status_lbl)
 
         # Mod List Content
         self._scroll = SmoothScrollArea()
@@ -134,6 +143,7 @@ class ModsPage(QWidget):
 
         del_btn = QPushButton("Delete")
         del_btn.setProperty("class", "destructive")
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         del_btn.clicked.connect(lambda *_args, p=jar: self._delete_mod(p))
         layout.addWidget(del_btn)
 
@@ -145,24 +155,25 @@ class ModsPage(QWidget):
         mods = Path(self._server_info.server_dir) / "mods"
         mods.mkdir(parents=True, exist_ok=True)
         if not _open_path(mods):
-            QMessageBox.warning(self, "Open Folder", "Could not open mods folder")
+            self._status_lbl.setText("⚠ Could not open mods folder")
 
     def _delete_mod(self, jar: Path) -> None:
         if self._server_info:
             proc = self._server_manager.get_process(self._server_info.id)
             if proc and proc.is_running:
-                QMessageBox.warning(self, "Server Running", "The server must be stopped to delete mods.")
+                self._status_lbl.setText("⚠ Stop the server before deleting mods.")
                 return
 
         reply = QMessageBox.question(
             self,
             "Delete Mod",
-            f"Are you sure you want to delete '{jar.name}'?",
+            f"Delete '{jar.name}'?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             try:
                 jar.unlink(missing_ok=True)
+                self._status_lbl.setText(f"✓ Deleted {jar.name}")
             except Exception as e:
-                QMessageBox.warning(self, "Delete Failed", f"Could not delete mod: {e}")
+                self._status_lbl.setText(f"✗ Could not delete: {e}")
             self._refresh()

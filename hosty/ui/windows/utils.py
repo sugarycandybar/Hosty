@@ -77,12 +77,12 @@ def _status_prefix(status: str) -> str:
 def _status_color_hex(status: str) -> str:
     """Return a hex color for the given server status."""
     mapping = {
-        ServerStatus.RUNNING: "#2ec27e",
-        ServerStatus.STARTING: "#e5a50a",
-        ServerStatus.STOPPING: "#e5a50a",
-        ServerStatus.STOPPED: "#5e6182",
+        ServerStatus.RUNNING: "#7A9E65",
+        ServerStatus.STARTING: "#D4944C",
+        ServerStatus.STOPPING: "#D4944C",
+        ServerStatus.STOPPED: "#887A6B",
     }
-    return mapping.get(status, "#5e6182")
+    return mapping.get(status, "#887A6B")
 
 
 class _MainThreadInvoker(QObject):

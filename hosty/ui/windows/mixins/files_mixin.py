@@ -46,11 +46,11 @@ class FilesMixin:
         index_layout.addWidget(lbl)
 
         # Build category rows
-        # Build category rows
         index_layout.addWidget(self._build_nav_row("Worlds", "public", "Manage world folders", lambda: self._navigate_to(1)))
         index_layout.addWidget(self._build_nav_row("Backups", "save", "Create and restore backups", lambda: self._navigate_to(2)))
         index_layout.addWidget(self._build_nav_row("Installed Mods", "extension", "View and update installed mods", lambda: self._navigate_to(3)))
         index_layout.addWidget(self._build_nav_row("Modrinth", "search", "Discover and install new mods, modpacks, and plugins", lambda: self._navigate_to(4)))
+        index_layout.addWidget(self._build_nav_row("Check for Mod Updates", "refresh", "Scan installed mods for newer versions", lambda: self._on_check_mod_updates()))
 
         # Quick action buttons
         index_layout.addSpacing(20)
@@ -61,19 +61,18 @@ class FilesMixin:
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
         
+        from ..theme import get_material_icon, get_colors, is_system_dark
+        icon_color = get_colors(is_system_dark()).get("text_secondary", "#C4B5A3")
+
         open_srv = QPushButton(" Open Server Folder")
-        from ..theme import get_material_icon
-        from PySide6.QtGui import QIcon 
-        # I actually cannot import late easily or I can... Wait, no I can do it here. Or use emojis? No, let's just make it text for now. Wait, I will use get_material_icon.
-        # Actually I can just add icon later. 
-        open_srv.setIcon(get_material_icon("folder_open", "#eecaa4"))
+        open_srv.setIcon(get_material_icon("folder_open", icon_color))
         open_srv.setProperty("class", "flat")
         open_srv.setCursor(Qt.CursorShape.PointingHandCursor)
         open_srv.clicked.connect(self._open_server_folder)
         btn_row.addWidget(open_srv)
         
         open_mods = QPushButton(" Open Mods Folder")
-        open_mods.setIcon(get_material_icon("folder_open", "#eecaa4"))
+        open_mods.setIcon(get_material_icon("folder_open", icon_color))
         open_mods.setProperty("class", "flat")
         open_mods.setCursor(Qt.CursorShape.PointingHandCursor)
         open_mods.clicked.connect(self._open_mods_folder)
@@ -104,11 +103,11 @@ class FilesMixin:
         layout = QHBoxLayout(card)
         layout.setContentsMargins(16, 16, 16, 16)
         
-        from ..theme import get_material_icon
+        from ..theme import get_material_icon, get_colors, is_system_dark
+        icon_color = get_colors(is_system_dark()).get("text_secondary", "#C4B5A3")
+
         icon_lbl = QLabel()
-        # Create icon using the current theme's text color approx
-        # For simplicity, passing white but in real life we could probe theme.
-        icon_lbl.setPixmap(get_material_icon(icon_name, "#c4b891", 28).pixmap(28, 28))
+        icon_lbl.setPixmap(get_material_icon(icon_name, icon_color, 28).pixmap(28, 28))
         layout.addWidget(icon_lbl)
         
         text_col = QVBoxLayout()
@@ -124,15 +123,13 @@ class FilesMixin:
         layout.addLayout(text_col, 1)
         
         nav_btn = QPushButton()
-        nav_btn.setIcon(get_material_icon("arrow_forward", "#c4b891", 20))
+        nav_btn.setIcon(get_material_icon("arrow_forward", icon_color, 20))
         nav_btn.setProperty("class", "flat")
         nav_btn.setFixedSize(36, 36)
         nav_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         nav_btn.clicked.connect(callback)
         layout.addWidget(nav_btn)
         
-        # Make the whole card clickable optionally (we'll just rely on the button/hover of the card)
-        # But this is standard for now.
         return card
 
     def _navigate_to(self, index: int) -> None:
@@ -178,3 +175,11 @@ class FilesMixin:
             page = self._files_stack.currentWidget()
             if hasattr(page, "load_server"):
                 page.load_server(info)
+
+    def _on_check_mod_updates(self) -> None:
+        """Check for mod updates — placeholder that navigates to Modrinth."""
+        if not self._selected_server_id:
+            QMessageBox.information(self._tabs, "Mod Updates", "Please select a server first.")
+            return
+        # For now, navigate to Modrinth page where the user can search for updates
+        self._navigate_to(4)
