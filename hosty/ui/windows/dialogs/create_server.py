@@ -252,7 +252,7 @@ class CreateServerDialog(QDialog):
 
         self.setWindowTitle("Create Server")
         self.setMinimumSize(540, 480)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint | Qt.WindowType.WindowCloseButtonHint)
 
         root = QVBoxLayout(self)
         root.setSpacing(0)

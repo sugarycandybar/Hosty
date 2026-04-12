@@ -2,17 +2,23 @@
 Theme system for Hosty Windows UI.
 
 Detects the Windows system theme (light/dark) and provides matching
-QSS stylesheets with a modern, polished design.
+QSS stylesheets with a modern, rounded, beginner-friendly design.
 """
 
 from __future__ import annotations
 
+import os
 import sys
+import threading
+import urllib.request
+from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QPalette, QColor
+from PySide6.QtGui import QFontDatabase, QPalette, QColor
 from PySide6.QtWidgets import QApplication
+
+from hosty.backend.preferences_manager import PreferencesManager
 
 
 def is_system_dark() -> bool:
@@ -27,138 +33,149 @@ def is_system_dark() -> bool:
         winreg.CloseKey(key)
         return value == 0
     except Exception:
-        return True  # Default to dark if we can't detect
+        return True
 
 
 # ---------------------------------------------------------------------------
-# Color tokens
+# Color tokens (User Palette: #c4b891, #005374, #eecaa4, #843800, #779463)
 # ---------------------------------------------------------------------------
 
 _DARK = {
-    "bg":               "#1a1b26",
-    "bg_secondary":     "#1f2133",
-    "bg_card":          "#24263a",
-    "bg_card_hover":    "#2a2d44",
-    "bg_input":         "#1f2133",
-    "bg_header":        "#16172a",
-    "bg_sidebar":       "#16172a",
-    "bg_sidebar_hover": "#1f2133",
-    "bg_sidebar_sel":   "#2d3154",
-    "border":           "#2f3146",
-    "border_focus":     "#7c6bf0",
-    "text":             "#e0e2f0",
-    "text_secondary":   "#9396b0",
-    "text_dim":         "#5e6182",
-    "accent":           "#7c6bf0",
-    "accent_hover":     "#8e7ff7",
-    "accent_pressed":   "#6b5bd9",
+    "bg":               "#251c14",
+    "bg_secondary":     "#2f241a",
+    "bg_card":          "#3b2c20",
+    "bg_card_hover":    "#453426",
+    "bg_input":         "#1c150e",
+    "bg_header":        "#251c14",
+    "bg_sidebar":       "#3b2c20",
+    "bg_sidebar_hover": "#453426",
+    "bg_sidebar_sel":   "#1c150e",
+    "border":           "#5c4633",
+    "border_focus":     "#c4b891",
+    "text":             "#eecaa4",
+    "text_secondary":   "#c4b891",
+    "text_dim":         "#95a2a6",
+    "accent":           "#843800",
+    "accent_hover":     "#a14500",
+    "accent_pressed":   "#6a2d00",
     "destructive":      "#e5534b",
     "destructive_hover":"#f07068",
-    "success":          "#2ec27e",
+    "success":          "#779463",
     "warning":          "#e5a50a",
-    "info_tag":         "#7aa2f7",
-    "warn_tag":         "#e0af68",
-    "error_tag":        "#f7768e",
+    "info_tag":         "#c4b891",
+    "warn_tag":         "#e5a50a",
+    "error_tag":        "#e5534b",
 
-    "scrollbar":        "#3a3d56",
-    "scrollbar_hover":  "#4d5070",
-    "tab_bg":           "#1a1b26",
-    "tab_sel":          "#24263a",
-    "tab_hover":        "#1f2133",
-    "tab_border":       "#2f3146",
+    "scrollbar":        "#00678F",
+    "scrollbar_hover":  "#007ea8",
+    "tab_bg":           "#004866",
+    "tab_sel":          "#00425e",
+    "tab_hover":        "#004e6e",
+    "tab_border":       "#00678F",
 
-    "status_running":   "#2ec27e",
+    "status_running":   "#779463",
     "status_starting":  "#e5a50a",
-    "status_stopped":   "#5e6182",
+    "status_stopped":   "#95a2a6",
 
-    "tooltip_bg":       "#2a2d44",
-    "tooltip_text":     "#e0e2f0",
+    "tooltip_bg":       "#00425e",
+    "tooltip_text":     "#eecaa4",
 
-    "btn_start_bg":     "#2ec27e",
-    "btn_start_text":   "#0e1a13",
+    "btn_start_bg":     "#779463",
+    "btn_start_text":   "#eecaa4",
     "btn_stop_bg":      "#e5534b",
     "btn_stop_text":    "#ffffff",
-    "btn_default_bg":   "#2f3146",
-    "btn_default_hover":"#3a3d56",
-    "btn_default_text": "#e0e2f0",
+    "btn_default_bg":   "#004866",
+    "btn_default_hover":"#00678F",
+    "btn_default_text": "#eecaa4",
 
-    "console_bg":       "#11131e",
-    "console_text":     "#c8cad8",
+    "console_bg":       "#003B53",
+    "console_text":     "#eecaa4",
 
-    "sparkline_cpu":    "56, 135, 232",
-    "sparkline_ram":    "122, 107, 240",
-    "sparkline_tps":    "247, 165, 36",
+    "sparkline_cpu":    "196, 184, 145",
+    "sparkline_ram":    "238, 202, 164",
+    "sparkline_tps":    "119, 148, 99",
 }
 
 _LIGHT = {
-    "bg":               "#f8f9fc",
-    "bg_secondary":     "#f0f1f6",
-    "bg_card":          "#ffffff",
-    "bg_card_hover":    "#f5f6fa",
-    "bg_input":         "#ffffff",
-    "bg_header":        "#eef0f5",
-    "bg_sidebar":       "#eef0f5",
-    "bg_sidebar_hover": "#e4e6ee",
-    "bg_sidebar_sel":   "#dcdff0",
-    "border":           "#d4d7e2",
-    "border_focus":     "#7c6bf0",
-    "text":             "#1a1c2e",
-    "text_secondary":   "#5e6182",
-    "text_dim":         "#9396b0",
-    "accent":           "#7c6bf0",
-    "accent_hover":     "#6b5bd9",
-    "accent_pressed":   "#5a4bc2",
+    "bg":               "#eecaa4",
+    "bg_secondary":     "#e5c19b",
+    "bg_card":          "#f5dcc1",
+    "bg_card_hover":    "#f8e6d2",
+    "bg_input":         "#fdf7f1",
+    "bg_header":        "#eecaa4",
+    "bg_sidebar":       "#f5dcc1",
+    "bg_sidebar_hover": "#f8e6d2",
+    "bg_sidebar_sel":   "#fdf7f1",
+    "border":           "#c4b891",
+    "border_focus":     "#005374",
+    "text":             "#005374",
+    "text_secondary":   "#003B53",
+    "text_dim":         "#6c8188",
+    "accent":           "#843800",
+    "accent_hover":     "#6a2d00",
+    "accent_pressed":   "#502200",
     "destructive":      "#d32f2f",
     "destructive_hover":"#c62828",
-    "success":          "#1b8c5a",
+    "success":          "#779463",
     "warning":          "#c68a08",
-    "info_tag":         "#2563eb",
-    "warn_tag":         "#b47d00",
-    "error_tag":        "#dc2626",
+    "info_tag":         "#005374",
+    "warn_tag":         "#c68a08",
+    "error_tag":        "#d32f2f",
 
-    "scrollbar":        "#c4c7d6",
-    "scrollbar_hover":  "#a8abb8",
-    "tab_bg":           "#f0f1f6",
-    "tab_sel":          "#ffffff",
-    "tab_hover":        "#e8e9f0",
-    "tab_border":       "#d4d7e2",
+    "scrollbar":        "#c4b891",
+    "scrollbar_hover":  "#baa871",
+    "tab_bg":           "#e5c19b",
+    "tab_sel":          "#f5dcc1",
+    "tab_hover":        "#f8e6d2",
+    "tab_border":       "#c4b891",
 
-    "status_running":   "#1b8c5a",
+    "status_running":   "#779463",
     "status_starting":  "#c68a08",
-    "status_stopped":   "#b0b3c4",
+    "status_stopped":   "#8c979a",
 
-    "tooltip_bg":       "#1a1c2e",
-    "tooltip_text":     "#f8f9fc",
+    "tooltip_bg":       "#005374",
+    "tooltip_text":     "#eecaa4",
 
-    "btn_start_bg":     "#1b8c5a",
-    "btn_start_text":   "#ffffff",
+    "btn_start_bg":     "#779463",
+    "btn_start_text":   "#fdf7f1",
     "btn_stop_bg":      "#d32f2f",
     "btn_stop_text":    "#ffffff",
-    "btn_default_bg":   "#e4e6ee",
-    "btn_default_hover":"#d4d7e2",
-    "btn_default_text": "#1a1c2e",
+    "btn_default_bg":   "#f8e6d2",
+    "btn_default_hover":"#ffffff",
+    "btn_default_text": "#005374",
 
-    "console_bg":       "#fafbff",
-    "console_text":     "#1a1c2e",
+    "console_bg":       "#fdf7f1",
+    "console_text":     "#005374",
 
-    "sparkline_cpu":    "37, 99, 235",
-    "sparkline_ram":    "122, 107, 240",
-    "sparkline_tps":    "202, 138, 8",
+    "sparkline_cpu":    "132, 56, 0",
+    "sparkline_ram":    "0, 83, 116",
+    "sparkline_tps":    "119, 148, 99",
 }
 
 
 def _build_qss(c: dict) -> str:
     """Build a complete QSS stylesheet from a color token dict."""
+    check_svg_path = Path(__file__).parent / "assets" / "check.svg"
+    check_svg_path.parent.mkdir(parents=True, exist_ok=True)
+    check_svg_path.write_text("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'><path d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z'/></svg>")
+    check_url = check_svg_path.as_posix()
+
     return f"""
 /* ===== Global ===== */
 * {{
-    font-family: "Segoe UI Variable", "Segoe UI", "Inter", sans-serif;
-    font-size: 13px;
+    font-family: "Nunito", "Quicksand", "Segoe UI Variable", "Segoe UI", "Inter", sans-serif;
+    font-size: 14px;
     outline: none;
 }}
 
-QMainWindow {{
+QMainWindow, QDialog, QStackedWidget > QWidget, QScrollArea > QWidget > QWidget {{
     background: {c["bg"]};
+}}
+
+QTabWidget::pane {{
+    background: {c["bg"]};
+    border: none;
+    border-top: 1px solid {c["tab_border"]};
 }}
 
 QWidget {{
@@ -168,12 +185,12 @@ QWidget {{
 /* ===== Scroll bars ===== */
 QScrollBar:vertical {{
     background: transparent;
-    width: 8px;
+    width: 10px;
     margin: 2px;
 }}
 QScrollBar::handle:vertical {{
     background: {c["scrollbar"]};
-    border-radius: 4px;
+    border-radius: 5px;
     min-height: 32px;
 }}
 QScrollBar::handle:vertical:hover {{
@@ -188,12 +205,12 @@ QScrollBar::sub-page:vertical {{
 }}
 QScrollBar:horizontal {{
     background: transparent;
-    height: 8px;
+    height: 10px;
     margin: 2px;
 }}
 QScrollBar::handle:horizontal {{
     background: {c["scrollbar"]};
-    border-radius: 4px;
+    border-radius: 5px;
     min-width: 32px;
 }}
 QScrollBar::handle:horizontal:hover {{
@@ -212,11 +229,11 @@ QPushButton {{
     background: {c["btn_default_bg"]};
     color: {c["btn_default_text"]};
     border: none;
-    border-radius: 6px;
-    padding: 6px 16px;
-    font-weight: 600;
-    font-size: 13px;
-    min-height: 20px;
+    border-radius: 12px;
+    padding: 8px 18px;
+    font-weight: 700;
+    font-size: 14px;
+    min-height: 24px;
 }}
 QPushButton:hover {{
     background: {c["btn_default_hover"]};
@@ -262,11 +279,11 @@ QPushButton[class="destructive"]:hover {{
 QPushButton[class="flat"] {{
     background: transparent;
     border: none;
-    padding: 4px;
+    padding: 6px;
+    border-radius: 8px;
 }}
 QPushButton[class="flat"]:hover {{
     background: {c["bg_card_hover"]};
-    border-radius: 4px;
 }}
 
 /* ===== Tab widget ===== */
@@ -274,7 +291,7 @@ QTabWidget::pane {{
     background: {c["bg"]};
     border: 1px solid {c["tab_border"]};
     border-top: none;
-    border-radius: 0 0 8px 8px;
+    border-radius: 0 0 16px 16px;
 }}
 QTabBar {{
     background: transparent;
@@ -284,25 +301,25 @@ QTabBar::tab {{
     color: {c["text_secondary"]};
     border: 1px solid {c["tab_border"]};
     border-bottom: none;
-    padding: 8px 18px;
+    padding: 10px 22px;
     margin-right: -1px;
-    font-weight: 600;
-    font-size: 12px;
+    font-weight: 700;
+    font-size: 14px;
 }}
 QTabBar::tab:first {{
-    border-radius: 8px 0 0 0;
+    border-radius: 12px 0 0 0;
 }}
 QTabBar::tab:last {{
-    border-radius: 0 8px 0 0;
+    border-radius: 0 12px 0 0;
     margin-right: 0;
 }}
 QTabBar::tab:only-one {{
-    border-radius: 8px 8px 0 0;
+    border-radius: 12px 12px 0 0;
 }}
 QTabBar::tab:selected {{
-    background: {c["tab_sel"]};
+    background: {c["bg"]};
     color: {c["text"]};
-    border-bottom: 2px solid {c["accent"]};
+    border-bottom: 3px solid {c["accent"]};
 }}
 QTabBar::tab:hover:!selected {{
     background: {c["tab_hover"]};
@@ -313,9 +330,9 @@ QTabBar::tab:hover:!selected {{
 QLineEdit {{
     background: {c["bg_input"]};
     color: {c["text"]};
-    border: 1px solid {c["border"]};
-    border-radius: 6px;
-    padding: 6px 10px;
+    border: 2px solid {c["border"]};
+    border-radius: 10px;
+    padding: 8px 12px;
     selection-background-color: {c["accent"]};
 }}
 QLineEdit:focus {{
@@ -330,9 +347,9 @@ QLineEdit:disabled {{
 QSpinBox {{
     background: {c["bg_input"]};
     color: {c["text"]};
-    border: 1px solid {c["border"]};
-    border-radius: 6px;
-    padding: 4px 8px;
+    border: 2px solid {c["border"]};
+    border-radius: 10px;
+    padding: 6px 10px;
 }}
 QSpinBox:focus {{
     border-color: {c["border_focus"]};
@@ -340,65 +357,99 @@ QSpinBox:focus {{
 QSpinBox::up-button, QSpinBox::down-button {{
     background: {c["btn_default_bg"]};
     border: none;
-    width: 20px;
-    border-radius: 3px;
+    width: 24px;
+    border-radius: 6px;
 }}
 QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
     background: {c["btn_default_hover"]};
+}}
+QSpinBox::up-arrow {{
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid {c["text_secondary"]};
+    width: 0px; height: 0px;
+}}
+QSpinBox::down-arrow {{
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid {c["text_secondary"]};
+    width: 0px; height: 0px;
 }}
 
 /* ===== ComboBox ===== */
 QComboBox {{
     background: {c["bg_input"]};
     color: {c["text"]};
-    border: 1px solid {c["border"]};
-    border-radius: 6px;
-    padding: 6px 10px;
-    min-width: 120px;
+    border: 2px solid {c["border"]};
+    border-radius: 10px;
+    padding: 8px 12px;
+    min-width: 140px;
+    font-weight: 600;
 }}
 QComboBox:focus {{
     border-color: {c["border_focus"]};
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 24px;
+    width: 28px;
 }}
 QComboBox::down-arrow {{
     image: none;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid {c["text_secondary"]};
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid {c["text_secondary"]};
     margin-right: 8px;
 }}
 QComboBox QAbstractItemView {{
     background: {c["bg_card"]};
     color: {c["text"]};
     border: 1px solid {c["border"]};
-    border-radius: 6px;
+    border-radius: 10px;
     selection-background-color: {c["accent"]};
     selection-color: #ffffff;
-    padding: 4px;
+    padding: 6px;
     outline: none;
 }}
 
 /* ===== CheckBox ===== */
 QCheckBox {{
-    spacing: 8px;
+    spacing: 12px;
     color: {c["text"]};
+    font-weight: 600;
 }}
 QCheckBox::indicator {{
-    width: 18px;
-    height: 18px;
+    width: 22px;
+    height: 22px;
     border: 2px solid {c["border"]};
-    border-radius: 4px;
+    border-radius: 6px;
     background: {c["bg_input"]};
 }}
 QCheckBox::indicator:checked {{
     background: {c["accent"]};
     border-color: {c["accent"]};
+    image: url("{check_url}");
 }}
 QCheckBox::indicator:hover {{
     border-color: {c["accent"]};
+}}
+
+/* ===== GroupBox ===== */
+QGroupBox {{
+    background: {c["bg_card"]};
+    border: 1px solid {c["border"]};
+    border-radius: 14px;
+    margin-top: 24px;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 4px;
+    font-weight: 700;
+    color: {c["text_secondary"]};
+    top: -24px;
+    left: 8px;
 }}
 
 /* ===== List widgets ===== */
@@ -409,10 +460,12 @@ QListWidget {{
     outline: none;
 }}
 QListWidget::item {{
-    padding: 10px 14px;
+    padding: 12px 16px;
     border: none;
-    border-radius: 0;
+    border-radius: 12px;
+    margin: 2px 8px;
     color: {c["text"]};
+    font-weight: 700;
 }}
 QListWidget::item:hover {{
     background: {c["bg_sidebar_hover"]};
@@ -426,19 +479,19 @@ QListWidget::item:selected {{
 QPlainTextEdit {{
     background: {c["console_bg"]};
     color: {c["console_text"]};
-    border: 1px solid {c["border"]};
-    border-radius: 8px;
-    padding: 8px;
+    border: 2px solid {c["border"]};
+    border-radius: 14px;
+    padding: 12px;
     font-family: "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
-    font-size: 13px;
+    font-size: 14px;
     selection-background-color: {c["accent"]};
 }}
 QTextEdit {{
     background: {c["bg_input"]};
     color: {c["text"]};
-    border: 1px solid {c["border"]};
-    border-radius: 8px;
-    padding: 8px;
+    border: 2px solid {c["border"]};
+    border-radius: 14px;
+    padding: 12px;
     selection-background-color: {c["accent"]};
 }}
 
@@ -446,14 +499,14 @@ QTextEdit {{
 QProgressBar {{
     background: {c["bg_secondary"]};
     border: none;
-    border-radius: 4px;
-    height: 8px;
+    border-radius: 6px;
+    height: 12px;
     text-align: center;
-    font-size: 0px;
+    color: transparent;
 }}
 QProgressBar::chunk {{
     background: {c["accent"]};
-    border-radius: 4px;
+    border-radius: 6px;
 }}
 
 /* ===== Splitter ===== */
@@ -468,47 +521,55 @@ QLabel {{
     color: {c["text"]};
 }}
 QLabel[class="header"] {{
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 22px;
+    font-weight: 800;
 }}
 QLabel[class="title"] {{
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 800;
 }}
 QLabel[class="subtitle"] {{
-    font-size: 12px;
+    font-size: 14px;
     color: {c["text_secondary"]};
+    font-weight: 600;
 }}
 QLabel[class="dim"] {{
     color: {c["text_dim"]};
-    font-size: 12px;
+    font-size: 13px;
 }}
 QLabel[class="group-title"] {{
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 15px;
+    font-weight: 800;
     color: {c["text_secondary"]};
     padding: 0;
     margin: 0;
 }}
 
+/* ===== Material Symbols Text Icon ===== */
+QLabel[class="icon"] {{
+    font-family: "Material Symbols Rounded";
+    font-size: 20px;
+    font-weight: 400;
+}}
+
 /* ===== Group Box ===== */
 QGroupBox {{
     background: {c["bg_card"]};
-    border: 1px solid {c["border"]};
-    border-radius: 10px;
-    margin-top: 6px;
-    padding: 16px 14px 14px 14px;
-    font-weight: 600;
-    font-size: 13px;
+    border: 2px solid {c["border"]};
+    border-radius: 16px;
+    margin-top: 10px;
+    padding: 20px 18px 18px 18px;
+    font-weight: 800;
+    font-size: 14px;
     color: {c["text"]};
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 2px 10px;
+    padding: 2px 14px;
     color: {c["text_secondary"]};
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 800;
 }}
 
 /* ===== Tool tips ===== */
@@ -516,22 +577,24 @@ QToolTip {{
     background: {c["tooltip_bg"]};
     color: {c["tooltip_text"]};
     border: 1px solid {c["border"]};
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 12px;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
 }}
 
 /* ===== Menu ===== */
 QMenu {{
     background: {c["bg_card"]};
     color: {c["text"]};
-    border: 1px solid {c["border"]};
-    border-radius: 8px;
-    padding: 4px;
+    border: 2px solid {c["border"]};
+    border-radius: 12px;
+    padding: 6px;
 }}
 QMenu::item {{
-    padding: 8px 24px;
-    border-radius: 6px;
+    padding: 10px 28px;
+    border-radius: 8px;
+    font-weight: 700;
 }}
 QMenu::item:selected {{
     background: {c["accent"]};
@@ -540,7 +603,7 @@ QMenu::item:selected {{
 QMenu::separator {{
     height: 1px;
     background: {c["border"]};
-    margin: 4px 8px;
+    margin: 6px 10px;
 }}
 
 /* ===== Dialog ===== */
@@ -566,24 +629,72 @@ QStackedWidget {{
 /* ===== Header widget ===== */
 QWidget[class="header-bar"] {{
     background: {c["bg_header"]};
-    border-bottom: 1px solid {c["border"]};
+    border-bottom: 2px solid {c["border"]};
 }}
 
 /* ===== Card widget ===== */
 QWidget[class="card"] {{
     background: {c["bg_card"]};
-    border: 1px solid {c["border"]};
-    border-radius: 10px;
+    border: 2px solid {c["border"]};
+    border-radius: 16px;
 }}
 
 /* ===== Sidebar section ===== */
 QWidget[class="sidebar"] {{
     background: {c["bg_sidebar"]};
-    border-right: 1px solid {c["border"]};
+    border-right: 2px solid {c["border"]};
 }}
-
-/* ===== Status dots (for dynamic painting) ===== */
 """
+
+
+def _download_font(url: str, dest: Path) -> None:
+    if dest.exists():
+        return
+    try:
+        from urllib.request import Request, urlopen
+        req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urlopen(req, timeout=10) as response, open(dest, 'wb') as out_file:
+            out_file.write(response.read())
+    except Exception as e:
+        print(f"Font download failed for {url}: {e}")
+
+
+def _load_custom_fonts() -> None:
+    fonts_dir = Path(__file__).parent / "fonts"
+    fonts_dir.mkdir(parents=True, exist_ok=True)
+
+    nunito_reg = fonts_dir / "Nunito-Regular.ttf"
+    nunito_bold = fonts_dir / "Nunito-Bold.ttf"
+    material = fonts_dir / "MaterialSymbolsRounded.ttf"
+    
+    # Load them into Qt immediately if they exist (sync)
+    if nunito_reg.exists():
+        QFontDatabase.addApplicationFont(str(nunito_reg))
+    if nunito_bold.exists():
+        QFontDatabase.addApplicationFont(str(nunito_bold))
+    if material.exists():
+        QFontDatabase.addApplicationFont(str(material))
+
+    # Material Symbols URL
+    mat_url = "https://github.com/google/material-design-icons/raw/master/variablefont/MaterialSymbolsRounded%5BFILL%2CGRAD%2Copsz%2Cwght%5D.ttf"
+    nun_reg_url = "https://github.com/google/fonts/raw/main/ofl/nunito/static/Nunito-Regular.ttf"
+    nun_bold_url = "https://github.com/google/fonts/raw/main/ofl/nunito/static/Nunito-Bold.ttf"
+
+    def worker():
+        _download_font(nun_reg_url, nunito_reg)
+        _download_font(nun_bold_url, nunito_bold)
+        _download_font(mat_url, material)
+        
+        # Load again in case they were just downloaded
+        if nunito_reg.exists():
+            QFontDatabase.addApplicationFont(str(nunito_reg))
+        if nunito_bold.exists():
+            QFontDatabase.addApplicationFont(str(nunito_bold))
+        if material.exists():
+            QFontDatabase.addApplicationFont(str(material))
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
 
 
 def get_colors(dark: bool = True) -> dict:
@@ -596,25 +707,78 @@ def get_stylesheet(dark: bool = True) -> str:
     c = _DARK if dark else _LIGHT
     return _build_qss(c)
 
+def get_material_icon(name: str, color_hex: str = "#ffffff", size: int = 24) -> "QIcon":
+    from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
+    from PySide6.QtCore import Qt, QRect
+    
+    _map = {
+        "public": "\ue80b",
+        "save": "\ue161",
+        "extension": "\ue87b",
+        "search": "\ue8b6",
+        "folder_open": "\ue2c8",
+        "settings": "\ue8b8",
+        "home": "\ue88a",
+        "arrow_forward": "\ue5c8",
+        "arrow_back": "\ue5c4",
+        "add": "\ue145",
+        "delete": "\ue872",
+        "refresh": "\ue5d5",
+        "play_arrow": "\ue037",
+        "stop": "\ue047",
+        "restore": "\ue929",
+        "edit": "\ue3c9",
+        "world": "\ue80b",
+        "backup": "\ue161",
+        "mod": "\ue87b",
+        "modrinth": "\ue8b6",
+    }
+    symbol = _map.get(name, name)
+    
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    font = QFont("Material Symbols Rounded", int(size * 0.7))
+    font.setPixelSize(int(size * 0.8))
+    painter.setFont(font)
+    painter.setPen(QColor(color_hex))
+    painter.drawText(QRect(0, 0, size, size), Qt.AlignmentFlag.AlignCenter, symbol)
+    painter.end()
+    return QIcon(pixmap)
 
 class ThemeManager:
     """
     Watches the system theme and applies the matching QSS to the QApplication.
+    Respects user preferences for theme overrides.
     """
 
-    def __init__(self, app: QApplication):
+    def __init__(self, app: QApplication, prefs: PreferencesManager):
         self._app = app
+        self._prefs = prefs
         self._current_dark: Optional[bool] = None
         self._timer = QTimer()
         self._timer.setInterval(2000)
         self._timer.timeout.connect(self._check)
+        
+        # Load beautiful rounded fonts
+        _load_custom_fonts()
+
         self.apply()
         self._timer.start()
 
     def apply(self):
-        dark = is_system_dark()
+        theme_pref = self._prefs.theme
+        if theme_pref == "light":
+            dark = False
+        elif theme_pref == "dark":
+            dark = True
+        else:
+            dark = is_system_dark()
+            
         if dark == self._current_dark:
             return
+            
         self._current_dark = dark
         self._app.setStyleSheet(get_stylesheet(dark))
 

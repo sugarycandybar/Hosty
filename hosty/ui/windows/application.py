@@ -150,6 +150,9 @@ class HostyMainWindow(
 
     def _attach_process(self, process) -> None:
         """Override to also connect TPS parsing."""
+        if self._selected_process == process and process is not None:
+            return
+
         if self._selected_process and self._status_handler_id:
             try:
                 self._selected_process.disconnect(self._status_handler_id)
@@ -175,6 +178,9 @@ class HostyMainWindow(
             self._output_handler_id = process.connect("output-received", self._on_process_output_with_tps)
             if process.is_running:
                 self._process_start_ts = time.time()
+            
+            for line in process.log_history:
+                self._on_process_output_with_tps(None, line)
 
     # ===== Playit runtime management (matches Linux window.py) =====
 
@@ -262,8 +268,10 @@ class HostyWindowsApplication:
         app = QApplication(argv)
         app.setApplicationName("Hosty")
 
+        server_manager = ServerManager()
+
         # Theme system
-        theme = ThemeManager(app)
+        theme = ThemeManager(app, server_manager.preferences)
 
         # Main thread invoker for backend callbacks
         invoker = _MainThreadInvoker()
@@ -271,7 +279,6 @@ class HostyWindowsApplication:
             lambda callback, *args, **kwargs: invoker.invoke.emit(callback, args, kwargs)
         )
 
-        server_manager = ServerManager()
         window = HostyMainWindow(server_manager)
         window.show()
 

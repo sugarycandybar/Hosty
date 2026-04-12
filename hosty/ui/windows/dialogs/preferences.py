@@ -5,8 +5,10 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QVBoxLayout,
 )
@@ -23,7 +25,7 @@ class PreferencesDialog(QDialog):
         self._preferences = preferences
         self.setWindowTitle("Preferences")
         self.setMinimumSize(440, 340)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint | Qt.WindowType.WindowCloseButtonHint)
 
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
@@ -43,6 +45,30 @@ class PreferencesDialog(QDialog):
         app_layout.addWidget(data_label)
 
         layout.addWidget(app_group)
+
+        # ===== Appearance group =====
+        appear_group = QGroupBox("Appearance")
+        appear_layout = QVBoxLayout(appear_group)
+        appear_layout.setSpacing(8)
+
+        theme_row = QHBoxLayout()
+        theme_row.addWidget(QLabel("Theme Mode"))
+        self._theme_combo = QComboBox()
+        self._theme_combo.addItems(["System", "Light", "Dark"])
+        
+        current_theme = preferences.theme
+        if current_theme == "light":
+            self._theme_combo.setCurrentIndex(1)
+        elif current_theme == "dark":
+            self._theme_combo.setCurrentIndex(2)
+        else:
+            self._theme_combo.setCurrentIndex(0)
+
+        self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        theme_row.addWidget(self._theme_combo, 1)
+        appear_layout.addLayout(theme_row)
+        
+        layout.addWidget(appear_group)
 
         # ===== Behavior group =====
         behavior_group = QGroupBox("Behavior")
@@ -69,3 +95,13 @@ class PreferencesDialog(QDialog):
 
     def _on_auto_deps_toggled(self, checked: bool):
         self._preferences.auto_resolve_mod_dependencies = checked
+
+    def _on_theme_changed(self, idx: int):
+        if idx == 1:
+            val = "light"
+        elif idx == 2:
+            val = "dark"
+        else:
+            val = "system"
+        self._preferences.theme = val
+

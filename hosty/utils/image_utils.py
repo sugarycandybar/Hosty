@@ -4,13 +4,19 @@ Handles image cropping, conversion, and loading for GTK display.
 """
 from pathlib import Path
 from PIL import Image
-import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Gdk', '4.0')
-gi.require_version('GdkPixbuf', '2.0')
-from gi.repository import GdkPixbuf, Gdk, Gtk
 import io
 import tempfile
+import sys
+
+try:
+    if sys.platform != "win32":
+        import gi
+        gi.require_version('Gtk', '4.0')
+        gi.require_version('Gdk', '4.0')
+        gi.require_version('GdkPixbuf', '2.0')
+        from gi.repository import GdkPixbuf, Gdk, Gtk
+except ImportError:
+    pass
 
 
 def crop_to_square(input_path: str, x: int, y: int, size: int) -> Image.Image:

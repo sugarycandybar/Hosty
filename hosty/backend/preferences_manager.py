@@ -18,6 +18,7 @@ DEFAULT_SETTINGS = {
     "prevent_sleep_while_running": False,
     "auto_backup_on_stop": True,
     "auto_resolve_mod_dependencies": True,
+    "theme": "system",
 }
 
 
@@ -101,3 +102,13 @@ class PreferencesManager:
     def auto_resolve_mod_dependencies(self, value: bool) -> None:
         self._settings["auto_resolve_mod_dependencies"] = bool(value)
         self._save()
+
+    @property
+    def theme(self) -> str:
+        return self._settings.get("theme", "system")
+
+    @theme.setter
+    def theme(self, value: str) -> None:
+        if value in ("system", "light", "dark"):
+            self._settings["theme"] = value
+            self._save()

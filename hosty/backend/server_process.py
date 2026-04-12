@@ -32,6 +32,7 @@ class ServerProcess(EventEmitter):
         self._stdout_thread: Optional[threading.Thread] = None
         self._stderr_thread: Optional[threading.Thread] = None
         self._pid: Optional[int] = None
+        self.log_history: list[str] = []
     
     @property
     def status(self) -> str:
@@ -194,6 +195,9 @@ class ServerProcess(EventEmitter):
     
     def _emit_output(self, text: str):
         """Emit output signal on the main thread."""
+        self.log_history.append(text)
+        if len(self.log_history) > 1000:
+            self.log_history.pop(0)
         self.emit_on_main_thread('output-received', text)
 
     def _emit_players_changed(self):

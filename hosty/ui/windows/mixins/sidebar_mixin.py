@@ -144,17 +144,59 @@ class SidebarMixin:
         else:
             self._clear_selection_state()
 
-    def _make_status_icon(self, status: str) -> QIcon:
-        """Create a small colored circle icon for the status."""
-        size = 12
+    def _make_server_icon(self, info: ServerInfo, status: str) -> QIcon:
+        """Create an icon combining the server's image and its status dot."""
+        size = 32
         pixmap = QPixmap(size, size)
-        pixmap.fill(QColor(0, 0, 0, 0))
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        # Base icon
+        icon_path = info.icon_path
+        if not icon_path or not Path(icon_path).exists():
+            default_icon = Path(info.server_dir) / "server-icon.png"
+            if default_icon.exists():
+                icon_path = str(default_icon)
+                
+        if icon_path and Path(icon_path).exists():
+            base = QPixmap(icon_path).scaled(
+                size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation
+            )
+        else:
+            # Fallback icon color circle
+            base = QPixmap(size, size)
+            base.fill(Qt.GlobalColor.transparent)
+            bp = QPainter(base)
+            bp.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            bp.setBrush(QColor("#004866"))
+            bp.setPen(Qt.PenStyle.NoPen)
+            bp.drawRoundedRect(0, 0, size, size, 6, 6)
+            bp.end()
+
+        # Draw base
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Create rounded clipping path for the icon
+        from PySide6.QtGui import QPainterPath
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, size, size, 6, 6)
+        painter.setClipPath(path)
+        painter.drawPixmap(0, 0, base)
+        painter.setClipping(False)
+
+        # Status dot in bottom right
+        dot_size = 10
+        dot_offset = size - dot_size
+        
+        # Border for dot (to stand out from icon)
+        painter.setBrush(QColor("#00425e"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(dot_offset - 1, dot_offset - 1, dot_size + 2, dot_size + 2)
+        
+        # Dot itself
         color = QColor(_status_color_hex(status))
         painter.setBrush(color)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(1, 1, size - 2, size - 2)
+        painter.drawEllipse(dot_offset, dot_offset, dot_size, dot_size)
+        
         painter.end()
         return QIcon(pixmap)
 
@@ -168,7 +210,7 @@ class SidebarMixin:
             subtitle = f"{info.mc_version} · {process.player_count}/{process.max_players}"
         label = f"{info.name}\n{subtitle}"
 
-        icon = self._make_status_icon(status)
+        icon = self._make_server_icon(info, status)
 
         for i in range(self._server_list.count()):
             item = self._server_list.item(i)

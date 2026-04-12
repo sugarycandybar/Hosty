@@ -18,13 +18,15 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
+    QScrollArea,
 )
+from ..components import SmoothScrollArea
 
 from hosty.backend.playit_config import load_playit_config, save_playit_config
 from hosty.backend.server_manager import ServerInfo, ServerManager
+from hosty.core.events import dispatch_on_main_thread
 
 
 PLAYIT_DASHBOARD_URL = "https://playit.gg/account/tunnels"
@@ -38,7 +40,7 @@ class ConnectMixin:
         outer = QVBoxLayout(tab)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        scroll = QScrollArea(tab)
+        scroll = SmoothScrollArea(tab)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
@@ -135,9 +137,21 @@ class ConnectMixin:
             except Exception:
                 ip = "Not available"
 
-            QTimer.singleShot(0, lambda: self._lan_ip_label.setText(ip))
+            dispatch_on_main_thread(lambda: self._lan_ip_label.setText(ip))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _is_setup_complete(self) -> bool:
+        if not self._server_manager:
+            return False
+        return bool(
+            self._connect_cfg.get("enabled", False)
+            and self._connect_cfg.get("setup_complete", False)
+            and (
+                self._server_manager.playit_manager.has_claimed_secret()
+                or bool(str(self._connect_cfg.get("secret", "")).strip())
+            )
+        )
 
     def _refresh_connect(self, info: ServerInfo) -> None:
         """Refresh the connect tab for the given server."""
@@ -174,6 +188,7 @@ class ConnectMixin:
             self._playit_status_label.setText("Tunnel is running")
             self._tunnel_btn.setText("Stop Tunnel")
             self._tunnel_btn.setProperty("class", "stop")
+            self._tunnel_btn.setEnabled(True)
         elif playit.is_running:
             self._playit_status_label.setText("Tunnel running for another server")
             self._tunnel_btn.setText("Start Tunnel")
@@ -193,6 +208,11 @@ class ConnectMixin:
 
     def _on_tunnel_toggle(self) -> None:
         if not self._connect_server_info:
+            return
+
+        # If playit setup is not complete, redirect to setup
+        if not self._is_setup_complete():
+            self._on_setup_playit()
             return
 
         playit = self._server_manager.playit_manager
@@ -228,26 +248,16 @@ class ConnectMixin:
             QMessageBox.information(self, "Playit Setup", "Select a server first.")
             return
 
-        try:
-            from hosty.dialogs.playit_setup import PlayitSetupDialog
-            # Playit setup is GTK-only; for Windows, guide user to manual setup
-            QMessageBox.information(
-                self,
-                "Playit Setup",
-                "To set up Playit.gg for this server:\n\n"
-                "1. Visit https://playit.gg and create an account\n"
-                "2. Download and install the Playit agent\n"
-                "3. Create a tunnel for Minecraft (port 25565)\n"
-                "4. The tunnel will auto-start when enabled\n\n"
-                "For more info, visit the Playit documentation.",
-            )
-        except ImportError:
-            QMessageBox.information(
-                self,
-                "Playit Setup",
-                "To set up Playit.gg for this server:\n\n"
-                "1. Visit https://playit.gg and create an account\n"
-                "2. Download and install the Playit agent\n"
-                "3. Create a tunnel for Minecraft (port 25565)\n"
-                "4. The tunnel will auto-start when enabled",
-            )
+        from hosty.ui.windows.dialogs.playit_setup import PlayitSetupDialog
+        # Pass dummy True for server_running to keep signature compatible
+        dialog = PlayitSetupDialog(
+            self._server_manager,
+            self._connect_server_info,
+            self
+        )
+        dialog.start_setup()
+        dialog.exec()
+        
+        # After dialog closes, refresh status if completed
+        if dialog.setup_completed():
+            self._refresh_connect(self._connect_server_info)

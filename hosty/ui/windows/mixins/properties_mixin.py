@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -14,12 +14,15 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QScrollArea,
-    QSpinBox,
+    QPushButton,
     QVBoxLayout,
     QWidget,
+    QScrollArea,
+    QSpinBox,
+    QProgressBar,
 )
 
+from ..components import SmoothScrollArea
 from hosty.backend.config_manager import ConfigManager
 from hosty.backend.server_manager import ServerInfo, ServerManager
 from hosty.utils.constants import (
@@ -38,6 +41,11 @@ class PropertiesMixin:
     """Mixin providing a grouped GUI editor for server.properties."""
 
     def _build_properties_tab(self) -> None:
+        self._prop_config: Optional[ConfigManager] = None
+        self._prop_server_info: Optional[ServerInfo] = None
+        
+        self._suppress_prop_changes = False
+
         tab = QWidget(self._tabs)
         outer = QVBoxLayout(tab)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -62,7 +70,7 @@ class PropertiesMixin:
         banner_layout.addWidget(dismiss_btn)
         outer.addWidget(self._props_banner)
 
-        scroll = QScrollArea(tab)
+        scroll = SmoothScrollArea(tab)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
@@ -147,6 +155,10 @@ class PropertiesMixin:
 
         scroll.setWidget(content)
         outer.addWidget(scroll)
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
         self._tabs.addTab(tab, "Properties")
 
     def _add_prop_entry(self, layout, label: str, key: str, default: str) -> QLineEdit:
@@ -154,7 +166,7 @@ class PropertiesMixin:
         row.addWidget(QLabel(label))
         entry = QLineEdit(default)
         entry.setProperty("_prop_key", key)
-        entry.textChanged.connect(self._on_prop_changed)
+        entry.textChanged.connect(self._schedule_save)
         row.addWidget(entry, 1)
         layout.addLayout(row)
         return entry
@@ -167,7 +179,8 @@ class PropertiesMixin:
         spin.setSingleStep(step)
         spin.setValue(default)
         spin.setProperty("_prop_key", key)
-        spin.valueChanged.connect(self._on_prop_changed)
+        spin.wheelEvent = lambda e: e.ignore()
+        spin.valueChanged.connect(self._schedule_save)
         row.addWidget(spin, 1)
         layout.addLayout(row)
         return spin
@@ -184,7 +197,8 @@ class PropertiesMixin:
             combo.setCurrentIndex(idx)
         except ValueError:
             combo.setCurrentIndex(0)
-        combo.currentIndexChanged.connect(self._on_prop_changed)
+        combo.wheelEvent = lambda e: e.ignore()
+        combo.currentIndexChanged.connect(self._schedule_save)
         row.addWidget(combo, 1)
         layout.addLayout(row)
         return combo
@@ -193,7 +207,7 @@ class PropertiesMixin:
         check = QCheckBox(label)
         check.setChecked(default)
         check.setProperty("_prop_key", key)
-        check.toggled.connect(self._on_prop_changed)
+        check.stateChanged.connect(self._schedule_save)
         layout.addWidget(check)
         return check
 
@@ -247,13 +261,20 @@ class PropertiesMixin:
 
         self._suppress_prop_changes = False
 
-    def _on_prop_changed(self, *_args) -> None:
+    def _schedule_save(self, *_args) -> None:
         if self._suppress_prop_changes:
             return
-        self._save_properties()
+        # If the RAM spin box changed, save it directly
+        if hasattr(self, '_ram_prop_spin') and self._prop_server_info:
+            new_ram = self._ram_prop_spin.value()
+            if self._prop_server_info.ram_mb != new_ram:
+                self._server_manager.update_server_ram(self._prop_server_info.id, new_ram)
+        
+        self._do_auto_save()
 
-    def _save_properties(self) -> None:
+    def _do_auto_save(self) -> None:
         if not self._prop_config:
+            self._props_banner.setVisible(False)
             return
 
         for key, widget in self._prop_widgets.items():

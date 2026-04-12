@@ -23,10 +23,12 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QScrollArea,
+    QPushButton,
     QVBoxLayout,
     QWidget,
+    QScrollArea,
 )
+from ..components import SmoothScrollArea
 
 from ..utils import HAS_PSUTIL, _format_uptime
 
@@ -167,7 +169,7 @@ class PerformanceMixin:
         outer = QVBoxLayout(tab)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        scroll = QScrollArea(tab)
+        scroll = SmoothScrollArea(tab)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
