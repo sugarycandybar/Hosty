@@ -1,91 +1,91 @@
-"""PySide6-based Windows frontend for Hosty."""
+"""
+Console mixin — server console with syntax-highlighted output and command input.
+"""
 
 from __future__ import annotations
 
-import os
-import time
-from pathlib import Path
+import re
 from typing import Optional
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
-    QApplication,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
     QHBoxLayout,
-    QInputDialog,
-    QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
-    QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
     QPushButton,
-    QSpinBox,
-    QSplitter,
-    QStackedWidget,
-    QTabWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-try:
-    import psutil
-
-    HAS_PSUTIL = True
-except Exception:
-    HAS_PSUTIL = False
-
-from hosty.backend.config_manager import ConfigManager
-from hosty.backend.server_manager import ServerInfo, ServerManager
-from hosty.core.events import set_main_thread_dispatcher
-from hosty.utils.constants import (
-    DEFAULT_RAM_MB,
-    DEFAULT_SERVER_PROPERTIES,
-    MAX_RAM_MB,
-    MIN_RAM_MB,
-    ServerStatus,
-    get_required_java_version,
-)
-
-
-
-from ..utils import *
-from ..dialogs.create_server import CreateServerDialog
 
 class ConsoleMixin:
+    """Mixin providing a monospace console with syntax highlighting."""
+
     def _build_console_tab(self) -> None:
         tab = QWidget(self._tabs)
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
+        # Console output
         self._console_output = QPlainTextEdit(tab)
         self._console_output.setReadOnly(True)
-        layout.addWidget(self._console_output)
+        self._console_output.setFont(
+            QFont(["Cascadia Code", "JetBrains Mono", "Consolas", "monospace"], 13)
+        )
+        self._console_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        layout.addWidget(self._console_output, 1)
 
-        row = QHBoxLayout()
+        # Input bar
+        input_bar = QWidget(tab)
+        input_layout = QHBoxLayout(input_bar)
+        input_layout.setContentsMargins(8, 6, 8, 8)
+        input_layout.setSpacing(6)
 
-        self._command_input = QLineEdit(tab)
-        self._command_input.setPlaceholderText("Type a command...")
+        self._command_input = QLineEdit(input_bar)
+        self._command_input.setPlaceholderText("Type a command…")
+        self._command_input.setFont(
+            QFont(["Cascadia Code", "JetBrains Mono", "Consolas", "monospace"], 13)
+        )
         self._command_input.returnPressed.connect(self._send_command)
-        row.addWidget(self._command_input)
+        input_layout.addWidget(self._command_input, 1)
 
-        clear_btn = QPushButton("Clear", tab)
-        clear_btn.clicked.connect(self._console_output.clear)
-        row.addWidget(clear_btn)
-
-        send_btn = QPushButton("Send", tab)
+        send_btn = QPushButton("Send")
         send_btn.clicked.connect(self._send_command)
-        row.addWidget(send_btn)
+        input_layout.addWidget(send_btn)
 
-        layout.addLayout(row)
+        layout.addWidget(input_bar)
         self._tabs.addTab(tab, "Console")
 
     def _on_process_output(self, _process, text: str) -> None:
-        self._console_output.appendPlainText(text.rstrip("\n"))
+        """Append output with syntax highlighting."""
+        line = text.rstrip("\n")
+        if not line:
+            return
+
+        cursor = self._console_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+
+        fmt = QTextCharFormat()
+        fmt.setFontFamily("Cascadia Code, JetBrains Mono, Consolas, monospace")
+
+        # Determine color based on content
+        if line.startswith("[Hosty]"):
+            fmt.setForeground(QColor("#7c6bf0"))
+            fmt.setFontWeight(QFont.Weight.Bold)
+        elif "WARN" in line:
+            fmt.setForeground(QColor("#e0af68"))
+        elif "ERROR" in line or "Exception" in line:
+            fmt.setForeground(QColor("#f7768e"))
+        elif "INFO" in line:
+            fmt.setForeground(QColor("#7aa2f7"))
+
+        if self._console_output.document().characterCount() > 1:
+            cursor.insertText("\n")
+        cursor.insertText(line, fmt)
+
+        # Auto-scroll to bottom
         scrollbar = self._console_output.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
 
@@ -95,9 +95,27 @@ class ConsoleMixin:
             return
 
         if self._selected_process:
-            self._console_output.appendPlainText(f"> {text}")
+            # Echo command
+            cursor = self._console_output.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            fmt = QTextCharFormat()
+            fmt.setForeground(QColor("#7c6bf0"))
+            fmt.setFontWeight(QFont.Weight.Bold)
+            if self._console_output.document().characterCount() > 1:
+                cursor.insertText("\n")
+            cursor.insertText(f"> {text}", fmt)
+
+            scrollbar = self._console_output.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+
             self._selected_process.send_command(text)
         else:
-            self._console_output.appendPlainText("[Hosty] No process connected")
-        self._command_input.clear()
+            cursor = self._console_output.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            fmt = QTextCharFormat()
+            fmt.setForeground(QColor("#f7768e"))
+            if self._console_output.document().characterCount() > 1:
+                cursor.insertText("\n")
+            cursor.insertText("[Hosty] No server process connected", fmt)
 
+        self._command_input.clear()

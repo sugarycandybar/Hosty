@@ -1,57 +1,23 @@
-"""PySide6-based Windows frontend for Hosty."""
+"""Shared utilities for the PySide6 Windows frontend."""
 
 from __future__ import annotations
 
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtWidgets import (
-    QApplication,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
-    QHBoxLayout,
-    QInputDialog,
-    QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
-    QMessageBox,
-    QPlainTextEdit,
-    QProgressBar,
-    QPushButton,
-    QSpinBox,
-    QSplitter,
-    QStackedWidget,
-    QTabWidget,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import QObject, Qt, Signal, Slot
+from PySide6.QtGui import QColor
+
+from hosty.utils.constants import ServerStatus
 
 try:
     import psutil
-
     HAS_PSUTIL = True
 except Exception:
     HAS_PSUTIL = False
-
-from hosty.backend.config_manager import ConfigManager
-from hosty.backend.server_manager import ServerInfo, ServerManager
-from hosty.core.events import set_main_thread_dispatcher
-from hosty.utils.constants import (
-    DEFAULT_RAM_MB,
-    DEFAULT_SERVER_PROPERTIES,
-    MAX_RAM_MB,
-    MIN_RAM_MB,
-    ServerStatus,
-    get_required_java_version,
-)
-
 
 
 __all__ = [
@@ -59,10 +25,14 @@ __all__ = [
     '_format_uptime',
     '_iter_world_dirs',
     '_status_prefix',
+    '_status_color_hex',
     '_MainThreadInvoker',
+    'HAS_PSUTIL',
 ]
 
+
 def _open_path(path: Path) -> bool:
+    """Open a folder or file in the system file manager."""
     target = path.resolve()
     if target.is_file():
         target = target.parent
@@ -96,12 +66,23 @@ def _iter_world_dirs(server_root: Path) -> list[Path]:
 
 def _status_prefix(status: str) -> str:
     mapping = {
-        ServerStatus.RUNNING: "[RUNNING]",
-        ServerStatus.STARTING: "[STARTING]",
-        ServerStatus.STOPPING: "[STOPPING]",
-        ServerStatus.STOPPED: "[STOPPED]",
+        ServerStatus.RUNNING: "●",
+        ServerStatus.STARTING: "◐",
+        ServerStatus.STOPPING: "◐",
+        ServerStatus.STOPPED: "○",
     }
-    return mapping.get(status, "[UNKNOWN]")
+    return mapping.get(status, "?")
+
+
+def _status_color_hex(status: str) -> str:
+    """Return a hex color for the given server status."""
+    mapping = {
+        ServerStatus.RUNNING: "#2ec27e",
+        ServerStatus.STARTING: "#e5a50a",
+        ServerStatus.STOPPING: "#e5a50a",
+        ServerStatus.STOPPED: "#5e6182",
+    }
+    return mapping.get(status, "#5e6182")
 
 
 class _MainThreadInvoker(QObject):
@@ -114,5 +95,3 @@ class _MainThreadInvoker(QObject):
     @Slot(object, object, object)
     def _run(self, callback, args, kwargs) -> None:
         callback(*args, **kwargs)
-
-

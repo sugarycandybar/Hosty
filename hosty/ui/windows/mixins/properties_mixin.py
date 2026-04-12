@@ -1,104 +1,297 @@
-"""PySide6-based Windows frontend for Hosty."""
+"""
+Properties mixin — GUI editor for server.properties with auto-save.
+"""
 
 from __future__ import annotations
 
-import os
-import time
-from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
+    QCheckBox,
+    QComboBox,
+    QGroupBox,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
-    QMessageBox,
-    QPlainTextEdit,
-    QProgressBar,
-    QPushButton,
+    QScrollArea,
     QSpinBox,
-    QSplitter,
-    QStackedWidget,
-    QTabWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-try:
-    import psutil
-
-    HAS_PSUTIL = True
-except Exception:
-    HAS_PSUTIL = False
-
 from hosty.backend.config_manager import ConfigManager
 from hosty.backend.server_manager import ServerInfo, ServerManager
-from hosty.core.events import set_main_thread_dispatcher
 from hosty.utils.constants import (
     DEFAULT_RAM_MB,
-    DEFAULT_SERVER_PROPERTIES,
+    DIFFICULTIES,
+    GAMEMODES,
+    LEVEL_TYPE_NAMES,
+    LEVEL_TYPES,
     MAX_RAM_MB,
     MIN_RAM_MB,
     ServerStatus,
-    get_required_java_version,
 )
 
 
-
-from ..utils import *
-from ..dialogs.create_server import CreateServerDialog
-
 class PropertiesMixin:
+    """Mixin providing a grouped GUI editor for server.properties."""
+
     def _build_properties_tab(self) -> None:
         tab = QWidget(self._tabs)
-        layout = QVBoxLayout(tab)
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        self._properties_editor = QTextEdit(tab)
-        self._properties_editor.setAcceptRichText(False)
-        layout.addWidget(self._properties_editor)
+        # Restart banner
+        self._props_banner = QWidget(tab)
+        self._props_banner.setVisible(False)
+        self._props_banner.setStyleSheet(
+            "background: rgba(229, 165, 10, 0.15); padding: 8px 16px;"
+        )
+        banner_layout = QHBoxLayout(self._props_banner)
+        banner_layout.setContentsMargins(16, 6, 16, 6)
+        banner_label = QLabel("⚠️ Restart the server to apply changes")
+        banner_label.setStyleSheet("color: #e5a50a; font-weight: 600; font-size: 12px;")
+        banner_layout.addWidget(banner_label)
+        banner_layout.addStretch()
+        dismiss_btn = QLabel("✕")
+        dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        dismiss_btn.setStyleSheet("color: #e5a50a; font-weight: 700; padding: 0 4px;")
+        dismiss_btn.mousePressEvent = lambda _: self._props_banner.setVisible(False)
+        banner_layout.addWidget(dismiss_btn)
+        outer.addWidget(self._props_banner)
 
-        save_btn = QPushButton("Save Properties", tab)
-        save_btn.clicked.connect(self._save_properties)
-        layout.addWidget(save_btn)
+        scroll = QScrollArea(tab)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setSpacing(16)
+        layout.setContentsMargins(24, 24, 24, 24)
+
+        self._prop_widgets = {}
+        self._prop_config: Optional[ConfigManager] = None
+        self._prop_server_info: Optional[ServerInfo] = None
+        self._suppress_prop_changes = False
+
+        # ===== General =====
+        general = QGroupBox("General")
+        gen_lay = QVBoxLayout(general)
+        gen_lay.setSpacing(10)
+
+        self._prop_widgets["motd"] = self._add_prop_entry(gen_lay, "Message of the Day", "motd", "a hosty server")
+        self._prop_widgets["max-players"] = self._add_prop_spin(gen_lay, "Max Players", "max-players", 1, 1000, 20)
+        self._prop_widgets["difficulty"] = self._add_prop_combo(gen_lay, "Difficulty", "difficulty", DIFFICULTIES, "easy")
+        self._prop_widgets["gamemode"] = self._add_prop_combo(gen_lay, "Default Gamemode", "gamemode", GAMEMODES, "survival")
+
+        layout.addWidget(general)
+
+        # ===== Resources =====
+        resources = QGroupBox("Resources")
+        res_lay = QVBoxLayout(resources)
+        res_lay.setSpacing(10)
+
+        self._ram_prop_spin = self._add_prop_spin(res_lay, "Allocated RAM (MB)", "_ram", MIN_RAM_MB, MAX_RAM_MB, DEFAULT_RAM_MB, step=256)
+        layout.addWidget(resources)
+
+        # ===== World =====
+        world = QGroupBox("World")
+        world_lay = QVBoxLayout(world)
+        world_lay.setSpacing(10)
+
+        self._prop_widgets["level-seed"] = self._add_prop_entry(world_lay, "World Seed", "level-seed", "")
+        display_types = [LEVEL_TYPE_NAMES.get(t, t) for t in LEVEL_TYPES]
+        self._prop_widgets["level-type"] = self._add_prop_combo(world_lay, "World Type", "level-type", display_types, "Default")
+        self._prop_widgets["view-distance"] = self._add_prop_spin(world_lay, "View Distance", "view-distance", 2, 32, 10)
+        self._prop_widgets["simulation-distance"] = self._add_prop_spin(world_lay, "Simulation Distance", "simulation-distance", 2, 32, 10)
+        self._prop_widgets["spawn-protection"] = self._add_prop_spin(world_lay, "Spawn Protection Radius", "spawn-protection", 0, 256, 16)
+        self._prop_widgets["max-world-size"] = self._add_prop_spin(world_lay, "Max World Size", "max-world-size", 1000, 29999984, 29999984, step=1000)
+
+        layout.addWidget(world)
+
+        # ===== Network =====
+        network = QGroupBox("Network")
+        net_lay = QVBoxLayout(network)
+        net_lay.setSpacing(10)
+
+        self._prop_widgets["server-port"] = self._add_prop_spin(net_lay, "Server Port", "server-port", 1024, 65535, 25565)
+        self._prop_widgets["online-mode"] = self._add_prop_check(net_lay, "Online Mode", "online-mode", True)
+        self._prop_widgets["enable-query"] = self._add_prop_check(net_lay, "Enable Query", "enable-query", False)
+
+        layout.addWidget(network)
+
+        # ===== Players =====
+        players = QGroupBox("Players")
+        play_lay = QVBoxLayout(players)
+        play_lay.setSpacing(10)
+
+        self._prop_widgets["pvp"] = self._add_prop_check(play_lay, "PvP", "pvp", True)
+        self._prop_widgets["allow-flight"] = self._add_prop_check(play_lay, "Allow Flight", "allow-flight", False)
+
+        layout.addWidget(players)
+
+        # ===== Advanced =====
+        advanced = QGroupBox("Advanced")
+        adv_lay = QVBoxLayout(advanced)
+        adv_lay.setSpacing(10)
+
+        self._prop_widgets["enable-command-block"] = self._add_prop_check(adv_lay, "Command Blocks", "enable-command-block", False)
+        self._prop_widgets["allow-nether"] = self._add_prop_check(adv_lay, "Allow Nether", "allow-nether", True)
+        self._prop_widgets["hardcore"] = self._add_prop_check(adv_lay, "Hardcore Mode", "hardcore", False)
+        self._prop_widgets["enable-rcon"] = self._add_prop_check(adv_lay, "Enable RCON", "enable-rcon", False)
+
+        layout.addWidget(advanced)
+        layout.addStretch()
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
         self._tabs.addTab(tab, "Properties")
+
+    def _add_prop_entry(self, layout, label: str, key: str, default: str) -> QLineEdit:
+        row = QHBoxLayout()
+        row.addWidget(QLabel(label))
+        entry = QLineEdit(default)
+        entry.setProperty("_prop_key", key)
+        entry.textChanged.connect(self._on_prop_changed)
+        row.addWidget(entry, 1)
+        layout.addLayout(row)
+        return entry
+
+    def _add_prop_spin(self, layout, label: str, key: str, min_v: int, max_v: int, default: int, step: int = 1) -> QSpinBox:
+        row = QHBoxLayout()
+        row.addWidget(QLabel(label))
+        spin = QSpinBox()
+        spin.setRange(min_v, max_v)
+        spin.setSingleStep(step)
+        spin.setValue(default)
+        spin.setProperty("_prop_key", key)
+        spin.valueChanged.connect(self._on_prop_changed)
+        row.addWidget(spin, 1)
+        layout.addLayout(row)
+        return spin
+
+    def _add_prop_combo(self, layout, label: str, key: str, options: list, default: str) -> QComboBox:
+        row = QHBoxLayout()
+        row.addWidget(QLabel(label))
+        combo = QComboBox()
+        combo.addItems(options)
+        combo.setProperty("_prop_key", key)
+        combo.setProperty("_options", options)
+        try:
+            idx = options.index(default)
+            combo.setCurrentIndex(idx)
+        except ValueError:
+            combo.setCurrentIndex(0)
+        combo.currentIndexChanged.connect(self._on_prop_changed)
+        row.addWidget(combo, 1)
+        layout.addLayout(row)
+        return combo
+
+    def _add_prop_check(self, layout, label: str, key: str, default: bool) -> QCheckBox:
+        check = QCheckBox(label)
+        check.setChecked(default)
+        check.setProperty("_prop_key", key)
+        check.toggled.connect(self._on_prop_changed)
+        layout.addWidget(check)
+        return check
 
     def _load_properties(self, info: ServerInfo) -> None:
         config = self._server_manager.get_config(info.id)
         if not config:
-            self._properties_editor.clear()
             return
 
-        props = dict(DEFAULT_SERVER_PROPERTIES)
-        props.update(config.load())
-        lines = [f"{k}={v}" for k, v in props.items()]
-        self._properties_editor.setPlainText("\n".join(lines) + "\n")
+        self._prop_config = config
+        self._prop_server_info = info
+        config.load()
+        self._populate_properties()
+        self._props_banner.setVisible(False)
+
+    def _populate_properties(self) -> None:
+        if not self._prop_config:
+            return
+
+        self._suppress_prop_changes = True
+
+        # RAM
+        if hasattr(self, '_ram_prop_spin') and self._prop_server_info:
+            self._ram_prop_spin.setValue(int(self._prop_server_info.ram_mb))
+
+        for key, widget in self._prop_widgets.items():
+            if isinstance(widget, QLineEdit):
+                val = self._prop_config.get(key, "")
+                widget.setText(val)
+            elif isinstance(widget, QSpinBox):
+                val = self._prop_config.get_int(key, widget.value())
+                widget.setValue(val)
+            elif isinstance(widget, QCheckBox):
+                val = self._prop_config.get_bool(key, widget.isChecked())
+                widget.setChecked(val)
+            elif isinstance(widget, QComboBox):
+                val = self._prop_config.get(key, "")
+                options = widget.property("_options") or []
+                if key == "level-type":
+                    display_val = LEVEL_TYPE_NAMES.get(val, val)
+                    try:
+                        idx = options.index(display_val)
+                        widget.setCurrentIndex(idx)
+                    except (ValueError, IndexError):
+                        widget.setCurrentIndex(0)
+                else:
+                    try:
+                        idx = options.index(val)
+                        widget.setCurrentIndex(idx)
+                    except (ValueError, IndexError):
+                        widget.setCurrentIndex(0)
+
+        self._suppress_prop_changes = False
+
+    def _on_prop_changed(self, *_args) -> None:
+        if self._suppress_prop_changes:
+            return
+        self._save_properties()
 
     def _save_properties(self) -> None:
-        if not self._selected_server_id:
-            return
-        config = self._server_manager.get_config(self._selected_server_id)
-        if not config:
+        if not self._prop_config:
             return
 
-        raw = self._properties_editor.toPlainText().splitlines()
-        for line in raw:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            config.set_value(key.strip(), value.strip())
-        config.save()
+        for key, widget in self._prop_widgets.items():
+            if isinstance(widget, QLineEdit):
+                self._prop_config.set_value(key, widget.text())
+            elif isinstance(widget, QSpinBox):
+                self._prop_config.set_value(key, int(widget.value()))
+            elif isinstance(widget, QCheckBox):
+                self._prop_config.set_value(key, widget.isChecked())
+            elif isinstance(widget, QComboBox):
+                idx = widget.currentIndex()
+                options = widget.property("_options") or []
+                if key == "level-type":
+                    display_name = options[idx] if idx < len(options) else options[0] if options else ""
+                    raw_val = next(
+                        (k for k, v in LEVEL_TYPE_NAMES.items() if v == display_name),
+                        LEVEL_TYPES[0] if LEVEL_TYPES else "",
+                    )
+                    self._prop_config.set_value(key, raw_val)
+                else:
+                    val = options[idx] if idx < len(options) else (options[0] if options else "")
+                    self._prop_config.set_value(key, val)
 
-        self._server_manager.emit_on_main_thread("server-changed", self._selected_server_id)
-        QMessageBox.information(self, "Properties", "server.properties saved")
+        self._prop_config.save()
 
+        # Update RAM if changed
+        running = False
+        if self._server_manager and self._prop_server_info and hasattr(self, '_ram_prop_spin'):
+            ram_mb = int(self._ram_prop_spin.value())
+            if ram_mb != int(self._prop_server_info.ram_mb):
+                self._server_manager.update_server_ram(self._prop_server_info.id, ram_mb)
+
+            process = self._server_manager.get_process(self._prop_server_info.id)
+            if process:
+                process.set_max_players(self._prop_config.get_int("max-players", 20))
+                running = bool(process.is_running)
+
+        if self._server_manager and self._prop_server_info:
+            self._server_manager.emit_on_main_thread("server-changed", self._prop_server_info.id)
+
+        self._props_banner.setVisible(running)

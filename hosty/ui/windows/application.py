@@ -1,64 +1,60 @@
-"""PySide6-based Windows frontend for Hosty."""
+"""
+Hosty Windows Frontend — PySide6 application.
+
+Main window with sidebar + tabbed content, system theme support,
+and full feature parity with the Linux GTK4/Adwaita build.
+"""
 
 from __future__ import annotations
 
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMainWindow,
-    QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
     QPushButton,
-    QSpinBox,
     QSplitter,
-    QStackedWidget,
     QTabWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-try:
-    import psutil
-
-    HAS_PSUTIL = True
-except Exception:
-    HAS_PSUTIL = False
-
-from hosty.backend.config_manager import ConfigManager
-from hosty.backend.server_manager import ServerInfo, ServerManager
+from hosty.backend.playit_config import load_playit_config
+from hosty.backend.server_manager import ServerManager
 from hosty.core.events import set_main_thread_dispatcher
-from hosty.utils.constants import (
-    DEFAULT_RAM_MB,
-    DEFAULT_SERVER_PROPERTIES,
-    MAX_RAM_MB,
-    MIN_RAM_MB,
-    ServerStatus,
-    get_required_java_version,
+from hosty.utils.constants import ServerStatus
+
+from .theme import ThemeManager
+from .utils import _MainThreadInvoker, HAS_PSUTIL
+from .mixins import (
+    SidebarMixin,
+    ConsoleMixin,
+    PerformanceMixin,
+    PropertiesMixin,
+    FilesMixin,
+    ConnectMixin,
 )
 
 
+class HostyMainWindow(
+    QMainWindow,
+    SidebarMixin,
+    ConsoleMixin,
+    PerformanceMixin,
+    PropertiesMixin,
+    FilesMixin,
+    ConnectMixin,
+):
+    """Main Hosty application window."""
 
-from .utils import *
-from .dialogs import CreateServerDialog
-from .mixins import SidebarMixin, ConsoleMixin, PerformanceMixin, PropertiesMixin, FilesMixin
-
-class HostyMainWindow(QMainWindow, SidebarMixin, ConsoleMixin, PerformanceMixin, PropertiesMixin, FilesMixin):
     def __init__(self, server_manager: ServerManager):
         super().__init__()
         self._server_manager = server_manager
@@ -68,54 +64,195 @@ class HostyMainWindow(QMainWindow, SidebarMixin, ConsoleMixin, PerformanceMixin,
         self._output_handler_id = None
         self._process_start_ts: Optional[float] = None
         self._ignore_list_events = False
+        self._tps_value = 20.0
+        self._psutil_process = None
+        self._last_running_server_id = self._server_manager.get_running_server_id()
+        self._playit_starting_server_id = None
+        self._playit_autostart_paused_server_id: Optional[str] = None
 
         self.setWindowTitle("Hosty")
         self.resize(1200, 760)
+        self.setMinimumSize(700, 500)
 
         root = QWidget(self)
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         splitter = QSplitter(Qt.Orientation.Horizontal, root)
         layout.addWidget(splitter)
 
         self._build_sidebar(splitter)
         self._build_content(splitter)
-        splitter.setSizes([330, 870])
+        splitter.setSizes([280, 920])
 
+        # Connect server manager signals
         self._manager_added_id = self._server_manager.connect("server-added", self._on_server_added)
         self._manager_removed_id = self._server_manager.connect("server-removed", self._on_server_removed)
         self._manager_changed_id = self._server_manager.connect("server-changed", self._on_server_changed)
 
+        # Stats polling timer
         self._stats_timer = QTimer(self)
         self._stats_timer.setInterval(1000)
         self._stats_timer.timeout.connect(self._on_stats_tick)
         self._stats_timer.start()
+
+        # Playit runtime timer
+        self._playit_timer = QTimer(self)
+        self._playit_timer.setInterval(1000)
+        self._playit_timer.timeout.connect(self._poll_runtime_state)
+        self._playit_timer.start()
 
         self._populate_servers()
 
     def _build_content(self, splitter: QSplitter) -> None:
         content = QWidget(splitter)
         layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        header = QHBoxLayout()
+        # Header bar
+        header = QWidget(content)
+        header.setProperty("class", "header-bar")
+        header.setFixedHeight(56)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(20, 0, 20, 0)
+
         self._title_label = QLabel("Select a server", content)
-        self._title_label.setStyleSheet("font-size: 18px; font-weight: 600;")
-        header.addWidget(self._title_label)
-        header.addStretch(1)
-        self._toggle_btn = QPushButton("Start", content)
-        self._toggle_btn.setEnabled(False)
-        self._toggle_btn.clicked.connect(self._toggle_server)
-        header.addWidget(self._toggle_btn)
-        layout.addLayout(header)
+        self._title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
+        header_layout.addWidget(self._title_label)
+        header_layout.addStretch(1)
 
+        self._toggle_btn = QPushButton("Start", content)
+        self._toggle_btn.setProperty("class", "start")
+        self._toggle_btn.setEnabled(False)
+        self._toggle_btn.setMinimumWidth(100)
+        self._toggle_btn.clicked.connect(self._toggle_server)
+        header_layout.addWidget(self._toggle_btn)
+
+        layout.addWidget(header)
+
+        # Tab widget
         self._tabs = QTabWidget(content)
         layout.addWidget(self._tabs)
 
         self._build_console_tab()
+        self._build_connect_tab()
         self._build_performance_tab()
         self._build_properties_tab()
         self._build_files_tab()
+
+    def _on_process_output_with_tps(self, process, text: str) -> None:
+        """Process output handler that also parses TPS."""
+        self._on_process_output(process, text)
+        self._parse_tps(text)
+
+    def _attach_process(self, process) -> None:
+        """Override to also connect TPS parsing."""
+        if self._selected_process and self._status_handler_id:
+            try:
+                self._selected_process.disconnect(self._status_handler_id)
+            except Exception:
+                pass
+        if self._selected_process and self._output_handler_id:
+            try:
+                self._selected_process.disconnect(self._output_handler_id)
+            except Exception:
+                pass
+
+        self._selected_process = process
+        self._status_handler_id = None
+        self._output_handler_id = None
+        self._process_start_ts = None
+        self._psutil_process = None
+        self._tps_value = 20.0
+
+        self._console_output.clear()
+
+        if process:
+            self._status_handler_id = process.connect("status-changed", self._on_process_status)
+            self._output_handler_id = process.connect("output-received", self._on_process_output_with_tps)
+            if process.is_running:
+                self._process_start_ts = time.time()
+
+    # ===== Playit runtime management (matches Linux window.py) =====
+
+    def _poll_runtime_state(self) -> None:
+        running_id = self._server_manager.get_running_server_id()
+        prefs = self._server_manager.preferences
+
+        if running_id != self._last_running_server_id:
+            previous_id = self._last_running_server_id
+            self._last_running_server_id = running_id
+
+            if running_id:
+                self._apply_playit_runtime(previous_id, running_id)
+            else:
+                self._apply_playit_runtime(previous_id, None)
+
+                if previous_id:
+                    if prefs.auto_backup_on_stop:
+                        self._start_auto_backup(previous_id)
+        else:
+            self._apply_playit_runtime(None, running_id)
+
+    def _apply_playit_runtime(self, previous_id: Optional[str], running_id: Optional[str]) -> None:
+        playit = self._server_manager.playit_manager
+
+        if running_id != self._playit_autostart_paused_server_id and previous_id == self._playit_autostart_paused_server_id:
+            self._playit_autostart_paused_server_id = None
+
+        if previous_id and previous_id != running_id and playit.is_running_for(previous_id):
+            playit.stop()
+
+        if not running_id:
+            self._playit_autostart_paused_server_id = None
+            return
+
+        if running_id == self._playit_autostart_paused_server_id:
+            return
+
+        info = self._server_manager.get_server(running_id)
+        if not info:
+            return
+
+        cfg = load_playit_config(info.server_dir)
+        if not cfg.get("enabled", False):
+            return
+        if not cfg.get("auto_start", True):
+            return
+
+        if playit.is_running_for(running_id):
+            return
+
+        if self._playit_starting_server_id == running_id:
+            return
+
+        self._playit_starting_server_id = running_id
+
+        def worker():
+            playit.start(
+                running_id,
+                str(info.server_dir),
+                secret=str(cfg.get("secret", "")).strip(),
+                auto_install=bool(cfg.get("auto_install", True)),
+            )
+            self._playit_starting_server_id = None
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _start_auto_backup(self, server_id: str) -> None:
+        def worker():
+            ok, msg = self._server_manager.create_world_backup(server_id, auto=True)
+            # No UI toast for now — the backup just happens silently
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def shutdown(self) -> None:
+        """Clean shutdown."""
+        self._stats_timer.stop()
+        self._playit_timer.stop()
 
 
 class HostyWindowsApplication:
@@ -124,17 +261,11 @@ class HostyWindowsApplication:
     def run(self, argv: list[str]) -> int:
         app = QApplication(argv)
         app.setApplicationName("Hosty")
-        app.setStyleSheet(
-            "QMainWindow { background: #171a21; }"
-            "QWidget { color: #e8ecf1; font-size: 13px; }"
-            "QPlainTextEdit, QTextEdit, QListWidget { background: #11141a; border: 1px solid #2c3340; border-radius: 6px; }"
-            "QPushButton { background: #2b6cb0; border: none; border-radius: 6px; padding: 6px 10px; }"
-            "QPushButton:disabled { background: #3a4354; color: #9aa6bd; }"
-            "QTabWidget::pane { border: 1px solid #2c3340; border-radius: 6px; }"
-            "QTabBar::tab { background: #1d2230; padding: 6px 10px; margin-right: 2px; }"
-            "QTabBar::tab:selected { background: #2b6cb0; }"
-        )
 
+        # Theme system
+        theme = ThemeManager(app)
+
+        # Main thread invoker for backend callbacks
         invoker = _MainThreadInvoker()
         set_main_thread_dispatcher(
             lambda callback, *args, **kwargs: invoker.invoke.emit(callback, args, kwargs)
@@ -148,7 +279,15 @@ class HostyWindowsApplication:
             return app.exec()
         finally:
             try:
+                window.shutdown()
+            except Exception:
+                pass
+            try:
                 server_manager.stop_all()
+            except Exception:
+                pass
+            try:
+                theme.stop()
             except Exception:
                 pass
             set_main_thread_dispatcher(None)

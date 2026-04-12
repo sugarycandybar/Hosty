@@ -1,83 +1,136 @@
-"""PySide6-based Windows frontend for Hosty."""
+"""
+Sidebar mixin — server list with status dots, context menus, and management.
+"""
 
 from __future__ import annotations
 
-import os
+import shutil
 import time
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QAction, QColor, QPainter, QPixmap, QIcon
 from PySide6.QtWidgets import (
-    QApplication,
-    QDialog,
-    QDialogButtonBox,
-    QFormLayout,
+    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QMainWindow,
+    QMenu,
     QMessageBox,
-    QPlainTextEdit,
-    QProgressBar,
     QPushButton,
-    QSpinBox,
     QSplitter,
-    QStackedWidget,
-    QTabWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-try:
-    import psutil
-
-    HAS_PSUTIL = True
-except Exception:
-    HAS_PSUTIL = False
-
-from hosty.backend.config_manager import ConfigManager
 from hosty.backend.server_manager import ServerInfo, ServerManager
-from hosty.core.events import set_main_thread_dispatcher
-from hosty.utils.constants import (
-    DEFAULT_RAM_MB,
-    DEFAULT_SERVER_PROPERTIES,
-    MAX_RAM_MB,
-    MIN_RAM_MB,
-    ServerStatus,
-    get_required_java_version,
-)
+from hosty.utils.constants import ServerStatus
 
-
-
-from ..utils import *
+from ..utils import _status_color_hex, _status_prefix
 from ..dialogs.create_server import CreateServerDialog
 
+
 class SidebarMixin:
+    """Mixin providing a modern sidebar with server list and management."""
+
     def _build_sidebar(self, splitter: QSplitter) -> None:
         side = QWidget(splitter)
+        side.setProperty("class", "sidebar")
+        side.setMinimumWidth(240)
+        side.setMaximumWidth(360)
         layout = QVBoxLayout(side)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        controls = QHBoxLayout()
-        self._new_btn = QPushButton("New")
-        self._rename_btn = QPushButton("Rename")
-        self._delete_btn = QPushButton("Delete")
-        controls.addWidget(self._new_btn)
-        controls.addWidget(self._rename_btn)
-        controls.addWidget(self._delete_btn)
-        layout.addLayout(controls)
+        # Header
+        header = QWidget(side)
+        header.setProperty("class", "header-bar")
+        header.setFixedHeight(50)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(16, 0, 8, 0)
 
+        add_btn = QPushButton("+")
+        add_btn.setFixedSize(30, 30)
+        add_btn.setToolTip("Create new server")
+        add_btn.setProperty("class", "flat")
+        add_btn.setStyleSheet("font-size: 18px; font-weight: 700;")
+        add_btn.clicked.connect(self._show_create_dialog)
+        header_layout.addWidget(add_btn)
+
+        title_label = QLabel("Servers")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setStyleSheet(
+            "font-family: 'Cascadia Code', 'JetBrains Mono', 'Consolas', monospace;"
+            "font-weight: 700; font-size: 15px; letter-spacing: -0.3px;"
+        )
+        header_layout.addWidget(title_label, 1)
+
+        menu_btn = QPushButton("⋯")
+        menu_btn.setFixedSize(30, 30)
+        menu_btn.setToolTip("Menu")
+        menu_btn.setProperty("class", "flat")
+        menu_btn.setStyleSheet("font-size: 16px; font-weight: 700;")
+        menu_btn.clicked.connect(self._show_app_menu)
+        header_layout.addWidget(menu_btn)
+
+        layout.addWidget(header)
+
+        # Server list
         self._server_list = QListWidget(side)
+        self._server_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._server_list.customContextMenuRequested.connect(self._on_context_menu)
+        self._server_list.currentItemChanged.connect(self._on_server_selected)
         layout.addWidget(self._server_list)
 
-        self._new_btn.clicked.connect(self._show_create_dialog)
-        self._rename_btn.clicked.connect(self._rename_selected)
-        self._delete_btn.clicked.connect(self._delete_selected)
-        self._server_list.currentItemChanged.connect(self._on_server_selected)
+    def _show_app_menu(self) -> None:
+        """Show the application hamburger menu."""
+        menu = QMenu(self)
+        prefs_action = menu.addAction("Preferences")
+        prefs_action.triggered.connect(self._show_preferences)
+        about_action = menu.addAction("About Hosty")
+        about_action.triggered.connect(self._show_about)
+        menu.exec(self.sender().mapToGlobal(self.sender().rect().bottomLeft()))
+
+    def _show_preferences(self) -> None:
+        from ..dialogs.preferences import PreferencesDialog
+        dlg = PreferencesDialog(self._server_manager.preferences, self)
+        dlg.exec()
+
+    def _show_about(self) -> None:
+        from ..dialogs.about import AboutDialog
+        dlg = AboutDialog(self)
+        dlg.exec()
+
+    def _on_context_menu(self, pos) -> None:
+        """Right-click context menu on a server row."""
+        item = self._server_list.itemAt(pos)
+        if not item:
+            return
+
+        server_id = item.data(Qt.ItemDataRole.UserRole)
+        info = self._server_manager.get_server(server_id)
+        if not info:
+            return
+
+        self._server_list.setCurrentItem(item)
+
+        menu = QMenu(self)
+
+        rename_action = menu.addAction("Rename…")
+        rename_action.triggered.connect(lambda: self._rename_server(server_id))
+
+        icon_action = menu.addAction("Change Icon…")
+        icon_action.triggered.connect(lambda: self._change_icon(server_id))
+
+        menu.addSeparator()
+
+        delete_action = menu.addAction("Delete")
+        delete_action.triggered.connect(lambda: self._delete_server(server_id))
+
+        menu.exec(self._server_list.mapToGlobal(pos))
 
     def _populate_servers(self) -> None:
         self._ignore_list_events = True
@@ -91,19 +144,42 @@ class SidebarMixin:
         else:
             self._clear_selection_state()
 
+    def _make_status_icon(self, status: str) -> QIcon:
+        """Create a small colored circle icon for the status."""
+        size = 12
+        pixmap = QPixmap(size, size)
+        pixmap.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        color = QColor(_status_color_hex(status))
+        painter.setBrush(color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(1, 1, size - 2, size - 2)
+        painter.end()
+        return QIcon(pixmap)
+
     def _add_or_update_item(self, info: ServerInfo) -> None:
         process = self._server_manager.get_process(info.id)
         status = process.status if process else ServerStatus.STOPPED
-        label = f"{_status_prefix(status)} {info.name}  ({info.mc_version})"
+
+        # Build display text
+        subtitle = info.mc_version
+        if process and process.is_running:
+            subtitle = f"{info.mc_version} · {process.player_count}/{process.max_players}"
+        label = f"{info.name}\n{subtitle}"
+
+        icon = self._make_status_icon(status)
 
         for i in range(self._server_list.count()):
             item = self._server_list.item(i)
             if item.data(Qt.ItemDataRole.UserRole) == info.id:
                 item.setText(label)
+                item.setIcon(icon)
                 return
 
-        item = QListWidgetItem(label)
+        item = QListWidgetItem(icon, label)
         item.setData(Qt.ItemDataRole.UserRole, info.id)
+        item.setSizeHint(item.sizeHint().__class__(item.sizeHint().width(), 52))
         self._server_list.addItem(item)
 
     def _refresh_server_rows_status(self) -> None:
@@ -166,6 +242,7 @@ class SidebarMixin:
         self._attach_process(process)
         self._load_properties(info)
         self._refresh_files(info)
+        self._refresh_connect(info)
         self._refresh_toggle_button()
         self._refresh_performance()
 
@@ -173,16 +250,25 @@ class SidebarMixin:
         self._selected_server_id = None
         self._title_label.setText("Select a server")
         self._toggle_btn.setEnabled(False)
-        self._properties_editor.clear()
-        self._world_list.clear()
+        self._toggle_btn.setText("Start")
+        self._toggle_btn.setProperty("class", "start")
+        self._toggle_btn.style().unpolish(self._toggle_btn)
+        self._toggle_btn.style().polish(self._toggle_btn)
+        self._console_output.clear()
         self._attach_process(None)
         self._refresh_performance()
 
     def _attach_process(self, process) -> None:
         if self._selected_process and self._status_handler_id:
-            self._selected_process.disconnect(self._status_handler_id)
+            try:
+                self._selected_process.disconnect(self._status_handler_id)
+            except Exception:
+                pass
         if self._selected_process and self._output_handler_id:
-            self._selected_process.disconnect(self._output_handler_id)
+            try:
+                self._selected_process.disconnect(self._output_handler_id)
+            except Exception:
+                pass
 
         self._selected_process = process
         self._status_handler_id = None
@@ -212,23 +298,59 @@ class SidebarMixin:
         if not self._selected_process:
             self._toggle_btn.setEnabled(False)
             self._toggle_btn.setText("Start")
+            self._toggle_btn.setProperty("class", "start")
+            self._toggle_btn.style().unpolish(self._toggle_btn)
+            self._toggle_btn.style().polish(self._toggle_btn)
             return
 
-        if self._selected_process.is_running:
+        status = self._selected_process.status
+
+        if status == ServerStatus.STARTING:
+            self._toggle_btn.setEnabled(False)
+            self._toggle_btn.setText("Starting…")
+            self._toggle_btn.setProperty("class", "")
+            self._toggle_btn.setToolTip("Wait for the server to finish starting")
+        elif status == ServerStatus.RUNNING:
             self._toggle_btn.setEnabled(True)
             self._toggle_btn.setText("Stop")
-            return
+            self._toggle_btn.setProperty("class", "stop")
+            self._toggle_btn.setToolTip("")
+        else:
+            blocked = self._server_manager.is_any_server_running()
+            mods_busy = False
+            if self._selected_server_id:
+                mods_busy = self._server_manager.is_mod_operation_active(self._selected_server_id)
 
-        blocked = self._server_manager.is_any_server_running()
-        self._toggle_btn.setEnabled(not blocked)
-        self._toggle_btn.setText("Start")
+            self._toggle_btn.setEnabled(not blocked and not mods_busy)
+            self._toggle_btn.setText("Start")
+            self._toggle_btn.setProperty("class", "start")
+            if mods_busy:
+                self._toggle_btn.setToolTip("Mods are currently installing/updating")
+            elif blocked:
+                self._toggle_btn.setToolTip("Another server is already running")
+            else:
+                self._toggle_btn.setToolTip("")
+
+        self._toggle_btn.style().unpolish(self._toggle_btn)
+        self._toggle_btn.style().polish(self._toggle_btn)
 
     def _toggle_server(self) -> None:
         if not self._selected_process:
             return
 
+        if self._selected_process.status == ServerStatus.STARTING:
+            return
+
         if self._selected_process.is_running:
             self._selected_process.stop()
+            return
+
+        if self._selected_server_id and self._server_manager.is_mod_operation_active(self._selected_server_id):
+            QMessageBox.warning(
+                self,
+                "Cannot Start Server",
+                "Mods are currently being installed or updated. Please wait.",
+            )
             return
 
         if self._server_manager.is_any_server_running() and not self._selected_process.is_running:
@@ -248,14 +370,11 @@ class SidebarMixin:
         dialog.server_created.connect(self._select_server)
         dialog.exec()
 
-    def _rename_selected(self) -> None:
-        if not self._selected_server_id:
-            return
-        info = self._server_manager.get_server(self._selected_server_id)
+    def _rename_server(self, server_id: str) -> None:
+        info = self._server_manager.get_server(server_id)
         if not info:
             return
-
-        new_name, ok = QInputDialog.getText(self, "Rename Server", "New server name", text=info.name)
+        new_name, ok = QInputDialog.getText(self, "Rename Server", "New server name:", text=info.name)
         if not ok:
             return
         new_name = new_name.strip()
@@ -263,20 +382,39 @@ class SidebarMixin:
             return
         self._server_manager.rename_server(info.id, new_name)
 
-    def _delete_selected(self) -> None:
-        if not self._selected_server_id:
+    def _change_icon(self, server_id: str) -> None:
+        info = self._server_manager.get_server(server_id)
+        if not info:
             return
-        info = self._server_manager.get_server(self._selected_server_id)
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Server Icon",
+            "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp)",
+        )
+        if not path:
+            return
+
+        try:
+            from hosty.utils.image_utils import convert_to_png
+            icon_output = Path(info.server_dir) / "icon.png"
+            convert_to_png(path, str(icon_output), size=128)
+            self._server_manager.set_server_icon(server_id, str(icon_output))
+        except Exception as e:
+            QMessageBox.warning(self, "Icon Error", f"Could not set icon: {e}")
+
+    def _delete_server(self, server_id: str) -> None:
+        info = self._server_manager.get_server(server_id)
         if not info:
             return
 
         result = QMessageBox.question(
             self,
             "Delete Server",
-            f"Delete '{info.name}' and all its files?",
+            f'Are you sure you want to delete "{info.name}"?\n\nAll server files will be permanently deleted.',
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if result != QMessageBox.StandardButton.Yes:
             return
         self._server_manager.delete_server(info.id, delete_files=True)
-
