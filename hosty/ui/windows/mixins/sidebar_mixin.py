@@ -94,9 +94,9 @@ class SidebarMixin:
         # Header
         header = QWidget(side)
         header.setProperty("class", "header-bar")
-        header.setFixedHeight(50)
+        header.setFixedHeight(58)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(16, 0, 8, 0)
+        header_layout.setContentsMargins(20, 0, 20, 0)
 
         add_btn = QPushButton("+")
         add_btn.setFixedSize(30, 30)
@@ -329,7 +329,7 @@ class SidebarMixin:
                 return
 
     def _load_server(self, info: ServerInfo) -> None:
-        self._title_label.setText(f"{info.name} · {info.mc_version}")
+        self.setWindowTitle(f"Hosty — {info.name} · {info.mc_version}")
         self._toggle_btn.setEnabled(True)
 
         process = self._server_manager.get_process(info.id)
@@ -342,7 +342,7 @@ class SidebarMixin:
 
     def _clear_selection_state(self) -> None:
         self._selected_server_id = None
-        self._title_label.setText("Select a server")
+        self.setWindowTitle("Hosty")
         self._toggle_btn.setEnabled(False)
         self._toggle_btn.setText("Start")
         self._toggle_btn.setProperty("class", "start")

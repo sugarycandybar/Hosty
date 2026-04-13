@@ -17,7 +17,7 @@ It keeps the full server workflow in one app: setup, start/stop, monitoring, mod
 ## Run Hosty
 
 - Linux: use the Flatpak release from GitHub Releases.
-- Windows: use the EXE release from GitHub Releases.
+- Windows: use the EXE release from GitHub Releases. (Note: The Windows version is currently a work in progress.)
 
 <details>
 <summary>Run from source (Python)</summary>

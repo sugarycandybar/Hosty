@@ -63,15 +63,24 @@ class ConnectMixin:
         local_layout.setSpacing(8)
 
         ip_row = QHBoxLayout()
+        ip_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         ip_row.addWidget(QLabel("LAN IP Address"))
+        
+        ip_row.addStretch(1)
+
         self._lan_ip_label = QLabel("Detecting…")
-        self._lan_ip_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         self._lan_ip_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         ip_row.addWidget(self._lan_ip_label)
 
-        copy_ip_btn = QPushButton("Copy")
+        from ..theme import get_material_icon, get_colors, is_system_dark
+        icon_color = get_colors(is_system_dark()).get("accent", "#7c6bf0")
+
+        copy_ip_btn = QPushButton()
+        copy_ip_btn.setIcon(get_material_icon("content_copy", icon_color, 16))
+        copy_ip_btn.setFixedSize(28, 28)
         copy_ip_btn.setProperty("class", "flat")
         copy_ip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        copy_ip_btn.setToolTip("Copy LAN IP")
         copy_ip_btn.clicked.connect(self._copy_lan_ip)
         ip_row.addWidget(copy_ip_btn)
 
@@ -194,7 +203,7 @@ class ConnectMixin:
         layout.addStretch()
         scroll.setWidget(content)
         outer.addWidget(scroll)
-        self._tabs.addTab(tab, "Connect")
+        self._content_stack.addWidget(tab)
 
         # State
         self._connect_server_info: Optional[ServerInfo] = None

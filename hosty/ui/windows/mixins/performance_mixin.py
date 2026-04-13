@@ -165,7 +165,7 @@ class PerformanceMixin:
     """Mixin providing performance monitoring with sparkline charts."""
 
     def _build_performance_tab(self) -> None:
-        tab = QWidget(self._tabs)
+        tab = QWidget()
         outer = QVBoxLayout(tab)
         outer.setContentsMargins(0, 0, 0, 0)
 
@@ -216,7 +216,7 @@ class PerformanceMixin:
 
         scroll.setWidget(content)
         outer.addWidget(scroll)
-        self._tabs.addTab(tab, "Performance")
+        self._content_stack.addWidget(tab)
 
         # TPS tracking
         self._tps_value = 20.0

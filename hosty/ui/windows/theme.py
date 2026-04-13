@@ -11,14 +11,20 @@ import os
 import sys
 import threading
 import urllib.request
+import weakref
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtCore import QTimer
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QMainWindow, QDialog
+
+from PySide6.QtCore import QTimer, QEvent, QObject
 from PySide6.QtGui import QFontDatabase, QPalette, QColor
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMainWindow, QDialog
 
 from hosty.backend.preferences_manager import PreferencesManager
+
+from .utils import apply_window_theme
 
 
 def is_system_dark() -> bool:
@@ -487,7 +493,7 @@ QListWidget::item:selected {{
 QPlainTextEdit {{
     background: {c["console_bg"]};
     color: {c["console_text"]};
-    border: 2px solid {c["border"]};
+    border: none;
     border-radius: 14px;
     padding: 12px;
     font-family: "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
@@ -640,6 +646,32 @@ QWidget[class="header-bar"] {{
     border-bottom: 2px solid {c["border"]};
 }}
 
+QTabBar[class="header-tabs"] {{
+    border: none;
+    outline: none;
+}}
+
+QTabBar[class="header-tabs"]::tab {{
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 2px 16px;
+    margin: 8px 4px;
+    font-size: 14px;
+    font-weight: 700;
+    color: {c["text_secondary"]};
+}}
+QTabBar[class="header-tabs"]::tab:hover {{
+    color: {c["text"]};
+    background: {c["bg_sidebar_hover"]};
+    border-radius: 0;
+}}
+QTabBar[class="header-tabs"]::tab:selected {{
+    color: {c["accent"]};
+    border-bottom: 3px solid {c["accent"]};
+    background: transparent;
+}}
+
 /* ===== Card widget ===== */
 QWidget[class="card"] {{
     background: {c["bg_card"]};
@@ -770,16 +802,18 @@ def get_material_icon(name: str, color_hex: str = "#ffffff", size: int = 24) -> 
     painter.end()
     return QIcon(pixmap)
 
-class ThemeManager:
+class ThemeManager(QObject):
     """
     Watches the system theme and applies the matching QSS to the QApplication.
     Respects user preferences for theme overrides.
     """
 
     def __init__(self, app: QApplication, prefs: PreferencesManager):
+        super().__init__()
         self._app = app
         self._prefs = prefs
         self._current_dark: Optional[bool] = None
+        self._windows = weakref.WeakSet()
         self._timer = QTimer()
         self._timer.setInterval(2000)
         self._timer.timeout.connect(self._check)
@@ -789,6 +823,9 @@ class ThemeManager:
 
         self.apply()
         self._timer.start()
+        
+        # Install event filter to catch new windows automatically
+        self._app.installEventFilter(self)
 
     def apply(self):
         theme_pref = self._prefs.theme
@@ -804,10 +841,42 @@ class ThemeManager:
             
         self._current_dark = dark
         self._app.setStyleSheet(get_stylesheet(dark))
+        self._update_all_window_frames()
+
+    def register_window(self, window: QMainWindow | QDialog):
+        """Register a window to have its title bar matched to the theme."""
+        self._windows.add(window)
+        self._update_window_frame(window)
+
+    def _update_all_window_frames(self):
+        for window in self._windows:
+            self._update_window_frame(window)
+
+    def _update_window_frame(self, window: QMainWindow | QDialog):
+        if not window:
+            return
+            
+        c = self.colors
+        # Darker title bar as requested
+        bg = QColor(c["bg_header"]).darker(108)
+        fg = QColor(c["text"])
+        
+        apply_window_theme(
+            int(window.winId()), 
+            self.is_dark,
+            caption_color=bg,
+            text_color=fg
+        )
 
     @property
     def is_dark(self) -> bool:
         return self._current_dark if self._current_dark is not None else True
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Show:
+            if isinstance(obj, (QMainWindow, QDialog)):
+                self.register_window(obj)
+        return super().eventFilter(obj, event)
 
     @property
     def colors(self) -> dict:

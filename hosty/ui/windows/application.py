@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -22,7 +23,8 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QSplitter,
-    QTabWidget,
+    QTabBar,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -115,13 +117,23 @@ class HostyMainWindow(
         # Header bar
         header = QWidget(content)
         header.setProperty("class", "header-bar")
-        header.setFixedHeight(56)
+        header.setFixedHeight(58)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(20, 0, 20, 0)
+        header_layout.setContentsMargins(10, 0, 20, 0) # Less left margin for tabs
 
-        self._title_label = QLabel("Select a server", content)
-        self._title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
-        header_layout.addWidget(self._title_label)
+
+        # Navigation Tabs in Header
+        self._tabs = QTabBar(header)
+        self._tabs.setProperty("class", "header-tabs")
+        self._tabs.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tabs.addTab("Console")
+        self._tabs.addTab("Connect")
+        self._tabs.addTab("Performance")
+        self._tabs.addTab("Properties")
+        self._tabs.addTab("Files")
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+        header_layout.addWidget(self._tabs)
+
         header_layout.addStretch(1)
 
         self._toggle_btn = QPushButton("Start", content)
@@ -134,15 +146,18 @@ class HostyMainWindow(
 
         layout.addWidget(header)
 
-        # Tab widget
-        self._tabs = QTabWidget(content)
-        layout.addWidget(self._tabs)
+        # Content stack
+        self._content_stack = QStackedWidget(content)
+        layout.addWidget(self._content_stack)
 
         self._build_console_tab()
         self._build_connect_tab()
         self._build_performance_tab()
         self._build_properties_tab()
         self._build_files_tab()
+
+    def _on_tab_changed(self, index: int) -> None:
+        self._content_stack.setCurrentIndex(index)
 
     def _on_process_output_with_tps(self, process, text: str) -> None:
         """Process output handler that also parses TPS."""
@@ -269,10 +284,16 @@ class HostyWindowsApplication:
         app = QApplication(argv)
         app.setApplicationName("Hosty")
 
+        # Application Icon
+        icon_path = Path(__file__).parents[3] / "packaging" / "linux" / "io.github.sugarycandybar.Hosty.svg"
+        if icon_path.exists():
+            app.setWindowIcon(QIcon(str(icon_path)))
+
         server_manager = ServerManager()
 
         # Theme system
         theme = ThemeManager(app, server_manager.preferences)
+        app.theme_manager = theme
 
         # Main thread invoker for backend callbacks
         invoker = _MainThreadInvoker()
@@ -281,6 +302,7 @@ class HostyWindowsApplication:
         )
 
         window = HostyMainWindow(server_manager)
+        theme.register_window(window)
         window.show()
 
         try:

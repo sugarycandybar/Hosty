@@ -95,7 +95,7 @@ class FilesMixin:
         self._files_stack.addWidget(self._mods_page)     # Index 3
         self._files_stack.addWidget(self._modrinth_page) # Index 4
 
-        self._tabs.addTab(self._files_stack, "Files")
+        self._content_stack.addWidget(self._files_stack)
 
     def _build_nav_row(self, title: str, icon_name: str, subtitle: str, callback) -> QWidget:
         card = QWidget()
@@ -134,7 +134,7 @@ class FilesMixin:
 
     def _navigate_to(self, index: int) -> None:
         if not self._selected_server_id:
-            QMessageBox.information(self._tabs, "Files", "Please select a server first.")
+            QMessageBox.information(self, "Files", "Please select a server first.")
             return
             
         info = self._server_manager.get_server(self._selected_server_id)

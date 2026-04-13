@@ -19,6 +19,9 @@ try:
 except Exception:
     HAS_PSUTIL = False
 
+import ctypes
+from ctypes import wintypes
+
 
 __all__ = [
     '_open_path',
@@ -27,6 +30,7 @@ __all__ = [
     '_status_prefix',
     '_status_color_hex',
     '_MainThreadInvoker',
+    'apply_window_theme',
     'HAS_PSUTIL',
 ]
 
@@ -95,3 +99,60 @@ class _MainThreadInvoker(QObject):
     @Slot(object, object, object)
     def _run(self, callback, args, kwargs) -> None:
         callback(*args, **kwargs)
+
+
+def apply_window_theme(
+    window_id: int, 
+    dark: bool, 
+    caption_color: Optional[QColor] = None, 
+    text_color: Optional[QColor] = None
+) -> None:
+    """
+    Apply Windows-specific DWM attributes to the window frame.
+    Requires Windows 10 1809+ for dark mode, Windows 11 for colors.
+    """
+    if sys.platform != "win32":
+        return
+
+    try:
+        dwmapi = ctypes.windll.dwmapi
+        hwnd = wintypes.HWND(window_id)
+
+        # 1. Immersive Dark Mode (DWMWA_USE_IMMERSIVE_DARK_MODE = 20)
+        # Fallback to 19 for older Windows 10 versions if needed, 
+        # but 20 is standard for modern Win10/11.
+        rendering_policy = 20
+        value = ctypes.c_int(1 if dark else 0)
+        dwmapi.DwmSetWindowAttribute(
+            hwnd,
+            rendering_policy,
+            ctypes.byref(value),
+            ctypes.sizeof(value)
+        )
+
+        # 2. Caption Color (DWMWA_CAPTION_COLOR = 35) - Windows 11 only
+        if caption_color and hasattr(dwmapi, "DwmSetWindowAttribute"):
+            # DWM expects 0x00RRGGBB or 0x00BBGGRR depending on version, 
+            # usually COLORREF (0x00BBGGRR)
+            color_val = (caption_color.blue() << 16) | (caption_color.green() << 8) | caption_color.red()
+            color_ref = ctypes.c_int(color_val)
+            dwmapi.DwmSetWindowAttribute(
+                hwnd,
+                35,
+                ctypes.byref(color_ref),
+                ctypes.sizeof(color_ref)
+            )
+
+        # 3. Text Color (DWMWA_TEXT_COLOR = 36) - Windows 11 only
+        if text_color and hasattr(dwmapi, "DwmSetWindowAttribute"):
+            color_val = (text_color.blue() << 16) | (text_color.green() << 8) | text_color.red()
+            color_ref = ctypes.c_int(color_val)
+            dwmapi.DwmSetWindowAttribute(
+                hwnd,
+                36,
+                ctypes.byref(color_ref),
+                ctypes.sizeof(color_ref)
+            )
+            
+    except Exception as e:
+        print(f"Failed to apply window theme: {e}")

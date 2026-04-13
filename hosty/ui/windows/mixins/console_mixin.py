@@ -23,7 +23,8 @@ class ConsoleMixin:
     """Mixin providing a monospace console with syntax highlighting."""
 
     def _build_console_tab(self) -> None:
-        tab = QWidget(self._tabs)
+        tab = QWidget()
+        tab.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -56,7 +57,7 @@ class ConsoleMixin:
         input_layout.addWidget(send_btn)
 
         layout.addWidget(input_bar)
-        self._tabs.addTab(tab, "Console")
+        self._content_stack.addWidget(tab)
 
     def _on_process_output(self, _process, text: str) -> None:
         """Append output with syntax highlighting."""

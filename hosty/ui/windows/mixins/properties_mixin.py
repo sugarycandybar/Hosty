@@ -46,7 +46,7 @@ class PropertiesMixin:
         
         self._suppress_prop_changes = False
 
-        tab = QWidget(self._tabs)
+        tab = QWidget()
         outer = QVBoxLayout(tab)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -159,7 +159,7 @@ class PropertiesMixin:
         scroll.setWidget(content)
         outer.addWidget(scroll)
 
-        self._tabs.addTab(tab, "Properties")
+        self._content_stack.addWidget(tab)
 
     def _add_prop_entry(self, layout, label: str, key: str, default: str) -> QLineEdit:
         row = QHBoxLayout()
