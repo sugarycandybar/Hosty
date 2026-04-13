@@ -6,7 +6,7 @@ and managing Fabric Minecraft servers.
 """
 import sys
 
-from hosty.ui.factory import create_application
+from hosty.factory import create_application
 
 
 def main():
