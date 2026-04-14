@@ -41,8 +41,10 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._status_handler_id: Optional[int] = None
         self._manager_changed_id: Optional[int] = None
         self._cfg = {}
+        self._zrok_cfg = {}
         self._suppress_config_updates = False
         self._start_in_progress = False
+        self._zrok_start_in_progress = False
         self._local_ip_rows: list[Adw.ActionRow] = []
         self._local_ip_value = "Not available"
         self._players_name_rows: list[Adw.EntryRow] = []
@@ -80,6 +82,23 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         page = Adw.PreferencesPage()
         page.add(self._make_local_network_group())
 
+        zrok_setup_group = Adw.PreferencesGroup(
+            title="Zrok Tunnel (Low-lag option)",
+            description="Set up Zrok to expose your server privately with high performance",
+        )
+        zrok_setup_row = Adw.ActionRow(
+            title="Zrok setup required",
+            subtitle="Install and link Zrok",
+        )
+        self._zrok_setup_btn = Gtk.Button(label="Set Up Zrok")
+        self._zrok_setup_btn.add_css_class("suggested-action")
+        self._zrok_setup_btn.set_valign(Gtk.Align.CENTER)
+        self._zrok_setup_btn.connect("clicked", self._on_open_zrok_setup_dialog)
+        zrok_setup_row.add_suffix(self._zrok_setup_btn)
+        zrok_setup_group.add(zrok_setup_row)
+
+        page.add(zrok_setup_group)
+
         setup_group = Adw.PreferencesGroup(
             title="Playit.gg",
             description="Set up Playit to expose your server publicly",
@@ -104,6 +123,33 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
     def _build_ready_page(self) -> Gtk.Widget:
         page = Adw.PreferencesPage()
         page.add(self._make_local_network_group())
+
+        zrok_group = Adw.PreferencesGroup(
+            title="Zrok Tunnel (Low-lag option)",
+            description="High-performance peer-to-peer tunnel",
+        )
+        self._zrok_tunnel_row = Adw.ActionRow(title="Zrok Tunnel", subtitle="Stopped")
+        self._zrok_tunnel_row.set_activatable(False)
+        self._zrok_tunnel_btn = Gtk.Button(label="Start Zrok")
+        self._zrok_tunnel_btn.add_css_class("suggested-action")
+        self._zrok_tunnel_btn.connect("clicked", self._on_zrok_tunnel_toggle)
+        self._zrok_tunnel_row.add_suffix(self._zrok_tunnel_btn)
+        zrok_group.add(self._zrok_tunnel_row)
+
+        self._zrok_auto_start_row = Adw.SwitchRow(
+            title="Start Zrok with server",
+            subtitle="Automatically start and stop Zrok",
+        )
+        self._zrok_auto_start_row.connect("notify::active", self._on_zrok_auto_start_toggled)
+        zrok_group.add(self._zrok_auto_start_row)
+        
+        zrok_reset_row = Adw.ActionRow(title="Set Up Zrok Again", subtitle="Re-run guided setup")
+        zrok_reset_row.add_prefix(Gtk.Image.new_from_icon_name("view-refresh-symbolic"))
+        zrok_reset_row.set_activatable(True)
+        zrok_reset_row.connect("activated", self._on_open_zrok_setup_dialog)
+        zrok_group.add(zrok_reset_row)
+
+        page.add(zrok_group)
 
         group = Adw.PreferencesGroup(
             title="Playit.gg",

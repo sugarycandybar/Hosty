@@ -68,9 +68,8 @@ class PlayitSetupDialog(Adw.Dialog):
         self._close_btn.connect("clicked", self._on_close_clicked)
         header.pack_start(self._close_btn)
 
-        self._action_btn = Gtk.Button(label="Setting up...")
+        self._action_btn = Gtk.Button(label="Next")
         self._action_btn.add_css_class("suggested-action")
-        self._action_btn.set_sensitive(False)
         self._action_btn.connect("clicked", self._on_action_clicked)
         header.pack_end(self._action_btn)
 
@@ -79,12 +78,24 @@ class PlayitSetupDialog(Adw.Dialog):
         self._stack = Gtk.Stack()
         self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
 
+        self._stack.add_named(self._build_steps_page(), "steps")
         self._stack.add_named(self._build_progress_page(), "progress")
         self._stack.add_named(self._build_claim_page(), "claim")
         self._stack.add_named(self._build_success_page(), "success")
 
         self._toolbar_view.set_content(self._stack)
         self.set_child(self._toolbar_view)
+
+    def _build_steps_page(self) -> Gtk.Widget:
+        status = Adw.StatusPage()
+        status.set_icon_name("system-software-install-symbolic")
+        status.set_title("Playit Installation Steps")
+        status.set_description(
+            "1. Download Playit agent\n"
+            "2. Start agent\n"
+            "3. Open browser claim link to connect your account"
+        )
+        return status
 
     def _build_progress_page(self) -> Gtk.Widget:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
@@ -143,13 +154,18 @@ class PlayitSetupDialog(Adw.Dialog):
 
     def _on_action_clicked(self, *_args):
         page = self._stack.get_visible_child_name()
-        if page == "success":
+        if page == "steps":
+            self._begin_checking()
+        elif page == "success":
             self.close()
 
     def start_setup(self):
         if self._setup_started:
             return
         self._setup_started = True
+        self._stack.set_visible_child_name("steps")
+
+    def _begin_checking(self):
         self._action_btn.set_sensitive(False)
         self._close_btn.set_sensitive(False)
         self._stack.set_visible_child_name("progress")

@@ -19,6 +19,7 @@ from hosty.shared.backend.config_manager import ConfigManager
 from hosty.shared.backend.java_manager import JavaManager
 from hosty.shared.backend.download_manager import DownloadManager
 from hosty.shared.backend.playit_manager import PlayitManager
+from hosty.shared.backend.zrok_manager import ZrokManager
 from hosty.shared.backend.preferences_manager import PreferencesManager
 from hosty.shared.core.events import EventEmitter
 
@@ -71,6 +72,7 @@ class ServerManager(EventEmitter):
         self.java_manager = JavaManager()
         self.download_manager = DownloadManager()
         self.playit_manager = PlayitManager()
+        self.zrok_manager = ZrokManager()
         self.preferences = PreferencesManager()
         self._load()
     
@@ -185,6 +187,8 @@ class ServerManager(EventEmitter):
 
         if self.playit_manager.is_running_for(server_id):
             self.playit_manager.stop()
+        if self.zrok_manager.is_running_for(server_id):
+            self.zrok_manager.stop()
         
         # Stop if running
         process = self._processes.get(server_id)
@@ -278,6 +282,7 @@ class ServerManager(EventEmitter):
     def stop_all(self):
         """Stop all running servers."""
         self.playit_manager.stop()
+        self.zrok_manager.stop()
         for server_id, process in self._processes.items():
             if process.is_running:
                 process.stop()

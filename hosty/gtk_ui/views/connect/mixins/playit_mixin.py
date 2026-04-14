@@ -22,8 +22,10 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gtk, Adw, Gdk, GLib
 
 from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
+from hosty.shared.backend.zrok_config import load_zrok_config, save_zrok_config
 from hosty.shared.backend.server_manager import ServerInfo, ServerManager
 from hosty.gtk_ui.dialogs.playit_setup import PlayitSetupDialog
+from hosty.gtk_ui.dialogs.zrok_setup import ZrokSetupDialog
 
 
 PLAYIT_DASHBOARD_URL = "https://playit.gg/account/tunnels"
@@ -39,6 +41,7 @@ class PlayitMixin:
             self._cfg = {}
             return
         self._cfg = load_playit_config(root)
+        self._zrok_cfg = load_zrok_config(root)
 
         if self._server_manager:
             claimed_secret = self._server_manager.playit_manager.read_claimed_secret()
@@ -60,6 +63,7 @@ class PlayitMixin:
 
         self._suppress_config_updates = True
         self._auto_start_row.set_active(bool(self._cfg.get("auto_start", True)))
+        self._zrok_auto_start_row.set_active(bool(self._zrok_cfg.get("auto_start", True)))
         self._suppress_config_updates = False
 
     def _save_server_config(self, updates: Optional[dict] = None) -> bool:
@@ -90,6 +94,15 @@ class PlayitMixin:
             root = self.get_root()
             if root and hasattr(root, "clear_playit_auto_start_pause"):
                 root.clear_playit_auto_start_pause(self._server_info.id)
+
+    def _on_zrok_auto_start_toggled(self, *_args):
+        if self._suppress_config_updates:
+            return
+        root = self._server_dir()
+        if not root:
+            return
+        self._zrok_cfg["auto_start"] = self._zrok_auto_start_row.get_active()
+        save_zrok_config(root, self._zrok_cfg)
 
     def _is_setup_complete(self) -> bool:
         if not self._server_manager:
@@ -140,7 +153,35 @@ class PlayitMixin:
             self._tunnel_btn.set_label("Starting...")
             self._tunnel_btn.set_sensitive(False)
 
+        zrok = self._server_manager.zrok_manager
+        if zrok.is_running:
+            if self._server_info and zrok.server_id == self._server_info.id:
+                self._zrok_tunnel_row.set_subtitle("Running for this server")
+                self._zrok_tunnel_btn.set_label("Stop")
+                self._zrok_tunnel_btn.remove_css_class("suggested-action")
+                self._zrok_tunnel_btn.add_css_class("destructive-action")
+                self._zrok_tunnel_btn.set_sensitive(True)
+            else:
+                self._zrok_tunnel_row.set_subtitle("Running for another server")
+                self._zrok_tunnel_btn.set_label("Start")
+                self._zrok_tunnel_btn.remove_css_class("destructive-action")
+                self._zrok_tunnel_btn.add_css_class("suggested-action")
+                self._zrok_tunnel_btn.set_sensitive(False)
+        else:
+            self._zrok_tunnel_row.set_subtitle("Stopped")
+            self._zrok_tunnel_btn.set_label("Start")
+            self._zrok_tunnel_btn.remove_css_class("destructive-action")
+            self._zrok_tunnel_btn.add_css_class("suggested-action")
+            self._zrok_tunnel_btn.set_sensitive(True)
+
+        if self._zrok_start_in_progress:
+            self._zrok_tunnel_btn.set_label("Starting...")
+            self._zrok_tunnel_btn.set_sensitive(False)
+
     def _on_playit_status_changed(self, *_args):
+        self._refresh_status_row()
+
+    def _on_zrok_status_changed(self, *_args):
         self._refresh_status_row()
 
     def _on_tunnel_toggle(self, *_args):
@@ -230,4 +271,99 @@ class PlayitMixin:
             self._toast("Playit tunnel stopped")
         else:
             self._alert("Could not stop playit", msg)
+
+    # ===== Zrok Methods =====
+    
+    def _is_zrok_setup_complete(self) -> bool:
+        if not self._server_manager:
+            return False
+        return bool(
+            self._zrok_cfg.get("enabled", False)
+            and self._zrok_cfg.get("setup_complete", False)
+            and (
+                self._server_manager.zrok_manager.check_enabled()
+                or bool(str(self._zrok_cfg.get("token", "")).strip())
+            )
+        )
+
+    def _on_zrok_tunnel_toggle(self, *_args):
+        if not self._server_manager:
+            return
+        zrok = self._server_manager.zrok_manager
+        if zrok.is_running and self._server_info and zrok.server_id == self._server_info.id:
+            self._on_zrok_stop()
+        else:
+            self._on_zrok_start()
+
+    def _on_open_zrok_setup_dialog(self, *_args):
+        if not self._server_manager or not self._server_info:
+            return
+
+        dialog = ZrokSetupDialog(
+            self._server_manager,
+            self._server_info,
+            self._server_running(),
+        )
+        dialog.connect("setup-complete", self._on_zrok_setup_complete)
+        dialog.present(self.get_root())
+        dialog.start_setup()
+
+    def _on_zrok_setup_complete(self, *_args):
+        self._load_server_config()
+        self._refresh_mode()
+        self._refresh_status_row()
+        self._toast("Zrok setup completed")
+
+    def _on_zrok_start(self, *_args):
+        if not self._server_manager or not self._server_info:
+            return
+        if not self._is_zrok_setup_complete():
+            self._on_open_zrok_setup_dialog()
+            return
+        if self._zrok_start_in_progress:
+            self._toast("Zrok startup is already in progress")
+            return
+
+        server_id = self._server_info.id
+        server_dir = str(self._server_info.server_dir)
+        self._zrok_start_in_progress = True
+
+        def worker():
+            zrok = self._server_manager.zrok_manager
+            config = self._server_manager.get_config(server_id)
+            port = 25565
+            if config:
+                config.load()
+                port = config.get_int("server-port", 25565)
+            return zrok.start(
+                server_id,
+                server_dir,
+                port=port,
+                auto_install=True,
+            )
+
+        def run():
+            ok, msg = worker()
+
+            def ui_done():
+                self._zrok_start_in_progress = False
+                self._refresh_status_row()
+                if ok:
+                    self._toast("Zrok tunnel started")
+                else:
+                    self._alert("Could not start Zrok", msg)
+
+            GLib.idle_add(ui_done)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_zrok_stop(self, *_args):
+        if not self._server_manager:
+            return
+        ok, msg = self._server_manager.zrok_manager.stop()
+        self._refresh_status_row()
+        if ok:
+            self._toast("Zrok tunnel stopped")
+        else:
+            self._alert("Could not stop Zrok", msg)
 

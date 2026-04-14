@@ -76,9 +76,8 @@ class PlayitSetupDialog(QDialog):
         self._close_btn.clicked.connect(self.reject)
         header_layout.addWidget(self._close_btn)
 
-        self._action_btn = QPushButton("Setting up...")
+        self._action_btn = QPushButton("Next")
         self._action_btn.setProperty("class", "accent")
-        self._action_btn.setDisabled(True)
         self._action_btn.clicked.connect(self._on_action_clicked)
         header_layout.addWidget(self._action_btn)
 
@@ -88,9 +87,32 @@ class PlayitSetupDialog(QDialog):
         self._stack = QStackedWidget()
         root.addWidget(self._stack, 1)
 
+        self._stack.addWidget(self._build_steps_page())
         self._stack.addWidget(self._build_progress_page())
         self._stack.addWidget(self._build_claim_page())
         self._stack.addWidget(self._build_success_page())
+
+    def _build_steps_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(40, 40, 40, 40)
+        layout.setSpacing(16)
+
+        lbl = QLabel("Playit Installation Steps")
+        lbl.setProperty("class", "title")
+        layout.addWidget(lbl)
+
+        steps_text = (
+            "1. Download Playit agent\n"
+            "2. Start agent\n"
+            "3. Open browser claim link to connect your account"
+        )
+        steps_lbl = QLabel(steps_text)
+        steps_lbl.setProperty("class", "subtitle")
+        layout.addWidget(steps_lbl)
+
+        layout.addStretch()
+        return page
 
     def _build_progress_page(self) -> QWidget:
         page = QWidget()
@@ -171,16 +193,22 @@ class PlayitSetupDialog(QDialog):
         return page
 
     def _on_action_clicked(self) -> None:
-        if self._stack.currentIndex() == 2:  # Success page
+        idx = self._stack.currentIndex()
+        if idx == 0:
+            self._begin_checking()
+        elif idx == 3:  # Success page
             self.accept()
 
     def start_setup(self) -> None:
         if self._setup_started:
             return
         self._setup_started = True
+        self._stack.setCurrentIndex(0)
+
+    def _begin_checking(self) -> None:
         self._action_btn.setDisabled(True)
         self._close_btn.setDisabled(True)
-        self._stack.setCurrentIndex(0)
+        self._stack.setCurrentIndex(1)
         threading.Thread(target=self._setup_thread, daemon=True).start()
 
     def setup_completed(self) -> bool:
@@ -281,7 +309,7 @@ class PlayitSetupDialog(QDialog):
 
     def _show_claim_page(self) -> None:
         self._claim_link_lbl.setText(self._claim_url)
-        self._stack.setCurrentIndex(1)
+        self._stack.setCurrentIndex(2)
         self._close_btn.setEnabled(True)
         self._action_btn.setDisabled(True)
         self._action_btn.setText("Waiting for browser...")
@@ -294,7 +322,7 @@ class PlayitSetupDialog(QDialog):
         self._close_btn.setDisabled(True)
         self._action_btn.setDisabled(True)
         self._action_btn.setText("Finalizing...")
-        self._stack.setCurrentIndex(0)
+        self._stack.setCurrentIndex(1)
         self._update_progress(
             0.85,
             "Waiting for browser approval...",
@@ -359,7 +387,7 @@ class PlayitSetupDialog(QDialog):
         dispatch_on_main_thread(self._finish_ui_state)
 
     def _finish_ui_state(self) -> None:
-        self._stack.setCurrentIndex(2)
+        self._stack.setCurrentIndex(3)
         self._close_btn.setDisabled(True)
         self._action_btn.setEnabled(True)
         self._action_btn.setText("Done")
