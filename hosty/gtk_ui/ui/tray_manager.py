@@ -3,13 +3,11 @@ TrayManager - Optional system tray integration for background mode.
 """
 from __future__ import annotations
 
-import os
 from typing import Callable, Optional
 
 import gi
 gi.require_version("GLib", "2.0")
-gi.require_version("Gio", "2.0")
-from gi.repository import GLib, Gio
+from gi.repository import GLib
 
 try:
     import pystray
@@ -33,42 +31,6 @@ def _draw_default_icon() -> "Image.Image":
     return image
 
 
-def _has_status_notifier_watcher() -> bool:
-    """Check whether a StatusNotifier watcher is present on DBus."""
-    try:
-        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-        reply = bus.call_sync(
-            "org.freedesktop.DBus",
-            "/org/freedesktop/DBus",
-            "org.freedesktop.DBus",
-            "ListNames",
-            None,
-            GLib.VariantType("(as)"),
-            Gio.DBusCallFlags.NONE,
-            1500,
-            None,
-        )
-        names = set(reply.unpack()[0]) if reply is not None else set()
-        return "org.kde.StatusNotifierWatcher" in names
-    except Exception:
-        return False
-
-
-def _has_tray_host() -> bool:
-    """Best-effort desktop support check for tray integration."""
-    if not HAS_TRAY:
-        return False
-
-    current_desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
-    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
-
-    # GNOME on Wayland needs an AppIndicator/SNI host (usually an extension).
-    if "gnome" in current_desktop and session_type == "wayland":
-        return _has_status_notifier_watcher()
-
-    return True
-
-
 class TrayManager:
     """Manage a tray icon lifecycle using pystray when available."""
 
@@ -76,10 +38,15 @@ class TrayManager:
         self._on_restore = on_restore
         self._on_quit = on_quit
         self._icon: Optional["pystray.Icon"] = None
+        self._last_error: Optional[str] = None
 
     @property
     def available(self) -> bool:
-        return _has_tray_host()
+        return HAS_TRAY
+
+    @property
+    def last_error(self) -> Optional[str]:
+        return self._last_error
 
     @property
     def active(self) -> bool:
@@ -87,7 +54,8 @@ class TrayManager:
 
     def show(self) -> bool:
         """Show tray icon. Returns False if tray backend is unavailable."""
-        if not self.available:
+        if not HAS_TRAY:
+            self._last_error = "pystray backend not installed"
             return False
         if self._icon is not None:
             return True
@@ -98,18 +66,24 @@ class TrayManager:
         def on_quit(_icon, _item):
             GLib.idle_add(self._on_quit)
 
-        self._icon = pystray.Icon(
-            "hosty",
-            _draw_default_icon(),
-            "Hosty",
-            menu=pystray.Menu(
-                pystray.MenuItem("Open Hosty", on_restore, default=True),
-                pystray.MenuItem("Quit Hosty", on_quit),
-            ),
-        )
+        try:
+            self._icon = pystray.Icon(
+                "hosty",
+                _draw_default_icon(),
+                "Hosty",
+                menu=pystray.Menu(
+                    pystray.MenuItem("Open Hosty", on_restore, default=True),
+                    pystray.MenuItem("Quit Hosty", on_quit),
+                ),
+            )
 
-        self._icon.run_detached()
-        return True
+            self._icon.run_detached()
+            self._last_error = None
+            return True
+        except Exception as exc:
+            self._last_error = str(exc)
+            self._icon = None
+            return False
 
     def hide(self) -> None:
         if self._icon is None:

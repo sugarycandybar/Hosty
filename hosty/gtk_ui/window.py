@@ -167,7 +167,11 @@ class HostyWindow(Adw.ApplicationWindow):
                 self._hidden_to_tray = True
             elif auto_hide and not shown and not self._tray_unavailable_notified:
                 self._tray_unavailable_notified = True
-                self.show_toast("Tray icon unavailable in this desktop session")
+                detail = self._tray_manager.last_error
+                if detail:
+                    self.show_toast(f"Tray icon unavailable: {detail}")
+                else:
+                    self.show_toast("Tray icon unavailable in this desktop session")
             return
 
         self._tray_manager.hide()
