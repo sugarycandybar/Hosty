@@ -285,7 +285,7 @@ class HostyWindowsApplication:
         app.setApplicationName("Hosty")
 
         # Application Icon
-        icon_path = Path(__file__).parents[3] / "packaging" / "linux" / "io.github.sugarycandybar.Hosty.svg"
+        icon_path = Path(__file__).resolve().parents[2] / "packaging" / "linux" / "io.github.sugarycandybar.Hosty-symbolic.svg"
         if icon_path.exists():
             app.setWindowIcon(QIcon(str(icon_path)))
 

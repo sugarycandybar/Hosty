@@ -38,6 +38,7 @@ class HostyApplication(Adw.Application):
         
         # Load custom CSS
         self._load_css()
+        self._register_packaged_icons()
         
         # Initialize server manager
         self._server_manager = ServerManager()
@@ -77,6 +78,19 @@ class HostyApplication(Adw.Application):
                 css_provider,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
             )
+
+    def _register_packaged_icons(self):
+        """Ensure packaged app icons are discoverable in development runs."""
+        display = Gdk.Display.get_default()
+        if not display:
+            return
+
+        icon_dir = Path(__file__).resolve().parents[2] / "packaging" / "linux"
+        if not icon_dir.exists():
+            return
+
+        icon_theme = Gtk.IconTheme.get_for_display(display)
+        icon_theme.add_search_path(str(icon_dir))
     
     def _setup_actions(self):
         """Register application actions."""

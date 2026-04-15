@@ -13,7 +13,7 @@ def show_about_dialog(parent):
     """Show the Hosty about dialog."""
     about = Adw.AboutDialog()
     about.set_application_name(APP_NAME)
-    about.set_application_icon("applications-games-symbolic")
+    about.set_application_icon(f"{APP_ID}-symbolic")
     about.set_version(APP_VERSION)
     about.set_developer_name("Hosty Project")
     about.set_license_type(Gtk.License.GPL_3_0)

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
     QLabel,
@@ -26,10 +29,14 @@ class AboutDialog(QDialog):
         layout.setSpacing(12)
         layout.setContentsMargins(32, 32, 32, 24)
 
-        # App icon placeholder (text-based)
-        icon_label = QLabel("🎮")
+        icon_label = QLabel()
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_label.setStyleSheet("font-size: 48px;")
+        icon_label.setFixedHeight(72)
+
+        icon_path = Path(__file__).resolve().parents[3] / "packaging" / "linux" / "io.github.sugarycandybar.Hosty-symbolic.svg"
+        icon_pixmap = QIcon(str(icon_path)).pixmap(64, 64)
+        if not icon_pixmap.isNull():
+            icon_label.setPixmap(icon_pixmap)
         layout.addWidget(icon_label)
 
         name_label = QLabel(APP_NAME)

@@ -79,10 +79,10 @@ class HostyWindow(Adw.ApplicationWindow):
         self._toast_overlay.set_child(self._split_view)
         self.set_content(self._toast_overlay)
         
-        # Show welcome or auto-select first server
+        # Show welcome or auto-select first server immediately to avoid welcome flicker.
         if server_manager.servers:
             first_id = server_manager.servers[0].id
-            GLib.idle_add(lambda: self._sidebar.select_server(first_id))
+            self._sidebar.select_server(first_id)
         else:
             self._content_stack.set_visible_child_name("welcome")
         
