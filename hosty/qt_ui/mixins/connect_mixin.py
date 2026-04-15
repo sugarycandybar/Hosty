@@ -101,39 +101,6 @@ class ConnectMixin:
 
         layout.addWidget(local_group)
 
-        # ===== Zrok group =====
-        zrok_group = QGroupBox("Zrok Tunnel (Low-lag option)")
-        zrok_layout = QVBoxLayout(zrok_group)
-        zrok_layout.setSpacing(10)
-
-        self._zrok_status_label = QLabel("Not configured")
-        self._zrok_status_label.setProperty("class", "dim")
-        zrok_layout.addWidget(self._zrok_status_label)
-
-        zrok_tunnel_row = QHBoxLayout()
-        self._zrok_tunnel_btn = QPushButton("Start Zrok")
-        self._zrok_tunnel_btn.setProperty("class", "accent")
-        self._zrok_tunnel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._zrok_tunnel_btn.clicked.connect(self._on_zrok_tunnel_toggle)
-        zrok_tunnel_row.addWidget(self._zrok_tunnel_btn)
-        zrok_tunnel_row.addStretch()
-        zrok_layout.addLayout(zrok_tunnel_row)
-
-        self._zrok_auto_start_check = QCheckBox("Start tunnel with server")
-        self._zrok_auto_start_check.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._zrok_auto_start_check.toggled.connect(self._on_zrok_auto_start_toggled)
-        zrok_layout.addWidget(self._zrok_auto_start_check)
-
-        zrok_links_row = QHBoxLayout()
-        zrok_setup_btn = QPushButton("Set Up Zrok")
-        zrok_setup_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        zrok_setup_btn.clicked.connect(self._on_setup_zrok)
-        zrok_links_row.addWidget(zrok_setup_btn)
-        zrok_links_row.addStretch()
-        zrok_layout.addLayout(zrok_links_row)
-
-        layout.addWidget(zrok_group)
-
         # ===== Playit group =====
         playit_group = QGroupBox("Playit.gg Tunnel")
         playit_layout = QVBoxLayout(playit_group)
@@ -241,9 +208,7 @@ class ConnectMixin:
         # State
         self._connect_server_info: Optional[ServerInfo] = None
         self._connect_cfg = {}
-        self._zrok_cfg = {}
         self._playit_status_id = None
-        self._zrok_status_id = None
         self._suppress_connect_changes = False
 
         # Detect LAN IP
@@ -295,17 +260,12 @@ class ConnectMixin:
         )
 
     def _refresh_connect(self, info: ServerInfo) -> None:
-        from hosty.shared.backend.zrok_config import load_zrok_config
         self._connect_server_info = info
         self._suppress_connect_changes = True
 
         self._connect_cfg = load_playit_config(info.server_dir)
         auto_start = self._connect_cfg.get("auto_start", True)
         self._auto_start_check.setChecked(auto_start)
-
-        self._zrok_cfg = load_zrok_config(info.server_dir)
-        z_auto_start = self._zrok_cfg.get("auto_start", True)
-        self._zrok_auto_start_check.setChecked(z_auto_start)
 
         playit = self._server_manager.playit_manager
         if self._playit_status_id is not None:
@@ -315,16 +275,7 @@ class ConnectMixin:
                 pass
         self._playit_status_id = playit.connect("status-changed", self._on_playit_status_changed)
 
-        zrok = self._server_manager.zrok_manager
-        if self._zrok_status_id is not None:
-            try:
-                zrok.disconnect(self._zrok_status_id)
-            except Exception:
-                pass
-        self._zrok_status_id = zrok.connect("status-changed", self._on_zrok_status_changed)
-
         self._refresh_playit_ui()
-        self._refresh_zrok_ui()
 
         self._suppress_connect_changes = False
 
@@ -402,103 +353,6 @@ class ConnectMixin:
 
         from hosty.qt_ui.dialogs.playit_setup import PlayitSetupDialog
         dialog = PlayitSetupDialog(
-            self._server_manager,
-            self._connect_server_info,
-            self
-        )
-        dialog.start_setup()
-        dialog.exec()
-
-        if dialog.setup_completed():
-            self._refresh_connect(self._connect_server_info)
-
-    # ===== Zrok =====
-
-    def _is_zrok_setup_complete(self) -> bool:
-        if not self._server_manager:
-            return False
-        return bool(
-            self._zrok_cfg.get("enabled", False)
-            and self._zrok_cfg.get("setup_complete", False)
-            and (
-                self._server_manager.zrok_manager.check_enabled()
-                or bool(str(self._zrok_cfg.get("token", "")).strip())
-            )
-        )
-
-    def _refresh_zrok_ui(self) -> None:
-        zrok = self._server_manager.zrok_manager
-        if not self._connect_server_info:
-            return
-
-        sid = self._connect_server_info.id
-
-        if zrok.is_running_for(sid):
-            self._zrok_status_label.setText("Tunnel is running")
-            self._zrok_tunnel_btn.setText("Stop Zrok")
-            self._zrok_tunnel_btn.setProperty("class", "stop")
-            self._zrok_tunnel_btn.setEnabled(True)
-        elif zrok.is_running:
-            self._zrok_status_label.setText("Tunnel running for another server")
-            self._zrok_tunnel_btn.setText("Start Zrok")
-            self._zrok_tunnel_btn.setProperty("class", "accent")
-            self._zrok_tunnel_btn.setEnabled(False)
-        else:
-            self._zrok_status_label.setText("Tunnel is stopped")
-            self._zrok_tunnel_btn.setText("Start Zrok")
-            self._zrok_tunnel_btn.setProperty("class", "accent")
-            self._zrok_tunnel_btn.setEnabled(True)
-
-        self._zrok_tunnel_btn.style().unpolish(self._zrok_tunnel_btn)
-        self._zrok_tunnel_btn.style().polish(self._zrok_tunnel_btn)
-
-    def _on_zrok_status_changed(self, *_args) -> None:
-        self._refresh_zrok_ui()
-
-    def _on_zrok_tunnel_toggle(self) -> None:
-        if not self._connect_server_info:
-            return
-        if not self._is_zrok_setup_complete():
-            self._on_setup_zrok()
-            return
-
-        zrok = self._server_manager.zrok_manager
-        sid = self._connect_server_info.id
-
-        if zrok.is_running_for(sid):
-            zrok.stop()
-            return
-
-        def worker():
-            config = self._server_manager.get_config(sid)
-            port = 25565
-            if config:
-                config.load()
-                port = config.get_int("server-port", 25565)
-            zrok.start(
-                sid,
-                str(self._connect_server_info.server_dir),
-                port=port,
-                auto_install=True,
-            )
-
-        self._zrok_tunnel_btn.setEnabled(False)
-        self._zrok_tunnel_btn.setText("Starting…")
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _on_zrok_auto_start_toggled(self, checked: bool) -> None:
-        from hosty.shared.backend.zrok_config import save_zrok_config
-        if self._suppress_connect_changes or not self._connect_server_info:
-            return
-        self._zrok_cfg["auto_start"] = checked
-        save_zrok_config(self._connect_server_info.server_dir, self._zrok_cfg)
-
-    def _on_setup_zrok(self) -> None:
-        if not self._connect_server_info:
-            return
-
-        from hosty.qt_ui.dialogs.zrok_setup import ZrokSetupDialog
-        dialog = ZrokSetupDialog(
             self._server_manager,
             self._connect_server_info,
             self
