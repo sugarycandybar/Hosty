@@ -10,10 +10,6 @@ finish-args:
   - --socket=wayland
   - --socket=fallback-x11
   - --device=dri
-  - --talk-name=org.kde.StatusNotifierWatcher
-  - --talk-name=org.freedesktop.StatusNotifierWatcher
-  - --own-name=org.kde.StatusNotifierItem-*
-  - --own-name=org.freedesktop.StatusNotifierItem-*
   # Removed broad home access to avoid exposing the user's full $HOME.
   # Hosty stores data under XDG_DATA_HOME (e.g. ~/.local/share/hosty)
   # inside the Flatpak sandbox and does not require --filesystem=home.
@@ -21,7 +17,7 @@ modules:
   - name: python-deps
     buildsystem: simple
     build-commands:
-      - python3 -m pip install --prefix=/app --no-build-isolation --no-index --find-links="file://${PWD}" requests psutil pillow pystray
+      - python3 -m pip install --prefix=/app --no-build-isolation --no-index --find-links="file://${PWD}" requests psutil pillow
     sources:
       - type: file
         url: https://files.pythonhosted.org/packages/d7/8e/7540e8a2036f79a125c1d2ebadf69ed7901608859186c856fa0388ef4197/requests-2.33.1-py3-none-any.whl
@@ -44,15 +40,6 @@ modules:
       - type: file
         url: https://files.pythonhosted.org/packages/f3/0d/d0d6dea55cd152ce3d6767bb38a8fc10e33796ba4ba210cbab9354b6d238/pillow-11.3.0.tar.gz
         sha256: 3828ee7586cd0b2091b6209e5ad53e20d0649bbe87164a459d0676e035e8f523
-      - type: file
-        url: https://files.pythonhosted.org/packages/5c/64/927a4b9024196a4799eba0180e0ca31568426f258a4a5c90f87a97f51d28/pystray-0.19.5-py2.py3-none-any.whl
-        sha256: a0c2229d02cf87207297c22d86ffc57c86c227517b038c0d3c59df79295ac617
-      - type: file
-        url: https://files.pythonhosted.org/packages/fc/b8/ff33610932e0ee81ae7f1269c890f697d56ff74b9f5b2ee5d9b7fa2c5355/python_xlib-0.33-py2.py3-none-any.whl
-        sha256: c3534038d42e0df2f1392a1b30a15a4ff5fdc2b86cfa94f072bf11b10a164398
-      - type: file
-        url: https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl
-        sha256: 4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274
   - name: hosty
     buildsystem: simple
     build-commands:

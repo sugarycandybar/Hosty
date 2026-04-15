@@ -10,7 +10,6 @@ from gi.repository import Gtk, Adw, GLib
 
 from hosty.shared.backend.playit_config import load_playit_config
 from hosty.shared.backend.server_manager import ServerManager
-from hosty.gtk_ui.ui.tray_manager import TrayManager
 from hosty.gtk_ui.views.sidebar import Sidebar
 from hosty.gtk_ui.views.server_detail import ServerDetailView
 from hosty.gtk_ui.views.welcome_view import WelcomeView
@@ -27,13 +26,6 @@ class HostyWindow(Adw.ApplicationWindow):
         self._last_running_server_id = self._server_manager.get_running_server_id()
         self._playit_starting_server_id = None
         self._playit_autostart_paused_server_id: str | None = None
-        self._hidden_to_tray = False
-        self._allow_close = False
-        self._tray_unavailable_notified = False
-        self._tray_manager = TrayManager(
-            on_restore=self.restore_from_background,
-            on_quit=self._quit_from_tray,
-        )
         
         self.set_title("Hosty")
         self.set_default_size(1100, 700)
@@ -97,7 +89,6 @@ class HostyWindow(Adw.ApplicationWindow):
         # Connect server add to switch content
         server_manager.connect('server-added', self._on_server_added)
         server_manager.connect('server-removed', self._on_server_removed)
-        self.connect("close-request", self._on_close_request)
 
         self._status_poll_id = GLib.timeout_add(1000, self._poll_runtime_state)
     
@@ -130,68 +121,23 @@ class HostyWindow(Adw.ApplicationWindow):
             self._content_stack.set_visible_child_name("welcome")
 
     def restore_from_background(self):
-        """Bring the app window back from the tray."""
-        self._hidden_to_tray = False
-        self.present()
+        """Compatibility no-op after removing background mode."""
+        return
 
     def shutdown_background(self):
-        """Stop background polling and tray integration."""
+        """Compatibility no-op after removing background mode."""
         if self._status_poll_id:
             GLib.source_remove(self._status_poll_id)
             self._status_poll_id = None
-        self._tray_manager.hide()
-
-    def _on_close_request(self, *_args):
-        if self._allow_close:
-            return False
-
-        if self._server_manager.is_any_server_running() and self._tray_manager.show():
-            self.hide()
-            self._hidden_to_tray = True
-            return True
-
-        return False
-
-    def _quit_from_tray(self):
-        self._allow_close = True
-        self._tray_manager.hide()
-        app = self.get_application()
-        if app:
-            app.quit()
-
-    def _sync_tray_for_runtime(self, running_id: str | None, auto_hide: bool = False):
-        if running_id:
-            shown = self._tray_manager.show()
-            if shown and auto_hide and not self._hidden_to_tray:
-                self.hide()
-                self._hidden_to_tray = True
-            elif auto_hide and not shown and not self._tray_unavailable_notified:
-                self._tray_unavailable_notified = True
-                detail = self._tray_manager.last_error
-                if detail:
-                    self.show_toast(f"Tray icon unavailable: {detail}")
-                else:
-                    self.show_toast("Tray icon unavailable in this desktop session")
-            return
-
-        self._tray_manager.hide()
-        self._tray_unavailable_notified = False
-        if self._hidden_to_tray:
-            self._hidden_to_tray = False
-            self.present()
 
     def _poll_runtime_state(self):
         running_id = self._server_manager.get_running_server_id()
         prefs = self._server_manager.preferences
-        changed = running_id != self._last_running_server_id
-        previous_id = self._last_running_server_id if changed else None
 
-        if changed:
+        if running_id != self._last_running_server_id:
+            previous_id = self._last_running_server_id
             self._last_running_server_id = running_id
 
-        self._sync_tray_for_runtime(running_id, auto_hide=bool(running_id and changed))
-
-        if changed:
             if running_id:
                 self._apply_playit_runtime(previous_id, running_id)
             else:
