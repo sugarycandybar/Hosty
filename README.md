@@ -19,6 +19,8 @@ It keeps the full server workflow in one app: setup, start/stop, monitoring, mod
 - Linux: use the Flatpak release from GitHub Releases.
 - Windows: use the EXE release from GitHub Releases. (Note: The Windows version is currently a work in progress.)
 
+Note: On GNOME Wayland sessions, tray icons require a StatusNotifier/AppIndicator host (typically the GNOME extension "AppIndicator and KStatusNotifierItem Support"). Without that host, Hosty will keep running but cannot appear in the tray.
+
 <details>
 <summary>Run from source (Python)</summary>
 

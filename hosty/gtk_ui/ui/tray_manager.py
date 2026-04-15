@@ -3,11 +3,13 @@ TrayManager - Optional system tray integration for background mode.
 """
 from __future__ import annotations
 
+import os
 from typing import Callable, Optional
 
 import gi
 gi.require_version("GLib", "2.0")
-from gi.repository import GLib
+gi.require_version("Gio", "2.0")
+from gi.repository import GLib, Gio
 
 try:
     import pystray
@@ -31,6 +33,42 @@ def _draw_default_icon() -> "Image.Image":
     return image
 
 
+def _has_status_notifier_watcher() -> bool:
+    """Check whether a StatusNotifier watcher is present on DBus."""
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        reply = bus.call_sync(
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "ListNames",
+            None,
+            GLib.VariantType("(as)"),
+            Gio.DBusCallFlags.NONE,
+            1500,
+            None,
+        )
+        names = set(reply.unpack()[0]) if reply is not None else set()
+        return "org.kde.StatusNotifierWatcher" in names
+    except Exception:
+        return False
+
+
+def _has_tray_host() -> bool:
+    """Best-effort desktop support check for tray integration."""
+    if not HAS_TRAY:
+        return False
+
+    current_desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
+    session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+
+    # GNOME on Wayland needs an AppIndicator/SNI host (usually an extension).
+    if "gnome" in current_desktop and session_type == "wayland":
+        return _has_status_notifier_watcher()
+
+    return True
+
+
 class TrayManager:
     """Manage a tray icon lifecycle using pystray when available."""
 
@@ -41,7 +79,7 @@ class TrayManager:
 
     @property
     def available(self) -> bool:
-        return HAS_TRAY
+        return _has_tray_host()
 
     @property
     def active(self) -> bool:
@@ -49,7 +87,7 @@ class TrayManager:
 
     def show(self) -> bool:
         """Show tray icon. Returns False if tray backend is unavailable."""
-        if not HAS_TRAY:
+        if not self.available:
             return False
         if self._icon is not None:
             return True

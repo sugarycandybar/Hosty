@@ -29,6 +29,7 @@ class HostyWindow(Adw.ApplicationWindow):
         self._playit_autostart_paused_server_id: str | None = None
         self._hidden_to_tray = False
         self._allow_close = False
+        self._tray_unavailable_notified = False
         self._tray_manager = TrayManager(
             on_restore=self.restore_from_background,
             on_quit=self._quit_from_tray,
@@ -160,12 +161,17 @@ class HostyWindow(Adw.ApplicationWindow):
 
     def _sync_tray_for_runtime(self, running_id: str | None, auto_hide: bool = False):
         if running_id:
-            if self._tray_manager.show() and auto_hide and not self._hidden_to_tray:
+            shown = self._tray_manager.show()
+            if shown and auto_hide and not self._hidden_to_tray:
                 self.hide()
                 self._hidden_to_tray = True
+            elif auto_hide and not shown and not self._tray_unavailable_notified:
+                self._tray_unavailable_notified = True
+                self.show_toast("Tray icon unavailable in this desktop session")
             return
 
         self._tray_manager.hide()
+        self._tray_unavailable_notified = False
         if self._hidden_to_tray:
             self._hidden_to_tray = False
             self.present()
