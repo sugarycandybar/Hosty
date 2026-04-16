@@ -3,20 +3,17 @@ Playit setup dialog.
 """
 from __future__ import annotations
 
-import threading
 import subprocess
 import sys
+import threading
 import webbrowser
-import re
-import time
-from pathlib import Path
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Adw, GLib, GObject, Gtk, Gdk
+from gi.repository import Adw, GLib, GObject, Gtk
 
 from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
 from hosty.shared.backend.server_manager import ServerInfo, ServerManager
@@ -38,7 +35,7 @@ def _open_uri(uri: str) -> bool:
 
 
 class PlayitSetupDialog(Adw.Dialog):
-    """Guided setup for playit install + claim flow."""
+    """Guided setup for playit install + setup-code link flow."""
 
     __gsignals__ = {
         "setup-complete": (GObject.SignalFlags.RUN_FIRST, None, ()),
@@ -53,6 +50,7 @@ class PlayitSetupDialog(Adw.Dialog):
         self._setup_started = False
         self._finalize_started = False
         self._finished = False
+        self._did_try_open_setup_link = False
 
         self.set_title("Set Up Playit")
         self.set_content_width(520)
@@ -92,8 +90,9 @@ class PlayitSetupDialog(Adw.Dialog):
         status.set_title("Playit Installation Steps")
         status.set_description(
             "1. Download Playit agent\n"
-            "2. Start agent\n"
-            "3. Open browser claim link to connect your account"
+            "2. Open the Hosty setup URL\n"
+            "3. Paste your setup code\n"
+            "4. Link account and start tunnel"
         )
         return status
 
@@ -125,15 +124,20 @@ class PlayitSetupDialog(Adw.Dialog):
         page = Adw.PreferencesPage()
 
         group = Adw.PreferencesGroup(
-            title="Claim Playit",
-            description="Open the claim page to continue setup",
+            title="Link Playit",
+            description="Open the setup link and paste the setup code",
         )
 
-        self._claim_link_row = Adw.ActionRow(title="Claim link", subtitle="Waiting for link...")
+        self._claim_link_row = Adw.ActionRow(title="Setup link", subtitle="Waiting for link...")
         self._claim_link_row.set_activatable(True)
         self._claim_link_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         self._claim_link_row.connect("activated", self._on_open_claim_link)
         group.add(self._claim_link_row)
+
+        self._setup_code_row = Adw.EntryRow(title="Setup code")
+        self._setup_code_row.set_show_apply_button(False)
+        self._setup_code_row.set_text("")
+        group.add(self._setup_code_row)
 
         page.add(group)
 
@@ -145,8 +149,8 @@ class PlayitSetupDialog(Adw.Dialog):
     def _build_success_page(self) -> Gtk.Widget:
         status = Adw.StatusPage()
         status.set_icon_name("object-select-symbolic")
-        status.set_title("Finish setup from the link")
-        status.set_description("Complete Playit setup in the browser link to finish connecting this server.")
+        status.set_title("Playit setup complete")
+        status.set_description("Your account is linked and tunnel startup is ready for this server.")
         return status
 
     def _on_close_clicked(self, *_args):
@@ -156,6 +160,8 @@ class PlayitSetupDialog(Adw.Dialog):
         page = self._stack.get_visible_child_name()
         if page == "steps":
             self._begin_checking()
+        elif page == "claim":
+            self._begin_finish_setup()
         elif page == "success":
             self.close()
 
@@ -163,7 +169,7 @@ class PlayitSetupDialog(Adw.Dialog):
         if self._setup_started:
             return
         self._setup_started = True
-        self._stack.set_visible_child_name("steps")
+        self._begin_checking()
 
     def _begin_checking(self):
         self._action_btn.set_sensitive(False)
@@ -194,8 +200,6 @@ class PlayitSetupDialog(Adw.Dialog):
 
     def _setup_thread(self):
         manager = self._server_manager.playit_manager
-        server_id = self._server_info.id
-        server_dir = str(self._server_info.server_dir)
 
         self._update_progress(0.2, "Checking Playit installation...", "")
         binary = manager.resolve_binary()
@@ -210,128 +214,61 @@ class PlayitSetupDialog(Adw.Dialog):
             self._show_error("Playit install completed but binary path was not found.")
             return
 
-        self._update_progress(0.45, "Starting Playit agent...", "")
-        start_ok, start_msg = manager.start(
-            server_id,
-            server_dir,
-            secret="",
-            auto_install=True,
-            allow_unclaimed=True,
-        )
-        if not start_ok and not manager.is_running_for(server_id):
-            self._show_error(f"Could not start Playit: {start_msg}")
-            return
-
-        # Wait for claim URL from the live agent process.
-        self._update_progress(0.7, "Waiting for claim link...", "")
-        deadline = time.monotonic() + 60.0
-        claimed_since = 0.0
-        while time.monotonic() < deadline:
-            if manager.claim_url:
-                self._claim_url = manager.claim_url
-                self._show_claim_page()
+        if manager.has_claimed_secret():
+            linked_ok, _detail = manager.validate_existing_link(retry_attempts=3)
+            if linked_ok:
+                self._mark_setup_complete(manager)
                 return
 
-            if manager.has_claimed_secret() and manager.is_running_for(server_id):
-                # If this agent is already claimed, playit may not emit a claim link.
-                if claimed_since == 0.0:
-                    claimed_since = time.monotonic()
-                elif time.monotonic() - claimed_since >= 2.0:
-                    self._mark_setup_complete(binary, manager)
-                    return
-            else:
-                claimed_since = 0.0
-
-            if manager.public_endpoint and not manager.claim_url:
-                # Already claimed and connected on this device.
-                self._mark_setup_complete(binary, manager)
-                return
-            if not manager.is_running_for(server_id):
-                self._show_error("Playit stopped while waiting for claim link.")
-                return
-            time.sleep(0.2)
-
-        self._show_error("Playit did not provide a claim link in time.")
-
-    def _run_playit_command(self, command: list[str], timeout: int) -> str:
-        ok, output = self._run_playit_command_result(command, timeout)
-        if not ok:
-            return ""
-        return output
-
-    def _run_playit_command_result(self, command: list[str], timeout: int) -> tuple[bool, str]:
-        try:
-            result = subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=timeout,
-                cwd=str(self._server_info.server_dir),
-            )
-            output = (result.stdout or "").strip()
-            return result.returncode == 0, output
-        except Exception:
-            return False, ""
+        self._claim_url = manager.setup_url
+        self._show_claim_page()
 
     def _show_claim_page(self):
         def ui():
             self._claim_link_row.set_subtitle(self._claim_url)
             self._stack.set_visible_child_name("claim")
             self._close_btn.set_sensitive(True)
-            self._action_btn.set_sensitive(False)
-            self._action_btn.set_label("Waiting for browser...")
+            self._action_btn.set_sensitive(True)
+            self._action_btn.set_label("Link Code")
+            if self._claim_url and not self._did_try_open_setup_link:
+                self._did_try_open_setup_link = True
+                _open_uri(self._claim_url)
 
         GLib.idle_add(ui)
 
     def _begin_finish_setup(self):
         if self._finalize_started:
             return
-        self._finalize_started = True
 
+        setup_code = self._setup_code_row.get_text().strip()
+        if not setup_code:
+            self._show_error("Paste the setup code from the browser first.")
+            return
+
+        self._finalize_started = True
         self._close_btn.set_sensitive(False)
         self._action_btn.set_sensitive(False)
-        self._action_btn.set_label("Finalizing...")
+        self._action_btn.set_label("Linking...")
         self._stack.set_visible_child_name("progress")
         self._update_progress(
             0.85,
-            "Waiting for browser approval...",
-            "In browser: Continue, set name, Add agent. Keep Playit running.",
+            "Linking account...",
+            "Exchanging setup code with playit.",
         )
 
-        threading.Thread(target=self._finish_setup_thread, daemon=True).start()
+        threading.Thread(target=self._finish_setup_thread, args=(setup_code,), daemon=True).start()
 
-    def _finish_setup_thread(self):
+    def _finish_setup_thread(self, setup_code: str):
         manager = self._server_manager.playit_manager
-        server_id = self._server_info.id
-        binary = manager.resolve_binary()
-        if not binary:
-            self._show_error("Playit binary is missing. Run setup again.")
+        ok, msg = manager.link_account(setup_code)
+        if not ok:
+            self._show_error(f"Could not link playit account: {msg}")
             return
 
-        # Wait for the running agent to become claimed.
-        deadline = time.monotonic() + 600.0
-        while time.monotonic() < deadline:
-            if manager.has_claimed_secret():
-                self._mark_setup_complete(binary, manager)
-                return
-            if manager.public_endpoint:
-                # Some setups may become connected before secret file is visible.
-                self._mark_setup_complete(binary, manager)
-                return
-            if manager.claim_url and manager.claim_url != self._claim_url:
-                self._claim_url = manager.claim_url
-            if not manager.is_running_for(server_id):
-                self._show_error("Playit agent stopped before claim completed.")
-                break
-            time.sleep(0.25)
+        self._mark_setup_complete(manager)
 
-        if self._finished:
-            return
-        self._show_error("Timed out waiting for browser claim to complete.")
-
-    def _mark_setup_complete(self, binary: str, manager):
-        secret = self._read_secret_after_exchange(binary)
+    def _mark_setup_complete(self, manager):
+        secret = manager.read_claimed_secret()
 
         cfg = load_playit_config(self._server_info.server_dir)
         cfg["enabled"] = True
@@ -351,7 +288,7 @@ class PlayitSetupDialog(Adw.Dialog):
                 allow_unclaimed=False,
             )
             if not start_ok:
-                self._show_error(f"Claim succeeded, but could not keep Playit running: {start_msg}")
+                self._show_error(f"Account linked, but could not start Playit: {start_msg}")
                 return
 
         self._finished = True
@@ -365,46 +302,7 @@ class PlayitSetupDialog(Adw.Dialog):
 
         GLib.idle_add(ui)
 
-    def _read_secret_after_exchange(self, binary: str) -> str:
-        path_text = self._run_playit_command([binary, "--stdout", "secret-path"], timeout=8)
-        if not path_text:
-            return ""
-
-        raw_path = path_text.splitlines()[-1].strip()
-        if not raw_path:
-            return ""
-
-        path = Path(raw_path)
-        if not path.exists() or not path.is_file():
-            return ""
-
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore").strip()
-        except Exception:
-            return ""
-
-        if not text:
-            return ""
-
-        for pattern in (
-            r'(?mi)^\s*secret\s*=\s*"([^"]+)"\s*$',
-            r'(?mi)^\s*secret_key\s*=\s*"([^"]+)"\s*$',
-            r'(?mi)^\s*key\s*=\s*"([^"]+)"\s*$',
-        ):
-            m = re.search(pattern, text)
-            if m:
-                return m.group(1).strip()
-
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        if len(lines) == 1 and "=" not in lines[0]:
-            return lines[0]
-
-        return ""
-
     def _on_open_claim_link(self, *_args):
         if not self._claim_url:
             return
-        if not _open_uri(self._claim_url):
-            self._show_error("Could not open browser for the claim link.")
-            return
-        self._begin_finish_setup()
+        _open_uri(self._claim_url)

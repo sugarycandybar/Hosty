@@ -20,14 +20,21 @@
 
 button.hosty-starting-button,
 button.hosty-starting-button:disabled {
-    background-color: #e5a50a;
-    color: #2b1a00;
+    background-color: alpha(#e5a50a, 0.14);
+    border-color: alpha(#e5a50a, 0.4);
+    color: #e5a50a;
     opacity: 1;
 }
 
 button.hosty-starting-button:hover,
 button.hosty-starting-button:active {
-    background-color: #d99a00;
+    background-color: alpha(#e5a50a, 0.20);
+}
+
+button.playit-compact-button {
+    min-height: 28px;
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 
 /* ===== Status Indicators ===== */

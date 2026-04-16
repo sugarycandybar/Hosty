@@ -4,25 +4,23 @@ Playit setup dialog for Windows UI.
 
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 import threading
-import time
 import webbrowser
-from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QProgressBar,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
-    QGroupBox,
 )
 
 from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
@@ -36,11 +34,19 @@ def _open_uri(uri: str) -> bool:
             return True
     except Exception:
         pass
+
+    try:
+        cmd = ["open", uri] if sys.platform == "darwin" else ["xdg-open", uri]
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return True
+    except Exception:
+        pass
+
     return False
 
 
 class PlayitSetupDialog(QDialog):
-    """Guided setup for playit install + claim flow."""
+    """Guided setup for playit install + setup-code link flow."""
 
     def __init__(self, server_manager: ServerManager, server_info: ServerInfo, parent=None):
         super().__init__(parent)
@@ -51,16 +57,16 @@ class PlayitSetupDialog(QDialog):
         self._setup_started = False
         self._finalize_started = False
         self._setup_completed_flag = False
+        self._did_try_open_setup_link = False
 
         self.setWindowTitle("Set Up Playit")
-        self.setMinimumSize(500, 360)
+        self.setMinimumSize(520, 380)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint | Qt.WindowType.WindowCloseButtonHint)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Header
         header = QWidget()
         header.setProperty("class", "header-bar")
         header_layout = QHBoxLayout(header)
@@ -83,7 +89,6 @@ class PlayitSetupDialog(QDialog):
 
         root.addWidget(header)
 
-        # Stacked pages
         self._stack = QStackedWidget()
         root.addWidget(self._stack, 1)
 
@@ -104,8 +109,9 @@ class PlayitSetupDialog(QDialog):
 
         steps_text = (
             "1. Download Playit agent\n"
-            "2. Start agent\n"
-            "3. Open browser claim link to connect your account"
+            "2. Open the Hosty setup URL\n"
+            "3. Paste your setup code\n"
+            "4. Link account and start tunnel"
         )
         steps_lbl = QLabel(steps_text)
         steps_lbl.setProperty("class", "subtitle")
@@ -119,7 +125,7 @@ class PlayitSetupDialog(QDialog):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(40, 40, 40, 40)
         layout.setSpacing(16)
-        
+
         self._progress_title = QLabel("Preparing Playit")
         self._progress_title.setProperty("class", "title")
         layout.addWidget(self._progress_title)
@@ -147,26 +153,32 @@ class PlayitSetupDialog(QDialog):
         layout.setContentsMargins(40, 40, 40, 40)
         layout.setSpacing(16)
 
-        lbl = QLabel("Claim Playit Agent")
+        lbl = QLabel("Link Playit Account")
         lbl.setProperty("class", "title")
         layout.addWidget(lbl)
 
-        lbl2 = QLabel("Open the claim page to continue setup.")
+        lbl2 = QLabel("Open the setup link, copy the setup code, and paste it below.")
         lbl2.setProperty("class", "subtitle")
+        lbl2.setWordWrap(True)
         layout.addWidget(lbl2)
 
         group = QGroupBox()
         group_layout = QVBoxLayout(group)
         group_layout.setSpacing(8)
 
-        self._claim_link_lbl = QLabel("Waiting for link...")
+        self._claim_link_lbl = QLabel("Waiting for setup link...")
         self._claim_link_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._claim_link_lbl.setWordWrap(True)
         group_layout.addWidget(self._claim_link_lbl)
 
-        open_btn = QPushButton("Open Claim Link")
+        open_btn = QPushButton("Open Setup Link")
         open_btn.setProperty("class", "accent")
         open_btn.clicked.connect(self._on_open_claim_link)
         group_layout.addWidget(open_btn)
+
+        self._setup_code_input = QLineEdit()
+        self._setup_code_input.setPlaceholderText("Paste setup code")
+        group_layout.addWidget(self._setup_code_input)
 
         layout.addWidget(group)
         layout.addStretch()
@@ -179,31 +191,33 @@ class PlayitSetupDialog(QDialog):
         layout.setSpacing(16)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
-        lbl = QLabel("Finish setup from the link")
+        lbl = QLabel("Playit setup complete")
         lbl.setProperty("class", "title")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl)
 
-        lbl2 = QLabel("Complete Playit setup in the browser link to finish connecting this server.")
+        lbl2 = QLabel("Your account is linked and tunnel startup is ready for this server.")
         lbl2.setProperty("class", "dim")
         lbl2.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl2.setWordWrap(True)
         layout.addWidget(lbl2)
-        
+
         return page
 
     def _on_action_clicked(self) -> None:
         idx = self._stack.currentIndex()
         if idx == 0:
             self._begin_checking()
-        elif idx == 3:  # Success page
+        elif idx == 2:
+            self._begin_finish_setup()
+        elif idx == 3:
             self.accept()
 
     def start_setup(self) -> None:
         if self._setup_started:
             return
         self._setup_started = True
-        self._stack.setCurrentIndex(0)
+        self._begin_checking()
 
     def _begin_checking(self) -> None:
         self._action_btn.setDisabled(True)
@@ -236,8 +250,6 @@ class PlayitSetupDialog(QDialog):
 
     def _setup_thread(self) -> None:
         manager = self._server_manager.playit_manager
-        server_id = self._server_info.id
-        server_dir = str(self._server_info.server_dir)
 
         self._update_progress(0.2, "Checking Playit installation...", "")
         binary = manager.resolve_binary()
@@ -252,114 +264,54 @@ class PlayitSetupDialog(QDialog):
             self._show_error("Playit install completed but binary path was not found.")
             return
 
-        self._update_progress(0.45, "Starting Playit agent...", "")
-        start_ok, start_msg = manager.start(
-            server_id,
-            server_dir,
-            secret="",
-            auto_install=True,
-            allow_unclaimed=True,
-        )
-        if not start_ok and not manager.is_running_for(server_id):
-            self._show_error(f"Could not start Playit: {start_msg}")
-            return
-
-        self._update_progress(0.7, "Waiting for claim link...", "")
-        deadline = time.monotonic() + 60.0
-        claimed_since = 0.0
-        while time.monotonic() < deadline:
-            if manager.claim_url:
-                self._claim_url = manager.claim_url
-                dispatch_on_main_thread(self._show_claim_page)
+        if manager.has_claimed_secret():
+            linked_ok, _detail = manager.validate_existing_link(retry_attempts=3)
+            if linked_ok:
+                self._mark_setup_complete(manager)
                 return
 
-            if manager.has_claimed_secret() and manager.is_running_for(server_id):
-                if claimed_since == 0.0:
-                    claimed_since = time.monotonic()
-                elif time.monotonic() - claimed_since >= 2.0:
-                    self._mark_setup_complete(binary, manager)
-                    return
-            else:
-                claimed_since = 0.0
-
-            if manager.public_endpoint and not manager.claim_url:
-                self._mark_setup_complete(binary, manager)
-                return
-            if not manager.is_running_for(server_id):
-                self._show_error("Playit stopped while waiting for claim link.")
-                return
-            time.sleep(0.2)
-
-        self._show_error("Playit did not provide a claim link in time.")
-
-    def _run_playit_command(self, command: list[str], timeout: int) -> str:
-        try:
-            result = subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=timeout,
-                cwd=str(self._server_info.server_dir),
-            )
-            output = (result.stdout or "").strip()
-            return output if result.returncode == 0 else ""
-        except Exception:
-            return ""
+        self._claim_url = manager.setup_url
+        dispatch_on_main_thread(self._show_claim_page)
 
     def _show_claim_page(self) -> None:
         self._claim_link_lbl.setText(self._claim_url)
         self._stack.setCurrentIndex(2)
         self._close_btn.setEnabled(True)
-        self._action_btn.setDisabled(True)
-        self._action_btn.setText("Waiting for browser...")
+        self._action_btn.setEnabled(True)
+        self._action_btn.setText("Link Code")
+        if self._claim_url and not self._did_try_open_setup_link:
+            self._did_try_open_setup_link = True
+            _open_uri(self._claim_url)
 
     def _begin_finish_setup(self) -> None:
         if self._finalize_started:
             return
-        self._finalize_started = True
 
+        setup_code = self._setup_code_input.text().strip()
+        if not setup_code:
+            self._show_error("Paste the setup code from the browser first.")
+            return
+
+        self._finalize_started = True
         self._close_btn.setDisabled(True)
         self._action_btn.setDisabled(True)
-        self._action_btn.setText("Finalizing...")
+        self._action_btn.setText("Linking...")
         self._stack.setCurrentIndex(1)
-        self._update_progress(
-            0.85,
-            "Waiting for browser approval...",
-            "In browser: Continue, set name, Add agent. Keep Playit running.",
-        )
+        self._update_progress(0.85, "Linking account...", "Exchanging setup code with playit.")
 
-        threading.Thread(target=self._finish_setup_thread, daemon=True).start()
+        threading.Thread(target=self._finish_setup_thread, args=(setup_code,), daemon=True).start()
 
-    def _finish_setup_thread(self) -> None:
+    def _finish_setup_thread(self, setup_code: str) -> None:
         manager = self._server_manager.playit_manager
-        server_id = self._server_info.id
-        binary = manager.resolve_binary()
-        if not binary:
-            self._show_error("Playit binary is missing. Run setup again.")
+        ok, msg = manager.link_account(setup_code)
+        if not ok:
+            self._show_error(f"Could not link playit account: {msg}")
             return
 
-        deadline = time.monotonic() + 600.0
-        while time.monotonic() < deadline:
-            if manager.has_claimed_secret():
-                self._mark_setup_complete(binary, manager)
-                return
-            if manager.public_endpoint:
-                self._mark_setup_complete(binary, manager)
-                return
-            if manager.claim_url and manager.claim_url != self._claim_url:
-                self._claim_url = manager.claim_url
-            if not manager.is_running_for(server_id):
-                self._show_error("Playit agent stopped before claim completed.")
-                break
-            time.sleep(0.25)
+        self._mark_setup_complete(manager)
 
-        if self._setup_completed_flag:
-            return
-        self._show_error("Timed out waiting for browser claim to complete.")
-
-    def _mark_setup_complete(self, binary: str, manager) -> None:
-        secret = self._read_secret_after_exchange(binary)
+    def _mark_setup_complete(self, manager) -> None:
+        secret = manager.read_claimed_secret()
 
         cfg = load_playit_config(self._server_info.server_dir)
         cfg["enabled"] = True
@@ -379,11 +331,10 @@ class PlayitSetupDialog(QDialog):
                 allow_unclaimed=False,
             )
             if not start_ok:
-                self._show_error(f"Claim succeeded, but could not keep Playit running: {start_msg}")
+                self._show_error(f"Account linked, but could not start Playit: {start_msg}")
                 return
 
         self._setup_completed_flag = True
-
         dispatch_on_main_thread(self._finish_ui_state)
 
     def _finish_ui_state(self) -> None:
@@ -392,45 +343,7 @@ class PlayitSetupDialog(QDialog):
         self._action_btn.setEnabled(True)
         self._action_btn.setText("Done")
 
-    def _read_secret_after_exchange(self, binary: str) -> str:
-        path_text = self._run_playit_command([binary, "--stdout", "secret-path"], timeout=8)
-        if not path_text:
-            return ""
-
-        raw_path = path_text.splitlines()[-1].strip()
-        if not raw_path:
-            return ""
-
-        path = Path(raw_path)
-        if not path.exists() or not path.is_file():
-            return ""
-
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore").strip()
-        except Exception:
-            return ""
-
-        if not text:
-            return ""
-
-        for pattern in (
-            r'(?mi)^\s*secret\s*=\s*"([^"]+)"\s*$',
-            r'(?mi)^\s*secret_key\s*=\s*"([^"]+)"\s*$',
-            r'(?mi)^\s*key\s*=\s*"([^"]+)"\s*$',
-        ):
-            m = re.search(pattern, text)
-            if m:
-                return m.group(1).strip()
-
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
-        if len(lines) == 1 and "=" not in lines[0]:
-            return lines[0]
-
-        return ""
-
     def _on_open_claim_link(self) -> None:
         if not self._claim_url:
             return
-        if not _open_uri(self._claim_url):
-            return
-        self._begin_finish_setup()
+        _open_uri(self._claim_url)

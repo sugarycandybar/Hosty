@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QToolButton,
     QVBoxLayout,
     QWidget,
     QScrollArea,
@@ -110,33 +111,75 @@ class ConnectMixin:
         self._playit_status_label.setProperty("class", "dim")
         playit_layout.addWidget(self._playit_status_label)
 
+        domain_row = QHBoxLayout()
+        domain_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        domain_row.addWidget(QLabel("Tunnel Domain"))
+        domain_row.addStretch(1)
+        self._playit_domain_value = QLabel("Not available")
+        self._playit_domain_value.setProperty("class", "dim")
+        self._playit_domain_value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        domain_row.addWidget(self._playit_domain_value)
+        self._copy_domain_btn = QPushButton()
+        self._copy_domain_btn.setIcon(get_material_icon("content_copy", icon_color, 16))
+        self._copy_domain_btn.setFixedSize(28, 28)
+        self._copy_domain_btn.setProperty("class", "flat")
+        self._copy_domain_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._copy_domain_btn.setToolTip("Copy tunnel domain")
+        self._copy_domain_btn.setEnabled(False)
+        self._copy_domain_btn.clicked.connect(self._copy_playit_domain)
+        domain_row.addWidget(self._copy_domain_btn)
+        playit_layout.addLayout(domain_row)
+
         tunnel_row = QHBoxLayout()
         self._tunnel_btn = QPushButton("Start Playit")
         self._tunnel_btn.setProperty("class", "accent")
+        self._tunnel_btn.setFixedHeight(28)
         self._tunnel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._tunnel_btn.clicked.connect(self._on_tunnel_toggle)
         tunnel_row.addWidget(self._tunnel_btn)
         tunnel_row.addStretch()
         playit_layout.addLayout(tunnel_row)
 
-        self._auto_start_check = QCheckBox("Start tunnel with server")
+        self._playit_settings_toggle = QToolButton()
+        self._playit_settings_toggle.setText("Playit settings")
+        self._playit_settings_toggle.setCheckable(True)
+        self._playit_settings_toggle.setChecked(False)
+        self._playit_settings_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self._playit_settings_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._playit_settings_toggle.clicked.connect(self._toggle_playit_settings)
+        playit_layout.addWidget(self._playit_settings_toggle, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self._playit_settings_widget = QWidget()
+        settings_layout = QVBoxLayout(self._playit_settings_widget)
+        settings_layout.setContentsMargins(18, 0, 0, 0)
+        settings_layout.setSpacing(8)
+
+        self._auto_start_check = QCheckBox("Start with server")
         self._auto_start_check.setCursor(Qt.CursorShape.PointingHandCursor)
         self._auto_start_check.setToolTip("Automatically start and stop tunnel with the server")
         self._auto_start_check.toggled.connect(self._on_auto_start_toggled)
-        playit_layout.addWidget(self._auto_start_check)
+        settings_layout.addWidget(self._auto_start_check)
 
-        links_row = QHBoxLayout()
-        dashboard_btn = QPushButton("Open Dashboard")
+        settings_links_row = QHBoxLayout()
+        self._regenerate_domain_btn = QPushButton("Regenerate Tunnel Domain")
+        self._regenerate_domain_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._regenerate_domain_btn.clicked.connect(self._on_regenerate_domain)
+        settings_links_row.addWidget(self._regenerate_domain_btn)
+
+        dashboard_btn = QPushButton("Open Playit Dashboard")
         dashboard_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         dashboard_btn.clicked.connect(lambda: webbrowser.open(PLAYIT_DASHBOARD_URL))
-        links_row.addWidget(dashboard_btn)
+        settings_links_row.addWidget(dashboard_btn)
 
-        setup_btn = QPushButton("Set Up Playit")
+        setup_btn = QPushButton("Set Up Playit Again")
         setup_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         setup_btn.clicked.connect(self._on_setup_playit)
-        links_row.addWidget(setup_btn)
-        links_row.addStretch()
-        playit_layout.addLayout(links_row)
+        settings_links_row.addWidget(setup_btn)
+        settings_links_row.addStretch()
+        settings_layout.addLayout(settings_links_row)
+
+        self._playit_settings_widget.setVisible(False)
+        playit_layout.addWidget(self._playit_settings_widget)
 
         layout.addWidget(playit_group)
 
@@ -209,6 +252,8 @@ class ConnectMixin:
         self._connect_server_info: Optional[ServerInfo] = None
         self._connect_cfg = {}
         self._playit_status_id = None
+        self._playit_endpoint_id = None
+        self._playit_starting = False
         self._suppress_connect_changes = False
 
         # Detect LAN IP
@@ -273,7 +318,13 @@ class ConnectMixin:
                 playit.disconnect(self._playit_status_id)
             except Exception:
                 pass
+        if self._playit_endpoint_id is not None:
+            try:
+                playit.disconnect(self._playit_endpoint_id)
+            except Exception:
+                pass
         self._playit_status_id = playit.connect("status-changed", self._on_playit_status_changed)
+        self._playit_endpoint_id = playit.connect("endpoint-changed", self._on_playit_endpoint_changed)
 
         self._refresh_playit_ui()
 
@@ -289,9 +340,12 @@ class ConnectMixin:
             return
 
         sid = self._connect_server_info.id
+        endpoint = str(playit.public_endpoint or "").strip()
+        endpoint_for_this_server = ""
 
         if playit.is_running_for(sid):
             self._playit_status_label.setText("Tunnel is running")
+            endpoint_for_this_server = endpoint
             self._tunnel_btn.setText("Stop Tunnel")
             self._tunnel_btn.setProperty("class", "stop")
             self._tunnel_btn.setEnabled(True)
@@ -306,11 +360,54 @@ class ConnectMixin:
             self._tunnel_btn.setProperty("class", "accent")
             self._tunnel_btn.setEnabled(True)
 
+        if self._playit_starting:
+            self._playit_status_label.setText("Tunnel is starting")
+            self._tunnel_btn.setText("Starting...")
+            self._tunnel_btn.setEnabled(False)
+            self._tunnel_btn.setStyleSheet("color: #d9a500;")
+        else:
+            self._tunnel_btn.setStyleSheet("")
+
+        self._playit_domain_value.setText(endpoint_for_this_server or "Not available")
+        self._copy_domain_btn.setEnabled(bool(endpoint_for_this_server))
+        can_regenerate = (
+            self._is_setup_complete()
+            and (not playit.is_running or playit.is_running_for(sid))
+            and not self._playit_starting
+        )
+        self._regenerate_domain_btn.setEnabled(can_regenerate)
+
         self._tunnel_btn.style().unpolish(self._tunnel_btn)
         self._tunnel_btn.style().polish(self._tunnel_btn)
 
     def _on_playit_status_changed(self, *_args) -> None:
         self._refresh_playit_ui()
+
+    def _on_playit_endpoint_changed(self, *_args) -> None:
+        self._refresh_playit_ui()
+
+    def _toggle_playit_settings(self) -> None:
+        expanded = self._playit_settings_toggle.isChecked()
+        self._playit_settings_toggle.setArrowType(
+            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+        )
+        self._playit_settings_widget.setVisible(expanded)
+
+    def _copy_playit_domain(self) -> None:
+        endpoint = self._playit_domain_value.text().strip()
+        if not endpoint:
+            return
+        try:
+            from PySide6.QtWidgets import QApplication
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(endpoint)
+                self._player_status_label.setText("✓ Tunnel domain copied")
+                QTimer.singleShot(3000, lambda: (
+                    self._player_status_label.setText("") if "copied" in self._player_status_label.text() else None
+                ))
+        except Exception:
+            pass
 
     def _on_tunnel_toggle(self) -> None:
         if not self._connect_server_info:
@@ -330,15 +427,59 @@ class ConnectMixin:
         secret = str(cfg.get("secret", "")).strip()
 
         def worker():
-            playit.start(
+            ok, msg = playit.start(
                 sid,
                 str(self._connect_server_info.server_dir),
                 secret=secret,
                 auto_install=True,
             )
 
-        self._tunnel_btn.setEnabled(False)
-        self._tunnel_btn.setText("Starting…")
+            def done():
+                self._playit_starting = False
+                self._refresh_playit_ui()
+                if not ok:
+                    self._player_status_label.setText(f"Playit start failed: {msg}")
+
+            dispatch_on_main_thread(done)
+
+        self._playit_starting = True
+        self._refresh_playit_ui()
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_regenerate_domain(self) -> None:
+        if not self._connect_server_info:
+            return
+        if not self._is_setup_complete():
+            self._on_setup_playit()
+            return
+        if self._playit_starting:
+            return
+
+        playit = self._server_manager.playit_manager
+        sid = self._connect_server_info.id
+        cfg = self._connect_cfg
+        secret = str(cfg.get("secret", "")).strip()
+
+        def worker():
+            ok, msg = playit.regenerate_domain(
+                sid,
+                str(self._connect_server_info.server_dir),
+                secret=secret,
+                auto_install=True,
+            )
+
+            def done():
+                self._playit_starting = False
+                self._refresh_playit_ui()
+                if ok:
+                    self._player_status_label.setText("✓ Tunnel domain regenerated")
+                else:
+                    self._player_status_label.setText(f"Playit regenerate failed: {msg}")
+
+            dispatch_on_main_thread(done)
+
+        self._playit_starting = True
+        self._refresh_playit_ui()
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_auto_start_toggled(self, checked: bool) -> None:

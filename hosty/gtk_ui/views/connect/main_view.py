@@ -39,6 +39,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._server_info: Optional[ServerInfo] = None
         self._server_manager: Optional[ServerManager] = None
         self._status_handler_id: Optional[int] = None
+        self._endpoint_handler_id: Optional[int] = None
         self._manager_changed_id: Optional[int] = None
         self._cfg = {}
         self._suppress_config_updates = False
@@ -114,28 +115,52 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._tunnel_row.set_activatable(False)
         self._tunnel_btn = Gtk.Button(label="Start")
         self._tunnel_btn.add_css_class("suggested-action")
+        self._tunnel_btn.add_css_class("playit-compact-button")
         self._tunnel_btn.connect("clicked", self._on_tunnel_toggle)
         self._tunnel_row.add_suffix(self._tunnel_btn)
         group.add(self._tunnel_row)
+
+        self._tunnel_domain_row = Adw.ActionRow(title="Tunnel domain", subtitle="Not available")
+        self._tunnel_domain_row.set_activatable(False)
+        self._copy_tunnel_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic")
+        self._copy_tunnel_domain_btn.add_css_class("flat")
+        self._copy_tunnel_domain_btn.set_tooltip_text("Copy tunnel domain")
+        self._copy_tunnel_domain_btn.set_sensitive(False)
+        self._copy_tunnel_domain_btn.connect("clicked", self._on_copy_tunnel_domain)
+        self._tunnel_domain_row.add_suffix(self._copy_tunnel_domain_btn)
+        group.add(self._tunnel_domain_row)
+
+        settings_row = Adw.ExpanderRow(
+            title="Playit settings",
+            subtitle="Start behavior and setup tools",
+        )
 
         self._auto_start_row = Adw.SwitchRow(
             title="Start with server",
             subtitle="Automatically start and stop with this server",
         )
         self._auto_start_row.connect("notify::active", self._on_auto_start_toggled)
-        group.add(self._auto_start_row)
+        settings_row.add_row(self._auto_start_row)
 
         dashboard_row = Adw.ActionRow(title="Open playit dashboard", subtitle="View tunnel address and details")
         dashboard_row.add_prefix(Gtk.Image.new_from_icon_name("video-display-symbolic"))
         dashboard_row.set_activatable(True)
         dashboard_row.connect("activated", self._on_open_dashboard)
-        group.add(dashboard_row)
+        settings_row.add_row(dashboard_row)
+
+        regen_row = Adw.ActionRow(title="Regenerate tunnel domain", subtitle="Create a fresh public tunnel address")
+        regen_row.add_prefix(Gtk.Image.new_from_icon_name("network-wired-symbolic"))
+        regen_row.set_activatable(True)
+        regen_row.connect("activated", self._on_regenerate_domain)
+        settings_row.add_row(regen_row)
 
         reset_row = Adw.ActionRow(title="Set Up Playit Again", subtitle="Re-run guided setup")
         reset_row.add_prefix(Gtk.Image.new_from_icon_name("view-refresh-symbolic"))
         reset_row.set_activatable(True)
         reset_row.connect("activated", self._on_open_setup_dialog)
-        group.add(reset_row)
+        settings_row.add_row(reset_row)
+
+        group.add(settings_row)
 
         page.add(group)
         self._append_players_groups(page)
@@ -159,8 +184,15 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
             except Exception:
                 pass
             self._status_handler_id = None
+        if self._endpoint_handler_id is not None:
+            try:
+                playit.disconnect(self._endpoint_handler_id)
+            except Exception:
+                pass
+            self._endpoint_handler_id = None
 
         self._status_handler_id = playit.connect("status-changed", self._on_playit_status_changed)
+        self._endpoint_handler_id = playit.connect("endpoint-changed", self._on_playit_endpoint_changed)
         self._manager_changed_id = self._server_manager.connect("server-changed", self._on_server_changed)
         self._refresh_local_ip_row()
         self._load_server_config()

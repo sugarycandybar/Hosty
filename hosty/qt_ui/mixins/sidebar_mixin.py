@@ -146,7 +146,7 @@ class SidebarMixin:
 
     def _show_preferences(self) -> None:
         from ..dialogs.preferences import PreferencesDialog
-        dlg = PreferencesDialog(self._server_manager.preferences, self)
+        dlg = PreferencesDialog(self._server_manager.preferences, self._server_manager, self)
         dlg.exec()
 
     def _show_about(self) -> None:

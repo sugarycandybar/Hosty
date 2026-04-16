@@ -110,15 +110,22 @@ class PlayitMixin:
     def _refresh_status_row(self):
         if not self._server_manager:
             self._tunnel_row.set_subtitle("Stopped")
+            self._tunnel_domain_row.set_subtitle("Not available")
+            self._tunnel_domain_row.set_activatable(False)
+            self._copy_tunnel_domain_btn.set_sensitive(False)
             self._tunnel_btn.set_label("Start")
             self._tunnel_btn.remove_css_class("destructive-action")
             self._tunnel_btn.add_css_class("suggested-action")
+            self._tunnel_btn.remove_css_class("hosty-starting-button")
             return
 
         playit = self._server_manager.playit_manager
+        endpoint = str(playit.public_endpoint or "").strip()
+        endpoint_for_this_server = ""
         if playit.is_running:
             if self._server_info and playit.server_id == self._server_info.id:
                 self._tunnel_row.set_subtitle("Running for this server")
+                endpoint_for_this_server = endpoint
                 self._tunnel_btn.set_label("Stop")
                 self._tunnel_btn.remove_css_class("suggested-action")
                 self._tunnel_btn.add_css_class("destructive-action")
@@ -136,12 +143,49 @@ class PlayitMixin:
             self._tunnel_btn.add_css_class("suggested-action")
             self._tunnel_btn.set_sensitive(True)
 
+        if endpoint_for_this_server:
+            self._tunnel_domain_row.set_subtitle(endpoint_for_this_server)
+            self._tunnel_domain_row.set_activatable(True)
+            self._copy_tunnel_domain_btn.set_sensitive(True)
+        else:
+            self._tunnel_domain_row.set_subtitle("Not available")
+            self._tunnel_domain_row.set_activatable(False)
+            self._copy_tunnel_domain_btn.set_sensitive(False)
+
         if self._start_in_progress:
             self._tunnel_btn.set_label("Starting...")
             self._tunnel_btn.set_sensitive(False)
+            self._tunnel_btn.add_css_class("hosty-starting-button")
+        else:
+            self._tunnel_btn.remove_css_class("hosty-starting-button")
 
     def _on_playit_status_changed(self, *_args):
         self._refresh_status_row()
+
+    def _on_playit_endpoint_changed(self, *_args):
+        self._refresh_status_row()
+
+    def _on_copy_tunnel_domain(self, *_args):
+        if not self._server_manager or not self._server_info:
+            return
+
+        playit = self._server_manager.playit_manager
+        if not playit.is_running_for(self._server_info.id):
+            return
+
+        endpoint = str(playit.public_endpoint or "").strip()
+        if not endpoint:
+            return
+
+        try:
+            display = Gdk.Display.get_default()
+            if not display:
+                return
+            clipboard = display.get_clipboard()
+            clipboard.set(endpoint)
+            self._toast("Tunnel domain copied")
+        except Exception:
+            pass
 
     def _on_tunnel_toggle(self, *_args):
         if not self._server_manager:
@@ -174,6 +218,43 @@ class PlayitMixin:
     def _on_open_dashboard(self, *_args):
         if not _open_uri(PLAYIT_DASHBOARD_URL):
             self._alert("Could not open browser", "Unable to open playit dashboard.")
+
+    def _on_regenerate_domain(self, *_args):
+        if not self._server_manager or not self._server_info:
+            return
+        if not self._is_setup_complete():
+            self._on_open_setup_dialog()
+            return
+        if self._start_in_progress:
+            self._toast("Playit startup is already in progress")
+            return
+
+        self._save_server_config()
+        server_id = self._server_info.id
+        server_dir = str(self._server_info.server_dir)
+        secret = str(self._cfg.get("secret", "")).strip()
+        self._start_in_progress = True
+        self._refresh_status_row()
+
+        def run():
+            ok, msg = self._server_manager.playit_manager.regenerate_domain(
+                server_id,
+                server_dir,
+                secret=secret,
+                auto_install=True,
+            )
+
+            def ui_done():
+                self._start_in_progress = False
+                self._refresh_status_row()
+                if ok:
+                    self._toast("Tunnel domain regenerated")
+                else:
+                    self._alert("Could not regenerate tunnel domain", msg)
+
+            GLib.idle_add(ui_done)
+
+        threading.Thread(target=run, daemon=True).start()
 
     def _on_start(self, *_args):
         if not self._server_manager or not self._server_info:

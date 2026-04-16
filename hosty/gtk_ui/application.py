@@ -156,7 +156,7 @@ class HostyApplication(Adw.Application):
         """Show application preferences."""
         from hosty.gtk_ui.dialogs.preferences import show_preferences_window
         if self._window:
-            show_preferences_window(self._window, self._server_manager.preferences)
+            show_preferences_window(self._window, self._server_manager.preferences, self._server_manager)
     
     def _on_rename_server(self, action, param):
         """Show rename dialog for a server."""
