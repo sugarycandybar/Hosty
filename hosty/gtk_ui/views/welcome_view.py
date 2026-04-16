@@ -43,16 +43,16 @@ class WelcomeView(Gtk.Box):
 
         icon = Gtk.Image()
         icon.set_pixel_size(96)
-        icon_path = Path(__file__).resolve().parents[3] / "packaging" / "linux" / f"{APP_ID}-symbolic.svg"
+        icon_path = Path(__file__).resolve().parents[3] / "packaging" / "linux" / "io.github.sugarycandybar.Hosty.svg"
         if icon_path.exists():
             try:
                 pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(icon_path), 128, 128, True)
                 texture = Gdk.Texture.new_for_pixbuf(pixbuf)
                 icon.set_from_paintable(texture)
             except Exception:
-                icon.set_from_icon_name(f"{APP_ID}-symbolic")
+                icon.set_from_icon_name(APP_ID)
         else:
-            icon.set_from_icon_name(f"{APP_ID}-symbolic")
+            icon.set_from_icon_name(APP_ID)
         content.append(icon)
 
         title = Gtk.Label(label="Welcome to Hosty")
