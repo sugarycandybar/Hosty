@@ -59,11 +59,56 @@ def _format_uptime(seconds: float) -> str:
 
 
 def _iter_world_dirs(server_root: Path) -> list[Path]:
+    def _configured_level_name(root: Path) -> str:
+        props = root / "server.properties"
+        if not props.exists():
+            return "world"
+        try:
+            with open(props, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    if key.strip() == "level-name":
+                        name = value.strip()
+                        return name or "world"
+        except Exception:
+            pass
+        return "world"
+
+    def _is_world_dir(item: Path, level_name: str) -> bool:
+        if not item.is_dir():
+            return False
+
+        if (item / "level.dat").exists():
+            return True
+
+        if item.name.casefold() == level_name.casefold():
+            return True
+
+        markers = (
+            "region",
+            "data",
+            "playerdata",
+            "poi",
+            "entities",
+            "stats",
+            "advancements",
+            "dimensions",
+            "DIM-1",
+            "DIM1",
+            "session.lock",
+            "uid.dat",
+        )
+        return any((item / marker).exists() for marker in markers)
+
     if not server_root.is_dir():
         return []
+    level_name = _configured_level_name(server_root)
     worlds = []
     for item in server_root.iterdir():
-        if item.is_dir() and (item / "level.dat").exists():
+        if _is_world_dir(item, level_name):
             worlds.append(item)
     return sorted(worlds, key=lambda p: p.name.lower())
 

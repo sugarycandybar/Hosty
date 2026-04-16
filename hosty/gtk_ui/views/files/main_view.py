@@ -53,6 +53,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._players_group: Optional[Adw.PreferencesGroup] = None
         self._world_rows: list[Gtk.Widget] = []
         self._mod_rows: list[Gtk.Widget] = []
+        self._worlds_snapshot: tuple[tuple[str, tuple[str, ...]], ...] = tuple()
 
         self._backups_group: Optional[Adw.PreferencesGroup] = None
         self._backup_rows: list[Gtk.Widget] = []
@@ -136,7 +137,17 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._pop_to_root()
         self._server_info = server_info
         self._server_manager = server_manager
+        self._worlds_snapshot = tuple()
         self._rebuild_lists()
+
+    def refresh_worlds_if_changed(self, force: bool = False) -> None:
+        """Refresh the Files lists when world or dimension folders changed on disk."""
+        if not self._server_info:
+            return
+
+        snapshot = self._build_worlds_snapshot()
+        if force or snapshot != self._worlds_snapshot:
+            self._rebuild_lists()
 
     def _pop_to_root(self) -> None:
         if not self._root_page:
@@ -185,6 +196,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         if not root or not root.is_dir():
             self._world_rows.append(self._add_info_row(self._worlds_group, "No server folder"))
             self._mod_rows.append(self._add_info_row(self._mods_group, "No server folder"))
+            self._worlds_snapshot = tuple()
             return
 
         worlds = _world_dirs(root)
@@ -214,12 +226,36 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         if not standalone_jars and not entries:
             self._mod_rows.append(self._add_info_row(self._mods_group, "No mods installed"))
+            self._worlds_snapshot = self._build_worlds_snapshot()
             return
 
         for jar in standalone_jars:
             row = self._make_mod_row(jar)
             self._mods_group.add(row)
             self._mod_rows.append(row)
+
+        self._worlds_snapshot = self._build_worlds_snapshot()
+
+    def _build_worlds_snapshot(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
+        root = self._server_dir()
+        if not root or not root.is_dir():
+            return tuple()
+
+        snapshot: list[tuple[str, tuple[str, ...]]] = []
+        for world in _world_dirs(root):
+            world_root = world.resolve()
+            dim_keys: list[str] = []
+            for _label, dim_path in _world_dimension_dirs(world):
+                try:
+                    rel = dim_path.resolve().relative_to(world_root)
+                    key = str(rel) if str(rel) else "."
+                except Exception:
+                    key = str(dim_path.resolve())
+                dim_keys.append(key.lower())
+
+            snapshot.append((world.name.lower(), tuple(sorted(dim_keys))))
+
+        return tuple(snapshot)
 
     def _add_info_row(self, group: Adw.PreferencesGroup, title: str) -> Adw.ActionRow:
         row = Adw.ActionRow(title=title)

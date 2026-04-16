@@ -246,10 +246,7 @@ class BackupsMixin:
                                 raise RuntimeError("Backup archive contains invalid paths.")
                         zf.extractall(tmp_root)
 
-                    extracted_worlds = [
-                        item for item in tmp_root.iterdir()
-                        if item.is_dir() and (item / "level.dat").exists()
-                    ]
+                    extracted_worlds = _world_dirs(tmp_root)
                     if not extracted_worlds:
                         raise RuntimeError("This backup does not contain any world data.")
 

@@ -147,4 +147,6 @@ button.hosty-starting-button:active {
 /* ===== Sparkline ===== */
 .sparkline {
     min-height: 40px;
+    background: transparent;
+    border-radius: 12px 12px 0 0;
 }

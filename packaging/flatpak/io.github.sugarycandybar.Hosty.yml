@@ -1,7 +1,7 @@
 app-id: io.github.sugarycandybar.Hosty
 branch: stable
 runtime: org.gnome.Platform
-runtime-version: "48"
+runtime-version: "50"
 sdk: org.gnome.Sdk
 command: hosty
 finish-args:

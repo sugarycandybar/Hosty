@@ -288,6 +288,54 @@ class ServerManager(EventEmitter):
                     pass
                 process.kill()
 
+    def _configured_level_name(self, server_root: Path) -> str:
+        """Read level-name from server.properties, defaulting to world."""
+        try:
+            cfg = ConfigManager(server_root)
+            cfg.load()
+            name = cfg.get("level-name", "world").strip()
+            return name or "world"
+        except Exception:
+            return "world"
+
+    def _is_world_dir(self, item: Path, level_name: str) -> bool:
+        if not item.is_dir():
+            return False
+
+        if (item / "level.dat").exists():
+            return True
+
+        if item.name.casefold() == level_name.casefold():
+            return True
+
+        markers = (
+            "region",
+            "data",
+            "playerdata",
+            "poi",
+            "entities",
+            "stats",
+            "advancements",
+            "dimensions",
+            "DIM-1",
+            "DIM1",
+            "session.lock",
+            "uid.dat",
+        )
+        return any((item / marker).exists() for marker in markers)
+
+    def _iter_world_dirs(self, server_root: Path) -> list[Path]:
+        if not server_root.is_dir():
+            return []
+
+        level_name = self._configured_level_name(server_root)
+        worlds = [
+            item
+            for item in server_root.iterdir()
+            if self._is_world_dir(item, level_name)
+        ]
+        return sorted(worlds, key=lambda p: p.name.lower())
+
     def create_world_backup(self, server_id: str, auto: bool = False) -> tuple[bool, str]:
         """Create a zip backup containing world folders only."""
         info = self.get_server(server_id)
@@ -302,10 +350,7 @@ class ServerManager(EventEmitter):
         if not root.exists():
             return False, "Server directory does not exist"
 
-        worlds = [
-            item for item in root.iterdir()
-            if item.is_dir() and (item / "level.dat").exists()
-        ]
+        worlds = self._iter_world_dirs(root)
         if not worlds:
             return False, "No world folder found"
 

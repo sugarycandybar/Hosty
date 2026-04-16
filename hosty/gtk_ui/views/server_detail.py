@@ -304,6 +304,13 @@ class ServerDetailView(Gtk.Box):
         elif tab_name == "properties":
             self._props_view.reload_from_disk()
             GLib.idle_add(self._props_view.focus_save_button)
+        elif tab_name == "files":
+            self._files_view.refresh_worlds_if_changed(force=True)
+
+    def poll_runtime_state(self) -> None:
+        """Refresh lightweight live UI bits from the window polling loop."""
+        if self._view_stack.get_visible_child_name() == "files":
+            self._files_view.refresh_worlds_if_changed()
     
     def _on_toggle_clicked(self, button):
         """Handle start/stop button click."""

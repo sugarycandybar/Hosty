@@ -2,6 +2,7 @@
 Central constants for Hosty application.
 """
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -92,30 +93,43 @@ def get_adoptium_jre_url(java_version: int) -> str:
     """Backward-compatible helper that returns only the Adoptium JRE URL."""
     return get_adoptium_jre_download_info(java_version)[0]
 
-# Java version mapping: MC version prefix -> required Java version
-JAVA_VERSION_MAP = [
-    # Order matters: check from newest to oldest
-    ("26.", 25),
-    ("25.", 25),
-    ("1.21", 21),
-    ("1.20.5", 21),
-    ("1.20.4", 17),
-    ("1.20.3", 17),
-    ("1.20.2", 17),
-    ("1.20.1", 17),
-    ("1.20", 17),
-    ("1.19", 17),
-    ("1.18", 17),
-    ("1.17", 17),
-    ("1.16", 11),
-]
 DEFAULT_JAVA_VERSION = 21
 
+
+def _parse_mc_version_tuple(mc_version: str) -> tuple[int, int, int] | None:
+    """Parse a Minecraft version string into (major, minor, patch)."""
+    match = re.match(r"^(\d+(?:\.\d+){0,2})", mc_version or "")
+    if not match:
+        return None
+
+    nums = [int(part) for part in match.group(1).split(".")]
+    while len(nums) < 3:
+        nums.append(0)
+    return nums[0], nums[1], nums[2]
+
 def get_required_java_version(mc_version: str) -> int:
-    """Determine the required Java version for a Minecraft version."""
-    for prefix, java_ver in JAVA_VERSION_MAP:
-        if mc_version.startswith(prefix):
-            return java_ver
+    """Determine required Java version for Fabric-compatible Minecraft ranges."""
+    parsed = _parse_mc_version_tuple(mc_version)
+    if not parsed:
+        return DEFAULT_JAVA_VERSION
+
+    # Fabric requirements:
+    # 26.1+ -> Java 25+
+    # 1.20.5 - 1.21.11 -> Java 21+
+    # 1.18 - 1.20.4 -> Java 17+
+    # 1.17 - 1.17.1 -> Java 16+
+    # 1.12 - 1.16.5 -> Java 8+
+    if parsed >= (26, 1, 0):
+        return 25
+    if (1, 20, 5) <= parsed <= (1, 21, 11):
+        return 21
+    if (1, 18, 0) <= parsed <= (1, 20, 4):
+        return 17
+    if (1, 17, 0) <= parsed <= (1, 17, 1):
+        return 16
+    if (1, 12, 0) <= parsed <= (1, 16, 5):
+        return 8
+
     return DEFAULT_JAVA_VERSION
 
 # Default server.properties values

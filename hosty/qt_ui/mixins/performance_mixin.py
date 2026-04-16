@@ -237,6 +237,10 @@ class PerformanceMixin:
     def _on_stats_tick(self) -> None:
         self._refresh_server_rows_status()
         self._refresh_performance()
+        if self._selected_server_id:
+            info = self._server_manager.get_server(self._selected_server_id)
+            if info:
+                self._refresh_files(info)
 
     def _refresh_performance(self) -> None:
         process = self._selected_process

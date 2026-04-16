@@ -131,6 +131,8 @@ class HostyWindow(Adw.ApplicationWindow):
             self._status_poll_id = None
 
     def _poll_runtime_state(self):
+        self._detail_view.poll_runtime_state()
+
         running_id = self._server_manager.get_running_server_id()
         prefs = self._server_manager.preferences
 

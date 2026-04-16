@@ -24,8 +24,8 @@ class SparklineWidget(Gtk.DrawingArea):
         self._data = [0.0] * max_points
         self._max_points = max_points
         self._color = color_rgb
-        # Used to give it a slightly darker distinct background like in GNOME system monitor
-        self.add_css_class("view") 
+        # Keep sparkline background transparent and draw custom tint in Cairo.
+        self.add_css_class("sparkline")
         self.set_draw_func(self._draw)
     
     def add_value(self, value):
