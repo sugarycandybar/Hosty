@@ -8,5 +8,5 @@ export HOSTY_DATA_DIR
 # Create the data dir if it does not exist
 mkdir -p "$HOSTY_DATA_DIR"
 
-cd /app/share/hosty
-exec python3 /app/share/hosty/hosty.py "$@"
+cd /app/share
+exec python3 /app/share/hosty.py "$@"

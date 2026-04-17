@@ -12,7 +12,14 @@ from gi.repository import Gtk, Adw, GLib, GObject, Gio
 from hosty.shared.backend.server_manager import ServerManager
 from hosty.shared.utils.image_utils import convert_to_png
 from hosty.shared.utils.constants import (
-    MIN_RAM_MB, MAX_RAM_MB, get_required_java_version, DEFAULT_SERVER_PROPERTIES
+    MIN_RAM_MB,
+    MAX_RAM_MB,
+    get_required_java_version,
+    DEFAULT_SERVER_PROPERTIES,
+    DIFFICULTIES,
+    GAMEMODES,
+    LEVEL_TYPES,
+    LEVEL_TYPE_NAMES,
 )
 
 
@@ -123,6 +130,46 @@ class CreateServerDialog(Adw.Dialog):
         info_group.add(self._icon_row)
 
         page.add(info_group)
+
+        world_group = Adw.PreferencesGroup(
+            title="World defaults",
+            description="Initial gameplay settings applied to server.properties",
+        )
+
+        self._difficulty_values = list(DIFFICULTIES)
+        difficulty_labels = [value.title() for value in self._difficulty_values]
+        self._difficulty_row = Adw.ComboRow(
+            title="Difficulty",
+            model=Gtk.StringList.new(difficulty_labels),
+        )
+        default_difficulty = str(DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
+        if default_difficulty in self._difficulty_values:
+            self._difficulty_row.set_selected(self._difficulty_values.index(default_difficulty))
+        world_group.add(self._difficulty_row)
+
+        self._gamemode_values = list(GAMEMODES)
+        gamemode_labels = [value.replace("-", " ").title() for value in self._gamemode_values]
+        self._gamemode_row = Adw.ComboRow(
+            title="Default gamemode",
+            model=Gtk.StringList.new(gamemode_labels),
+        )
+        default_gamemode = str(DEFAULT_SERVER_PROPERTIES.get("gamemode", "survival"))
+        if default_gamemode in self._gamemode_values:
+            self._gamemode_row.set_selected(self._gamemode_values.index(default_gamemode))
+        world_group.add(self._gamemode_row)
+
+        self._level_type_values = list(LEVEL_TYPES)
+        level_type_labels = [LEVEL_TYPE_NAMES.get(value, value) for value in self._level_type_values]
+        self._level_type_row = Adw.ComboRow(
+            title="World type",
+            model=Gtk.StringList.new(level_type_labels),
+        )
+        default_level_type = str(DEFAULT_SERVER_PROPERTIES.get("level-type", "minecraft\\:normal"))
+        if default_level_type in self._level_type_values:
+            self._level_type_row.set_selected(self._level_type_values.index(default_level_type))
+        world_group.add(self._level_type_row)
+
+        page.add(world_group)
 
         legal_group = Adw.PreferencesGroup(
             title="Minecraft EULA",
@@ -389,6 +436,24 @@ class CreateServerDialog(Adw.Dialog):
         loader_version = self._loader_versions[loader_idx] if loader_idx < len(self._loader_versions) else ""
         ram_mb = int(self._ram_row.get_value())
         seed = self._seed_entry.get_text().strip()
+        difficulty_idx = self._difficulty_row.get_selected()
+        difficulty = (
+            self._difficulty_values[difficulty_idx]
+            if difficulty_idx < len(self._difficulty_values)
+            else str(DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
+        )
+        gamemode_idx = self._gamemode_row.get_selected()
+        gamemode = (
+            self._gamemode_values[gamemode_idx]
+            if gamemode_idx < len(self._gamemode_values)
+            else str(DEFAULT_SERVER_PROPERTIES.get("gamemode", "survival"))
+        )
+        level_type_idx = self._level_type_row.get_selected()
+        level_type = (
+            self._level_type_values[level_type_idx]
+            if level_type_idx < len(self._level_type_values)
+            else str(DEFAULT_SERVER_PROPERTIES.get("level-type", "minecraft\\:normal"))
+        )
         eula_accepted = self._eula_check.get_active()
         install_optimisations = bool(self._optimise_row.get_active())
 
@@ -409,6 +474,9 @@ class CreateServerDialog(Adw.Dialog):
                 loader_version,
                 ram_mb,
                 seed,
+                difficulty,
+                gamemode,
+                level_type,
                 eula_accepted,
                 self._icon_source_path,
                 install_optimisations,
@@ -424,6 +492,9 @@ class CreateServerDialog(Adw.Dialog):
         loader_version,
         ram_mb,
         seed,
+        difficulty,
+        gamemode,
+        level_type,
         eula_accepted,
         icon_source_path,
         install_optimisations,
@@ -513,6 +584,9 @@ class CreateServerDialog(Adw.Dialog):
             config = ConfigManager(str(server_info.server_dir))
             config.load()
             config.set_value("motd", DEFAULT_SERVER_PROPERTIES.get("motd", "a hosty server"))
+            config.set_value("difficulty", difficulty)
+            config.set_value("gamemode", gamemode)
+            config.set_value("level-type", level_type)
             config.set_value("level-seed", seed)
             config.save()
             config.set_eula(bool(eula_accepted))

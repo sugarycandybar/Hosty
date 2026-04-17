@@ -39,6 +39,10 @@ from hosty.shared.utils.constants import (
     DEFAULT_SERVER_PROPERTIES,
     MAX_RAM_MB,
     MIN_RAM_MB,
+    DIFFICULTIES,
+    GAMEMODES,
+    LEVEL_TYPES,
+    LEVEL_TYPE_NAMES,
     get_required_java_version,
 )
 
@@ -85,6 +89,9 @@ class InstallWorker(QThread):
         loader_version: str,
         ram_mb: int,
         seed: str = "",
+        difficulty: str = "easy",
+        gamemode: str = "survival",
+        level_type: str = "minecraft\\:normal",
         eula: bool = True,
         icon_path: str = "",
         install_optimisations: bool = False,
@@ -96,6 +103,9 @@ class InstallWorker(QThread):
         self._loader_version = loader_version
         self._ram_mb = ram_mb
         self._seed = seed
+        self._difficulty = str(difficulty or "easy")
+        self._gamemode = str(gamemode or "survival")
+        self._level_type = str(level_type or "minecraft\\:normal")
         self._eula = eula
         self._icon_path = icon_path
         self._install_optimisations = install_optimisations
@@ -177,6 +187,9 @@ class InstallWorker(QThread):
             config = ConfigManager(str(server_info.server_dir))
             config.load()
             config.set_value("motd", DEFAULT_SERVER_PROPERTIES.get("motd", "a hosty server"))
+            config.set_value("difficulty", self._difficulty)
+            config.set_value("gamemode", self._gamemode)
+            config.set_value("level-type", self._level_type)
             if self._seed:
                 config.set_value("level-seed", self._seed)
             config.save()
@@ -341,6 +354,47 @@ class CreateServerDialog(QDialog):
         info_layout.addLayout(icon_row)
 
         layout.addWidget(info_group)
+
+        world_group = QGroupBox("World Defaults")
+        world_layout = QVBoxLayout(world_group)
+
+        difficulty_row = QHBoxLayout()
+        difficulty_row.addWidget(QLabel("Difficulty"))
+        self._difficulty_combo = QComboBox()
+        self._difficulty_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        for value in DIFFICULTIES:
+            self._difficulty_combo.addItem(value.title(), value)
+        default_difficulty = str(DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
+        difficulty_idx = self._difficulty_combo.findData(default_difficulty)
+        self._difficulty_combo.setCurrentIndex(difficulty_idx if difficulty_idx >= 0 else 0)
+        difficulty_row.addWidget(self._difficulty_combo, 1)
+        world_layout.addLayout(difficulty_row)
+
+        gamemode_row = QHBoxLayout()
+        gamemode_row.addWidget(QLabel("Default gamemode"))
+        self._gamemode_combo = QComboBox()
+        self._gamemode_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        for value in GAMEMODES:
+            self._gamemode_combo.addItem(value.replace("-", " ").title(), value)
+        default_gamemode = str(DEFAULT_SERVER_PROPERTIES.get("gamemode", "survival"))
+        gamemode_idx = self._gamemode_combo.findData(default_gamemode)
+        self._gamemode_combo.setCurrentIndex(gamemode_idx if gamemode_idx >= 0 else 0)
+        gamemode_row.addWidget(self._gamemode_combo, 1)
+        world_layout.addLayout(gamemode_row)
+
+        world_type_row = QHBoxLayout()
+        world_type_row.addWidget(QLabel("World type"))
+        self._world_type_combo = QComboBox()
+        self._world_type_combo.setCursor(Qt.CursorShape.PointingHandCursor)
+        for value in LEVEL_TYPES:
+            self._world_type_combo.addItem(LEVEL_TYPE_NAMES.get(value, value), value)
+        default_level_type = str(DEFAULT_SERVER_PROPERTIES.get("level-type", "minecraft\\:normal"))
+        world_type_idx = self._world_type_combo.findData(default_level_type)
+        self._world_type_combo.setCurrentIndex(world_type_idx if world_type_idx >= 0 else 0)
+        world_type_row.addWidget(self._world_type_combo, 1)
+        world_layout.addLayout(world_type_row)
+
+        layout.addWidget(world_group)
 
         # EULA group
         eula_group = QGroupBox("Minecraft EULA")
@@ -596,6 +650,9 @@ class CreateServerDialog(QDialog):
         mc_version = self._game_versions[idx]
         loader_idx = self._loader_combo.currentIndex()
         loader_version = self._loader_versions[loader_idx] if loader_idx < len(self._loader_versions) else ""
+        difficulty = str(self._difficulty_combo.currentData() or DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
+        gamemode = str(self._gamemode_combo.currentData() or DEFAULT_SERVER_PROPERTIES.get("gamemode", "survival"))
+        level_type = str(self._world_type_combo.currentData() or DEFAULT_SERVER_PROPERTIES.get("level-type", "minecraft\\:normal"))
 
         self._stack.setCurrentIndex(2)
         self._validate()
@@ -607,6 +664,9 @@ class CreateServerDialog(QDialog):
             loader_version,
             int(self._ram_spin.value()),
             seed=self._seed_input.text().strip(),
+            difficulty=difficulty,
+            gamemode=gamemode,
+            level_type=level_type,
             eula=self._eula_check.isChecked(),
             icon_path=self._icon_source_path,
             install_optimisations=self._optimise_check.isChecked(),

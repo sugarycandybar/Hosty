@@ -964,6 +964,265 @@ class PlayitManager(EventEmitter):
             return True, "playit tunnel domain regenerated"
         return True, "playit tunnel restarted"
 
+    def _ensure_api_ready(self, secret: str = "", auto_install: bool = False) -> tuple[bool, str]:
+        binary = self.resolve_binary()
+        if not binary:
+            if auto_install:
+                ok, msg = self.install_latest_binary()
+                if not ok:
+                    return False, f"playit install failed: {msg}"
+                binary = self.resolve_binary()
+            if not binary:
+                return False, "playit binary not found"
+
+        provided_secret = str(secret or "").strip()
+        existing_secret = self.read_claimed_secret()
+        if provided_secret and not existing_secret:
+            if self._write_secret_key(provided_secret):
+                existing_secret = provided_secret
+
+        if not existing_secret:
+            return False, "playit is not linked yet"
+
+        if not self.initialized and not self._initialize_with_retry(max_attempts=25, delay_seconds=1.0):
+            detail = self._last_error or "unknown error"
+            if self._is_invalid_agent_key_error(detail):
+                self.unlink_account()
+                return False, "linked playit key is invalid; run setup again"
+            return False, f"failed to initialize playit API session: {detail}"
+
+        return True, ""
+
+    def _resolve_tunnel_port(self, server_dir: str, protocol: str, bedrock_port: int = 19132) -> int:
+        if protocol == "tcp":
+            return self._read_server_port(server_dir)
+
+        try:
+            port = int(bedrock_port)
+        except Exception:
+            return 19132
+        if 1024 <= port <= 65535:
+            return port
+        return 19132
+
+    def _list_tunnels_for_port(self, port: int, protocol: str) -> list[Tunnel]:
+        self._retrieve_tunnels()
+        return [
+            tunnel
+            for tunnel in list(self.tunnels.get(protocol, []))
+            if tunnel.port == int(port)
+        ]
+
+    def _add_tunnel_for_protocol(
+        self,
+        server_id: str,
+        server_dir: str,
+        protocol: str,
+        secret: str = "",
+        auto_install: bool = False,
+        bedrock_port: int = 19132,
+    ) -> tuple[bool, str, str]:
+        ok, msg = self._ensure_api_ready(secret=secret, auto_install=auto_install)
+        if not ok:
+            return False, msg, ""
+
+        port = self._resolve_tunnel_port(server_dir, protocol, bedrock_port=bedrock_port)
+        tunnel_label = server_id if protocol == "tcp" else f"{server_id}-bedrock"
+
+        try:
+            tunnel = self.get_tunnel(
+                port,
+                protocol=protocol,
+                ensure=True,
+                label=tunnel_label,
+            )
+        except Exception as e:
+            return False, str(e), ""
+
+        if not tunnel:
+            return False, f"failed to allocate a {protocol.upper()} playit tunnel", ""
+
+        endpoint = str(tunnel.hostname or "").strip()
+        tunnel_name = "Java" if protocol == "tcp" else "Bedrock"
+        if endpoint:
+            return True, f"{tunnel_name} tunnel ready: {endpoint}", endpoint
+        return True, f"{tunnel_name} tunnel created on {protocol.upper()} port {port}", ""
+
+    def _regenerate_tunnel_for_protocol(
+        self,
+        server_id: str,
+        server_dir: str,
+        protocol: str,
+        secret: str = "",
+        auto_install: bool = False,
+        bedrock_port: int = 19132,
+    ) -> tuple[bool, str, str]:
+        ok, msg = self._ensure_api_ready(secret=secret, auto_install=auto_install)
+        if not ok:
+            return False, msg, ""
+
+        port = self._resolve_tunnel_port(server_dir, protocol, bedrock_port=bedrock_port)
+        candidates = self._list_tunnels_for_port(port, protocol)
+
+        deleted_any = False
+        for tunnel in candidates:
+            if self._delete_tunnel(tunnel):
+                deleted_any = True
+
+        ok, msg, endpoint = self._add_tunnel_for_protocol(
+            server_id,
+            server_dir,
+            protocol,
+            secret=secret,
+            auto_install=auto_install,
+            bedrock_port=bedrock_port,
+        )
+        if not ok:
+            return False, msg, ""
+
+        tunnel_name = "Java" if protocol == "tcp" else "Bedrock"
+        if deleted_any and endpoint:
+            return True, f"{tunnel_name} tunnel domain regenerated: {endpoint}", endpoint
+        if deleted_any:
+            return True, f"{tunnel_name} tunnel domain regenerated", endpoint
+        return True, msg, endpoint
+
+    def _delete_tunnel_for_protocol(
+        self,
+        server_dir: str,
+        protocol: str,
+        secret: str = "",
+        auto_install: bool = False,
+        bedrock_port: int = 19132,
+    ) -> tuple[bool, str]:
+        ok, msg = self._ensure_api_ready(secret=secret, auto_install=auto_install)
+        if not ok:
+            return False, msg
+
+        port = self._resolve_tunnel_port(server_dir, protocol, bedrock_port=bedrock_port)
+        candidates = self._list_tunnels_for_port(port, protocol)
+        if not candidates:
+            tunnel_name = "Java" if protocol == "tcp" else "Bedrock"
+            return False, f"No {tunnel_name.lower()} tunnel found"
+
+        deleted_any = False
+        deleted_hostnames: list[str] = []
+        deleted_ids: set[str] = set()
+        for tunnel in candidates:
+            if self._delete_tunnel(tunnel):
+                deleted_any = True
+                if tunnel.hostname:
+                    deleted_hostnames.append(str(tunnel.hostname))
+                if tunnel.id:
+                    deleted_ids.add(str(tunnel.id))
+
+        if not deleted_any:
+            tunnel_name = "Java" if protocol == "tcp" else "Bedrock"
+            return False, f"Failed to delete {tunnel_name.lower()} tunnel"
+
+        if self._active_tunnel_id and self._active_tunnel_id in deleted_ids:
+            self._active_tunnel_id = None
+            self._public_endpoint = ""
+            self._emit_endpoint_changed()
+        elif self._public_endpoint and self._public_endpoint in deleted_hostnames:
+            self._public_endpoint = ""
+            self._emit_endpoint_changed()
+
+        tunnel_name = "Java" if protocol == "tcp" else "Bedrock"
+        return True, f"{tunnel_name} tunnel deleted"
+
+    def add_java_tunnel(
+        self,
+        server_id: str,
+        server_dir: str,
+        secret: str = "",
+        auto_install: bool = False,
+    ) -> tuple[bool, str, str]:
+        return self._add_tunnel_for_protocol(
+            server_id,
+            server_dir,
+            "tcp",
+            secret=secret,
+            auto_install=auto_install,
+        )
+
+    def regenerate_java_tunnel(
+        self,
+        server_id: str,
+        server_dir: str,
+        secret: str = "",
+        auto_install: bool = False,
+    ) -> tuple[bool, str, str]:
+        return self._regenerate_tunnel_for_protocol(
+            server_id,
+            server_dir,
+            "tcp",
+            secret=secret,
+            auto_install=auto_install,
+        )
+
+    def delete_java_tunnel(
+        self,
+        server_dir: str,
+        secret: str = "",
+        auto_install: bool = False,
+    ) -> tuple[bool, str]:
+        return self._delete_tunnel_for_protocol(
+            server_dir,
+            "tcp",
+            secret=secret,
+            auto_install=auto_install,
+        )
+
+    def add_bedrock_tunnel(
+        self,
+        server_id: str,
+        server_dir: str,
+        secret: str = "",
+        auto_install: bool = False,
+        bedrock_port: int = 19132,
+    ) -> tuple[bool, str, str]:
+        return self._add_tunnel_for_protocol(
+            server_id,
+            server_dir,
+            "udp",
+            secret=secret,
+            auto_install=auto_install,
+            bedrock_port=bedrock_port,
+        )
+
+    def regenerate_bedrock_tunnel(
+        self,
+        server_id: str,
+        server_dir: str,
+        secret: str = "",
+        auto_install: bool = False,
+        bedrock_port: int = 19132,
+    ) -> tuple[bool, str, str]:
+        return self._regenerate_tunnel_for_protocol(
+            server_id,
+            server_dir,
+            "udp",
+            secret=secret,
+            auto_install=auto_install,
+            bedrock_port=bedrock_port,
+        )
+
+    def delete_bedrock_tunnel(
+        self,
+        server_dir: str,
+        secret: str = "",
+        auto_install: bool = False,
+        bedrock_port: int = 19132,
+    ) -> tuple[bool, str]:
+        return self._delete_tunnel_for_protocol(
+            server_dir,
+            "udp",
+            secret=secret,
+            auto_install=auto_install,
+            bedrock_port=bedrock_port,
+        )
+
     def stop(self) -> tuple[bool, str]:
         if not self.is_running:
             self._server_id = None

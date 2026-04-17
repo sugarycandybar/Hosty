@@ -44,6 +44,8 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._cfg = {}
         self._suppress_config_updates = False
         self._start_in_progress = False
+        self._java_tunnel_in_progress = False
+        self._bedrock_in_progress = False
         self._local_ip_rows: list[Adw.ActionRow] = []
         self._local_ip_value = "Not available"
         self._players_name_rows: list[Adw.EntryRow] = []
@@ -110,31 +112,41 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
 
         group = Adw.PreferencesGroup(
             title="Playit.gg",
-            description="Simple tunnel controls",
+            description="Share with friends",
         )
 
-        self._tunnel_row = Adw.ActionRow(title="Tunnel", subtitle="Stopped")
+        self._tunnel_row = Adw.ActionRow(title="Agent", subtitle="Stopped")
         self._tunnel_row.set_activatable(False)
-        self._tunnel_btn = Gtk.Button(label="Start")
+        self._tunnel_btn = Gtk.Button(label="Start Agent")
         self._tunnel_btn.add_css_class("suggested-action")
         self._tunnel_btn.add_css_class("playit-compact-button")
         self._tunnel_btn.connect("clicked", self._on_tunnel_toggle)
         self._tunnel_row.add_suffix(self._tunnel_btn)
         group.add(self._tunnel_row)
 
-        self._tunnel_domain_row = Adw.ActionRow(title="Tunnel domain", subtitle="Not available")
+        self._tunnel_domain_row = Adw.ActionRow(title="Java tunnel domain", subtitle="Not available")
         self._tunnel_domain_row.set_activatable(False)
         self._copy_tunnel_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic")
         self._copy_tunnel_domain_btn.add_css_class("flat")
-        self._copy_tunnel_domain_btn.set_tooltip_text("Copy tunnel domain")
+        self._copy_tunnel_domain_btn.set_tooltip_text("Copy Java tunnel domain")
         self._copy_tunnel_domain_btn.set_sensitive(False)
         self._copy_tunnel_domain_btn.connect("clicked", self._on_copy_tunnel_domain)
         self._tunnel_domain_row.add_suffix(self._copy_tunnel_domain_btn)
         group.add(self._tunnel_domain_row)
 
+        self._bedrock_domain_row = Adw.ActionRow(title="Bedrock tunnel domain", subtitle="Not available")
+        self._bedrock_domain_row.set_activatable(False)
+        self._copy_bedrock_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic")
+        self._copy_bedrock_domain_btn.add_css_class("flat")
+        self._copy_bedrock_domain_btn.set_tooltip_text("Copy bedrock tunnel domain")
+        self._copy_bedrock_domain_btn.set_sensitive(False)
+        self._copy_bedrock_domain_btn.connect("clicked", self._on_copy_bedrock_domain)
+        self._bedrock_domain_row.add_suffix(self._copy_bedrock_domain_btn)
+        group.add(self._bedrock_domain_row)
+
         settings_row = Adw.ExpanderRow(
             title="Playit settings",
-            subtitle="Start behavior and setup tools",
+            subtitle="Agent behavior and tunnel management",
         )
 
         self._auto_start_row = Adw.SwitchRow(
@@ -144,19 +156,53 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._auto_start_row.connect("notify::active", self._on_auto_start_toggled)
         settings_row.add_row(self._auto_start_row)
 
-        dashboard_row = Adw.ActionRow(title="Open playit dashboard", subtitle="View tunnel address and details")
+        dashboard_row = Adw.ActionRow(title="Open playit dashboard")
         dashboard_row.add_prefix(Gtk.Image.new_from_icon_name("video-display-symbolic"))
         dashboard_row.set_activatable(True)
         dashboard_row.connect("activated", self._on_open_dashboard)
         settings_row.add_row(dashboard_row)
 
-        regen_row = Adw.ActionRow(title="Regenerate tunnel domain", subtitle="Create a fresh public tunnel address")
-        regen_row.add_prefix(Gtk.Image.new_from_icon_name("network-wired-symbolic"))
-        regen_row.set_activatable(True)
-        regen_row.connect("activated", self._on_regenerate_domain)
-        settings_row.add_row(regen_row)
+        java_row = Adw.ActionRow(
+            title="Java tunnel",
+        )
+        java_row.add_prefix(Gtk.Image.new_from_icon_name("network-wired-symbolic"))
+        self._delete_java_tunnel_btn = Gtk.Button(icon_name="user-trash-symbolic")
+        self._delete_java_tunnel_btn.add_css_class("flat")
+        self._delete_java_tunnel_btn.add_css_class("destructive-action")
+        self._delete_java_tunnel_btn.set_tooltip_text("Delete Java tunnel")
+        self._delete_java_tunnel_btn.set_sensitive(False)
+        self._delete_java_tunnel_btn.set_visible(False)
+        self._delete_java_tunnel_btn.connect("clicked", self._on_delete_java_tunnel)
+        java_row.add_suffix(self._delete_java_tunnel_btn)
+        self._java_tunnel_action_btn = Gtk.Button(icon_name="list-add-symbolic")
+        self._java_tunnel_action_btn.add_css_class("flat")
+        self._java_tunnel_action_btn.set_tooltip_text("Add Java tunnel")
+        self._java_tunnel_action_btn.connect("clicked", self._on_manage_java_tunnel)
+        java_row.add_suffix(self._java_tunnel_action_btn)
+        java_row.set_activatable_widget(self._java_tunnel_action_btn)
+        settings_row.add_row(java_row)
 
-        reset_row = Adw.ActionRow(title="Set Up Playit Again", subtitle="Re-run guided setup")
+        bedrock_row = Adw.ActionRow(
+            title="Bedrock tunnel",
+        )
+        bedrock_row.add_prefix(Gtk.Image.new_from_icon_name("network-cellular-signal-excellent-symbolic"))
+        self._delete_bedrock_tunnel_btn = Gtk.Button(icon_name="user-trash-symbolic")
+        self._delete_bedrock_tunnel_btn.add_css_class("flat")
+        self._delete_bedrock_tunnel_btn.add_css_class("destructive-action")
+        self._delete_bedrock_tunnel_btn.set_tooltip_text("Delete Bedrock tunnel")
+        self._delete_bedrock_tunnel_btn.set_sensitive(False)
+        self._delete_bedrock_tunnel_btn.set_visible(False)
+        self._delete_bedrock_tunnel_btn.connect("clicked", self._on_delete_bedrock_tunnel)
+        bedrock_row.add_suffix(self._delete_bedrock_tunnel_btn)
+        self._bedrock_tunnel_action_btn = Gtk.Button(icon_name="list-add-symbolic")
+        self._bedrock_tunnel_action_btn.add_css_class("flat")
+        self._bedrock_tunnel_action_btn.set_tooltip_text("Add Bedrock tunnel")
+        self._bedrock_tunnel_action_btn.connect("clicked", self._on_manage_bedrock_tunnel)
+        bedrock_row.add_suffix(self._bedrock_tunnel_action_btn)
+        bedrock_row.set_activatable_widget(self._bedrock_tunnel_action_btn)
+        settings_row.add_row(bedrock_row)
+
+        reset_row = Adw.ActionRow(title="Set Up Playit Again")
         reset_row.add_prefix(Gtk.Image.new_from_icon_name("view-refresh-symbolic"))
         reset_row.set_activatable(True)
         reset_row.connect("activated", self._on_open_setup_dialog)

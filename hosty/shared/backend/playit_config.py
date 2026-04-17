@@ -13,6 +13,8 @@ DEFAULT_PLAYIT_CONFIG = {
     "setup_complete": False,
     "auto_start": True,
     "auto_install": True,
+    "java_endpoint": "",
+    "bedrock_endpoint": "",
 }
 
 
@@ -42,6 +44,8 @@ def load_playit_config(server_dir: str | Path) -> dict:
     cfg["setup_complete"] = bool(cfg.get("setup_complete", False))
     cfg["auto_start"] = bool(cfg.get("auto_start", True))
     cfg["auto_install"] = bool(cfg.get("auto_install", True))
+    cfg["java_endpoint"] = str(cfg.get("java_endpoint", "")).strip()
+    cfg["bedrock_endpoint"] = str(cfg.get("bedrock_endpoint", "")).strip()
     return cfg
 
 
@@ -54,6 +58,8 @@ def save_playit_config(server_dir: str | Path, config: dict) -> bool:
     payload["setup_complete"] = bool(payload.get("setup_complete", False))
     payload["auto_start"] = bool(payload.get("auto_start", True))
     payload["auto_install"] = bool(payload.get("auto_install", True))
+    payload["java_endpoint"] = str(payload.get("java_endpoint", "")).strip()
+    payload["bedrock_endpoint"] = str(payload.get("bedrock_endpoint", "")).strip()
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -43,9 +43,9 @@ modules:
   - name: hosty
     buildsystem: simple
     build-commands:
-      - install -d /app/share/hosty
-      - cp -a hosty /app/share/hosty/
-      - install -Dm755 hosty.py /app/share/hosty/hosty.py
+      - install -d /app/share
+      - cp -a hosty /app/share/
+      - install -Dm755 hosty.py /app/share/hosty.py
       - install -Dm755 packaging/flatpak/hosty-wrapper.sh /app/bin/hosty
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.desktop /app/share/applications/io.github.sugarycandybar.Hosty.desktop
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml /app/share/metainfo/io.github.sugarycandybar.Hosty.metainfo.xml
