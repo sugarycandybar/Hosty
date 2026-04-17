@@ -4,7 +4,7 @@ AboutDialog - Hosty about dialog.
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Adw
+from gi.repository import Adw, Gtk
 
 from hosty.shared.utils.constants import APP_ID, APP_NAME, APP_VERSION, APP_WEBSITE
 
@@ -13,7 +13,7 @@ def show_about_dialog(parent):
     """Show the Hosty about dialog."""
     about = Adw.AboutDialog()
     about.set_application_name(APP_NAME)
-    about.set_application_icon(f"{APP_ID}-symbolic")
+    about.set_application_icon(APP_ID)
     about.set_version(APP_VERSION)
     about.set_developer_name("Hosty Project")
     about.set_license_type(Gtk.License.GPL_3_0)
@@ -24,9 +24,3 @@ def show_about_dialog(parent):
     about.set_website(APP_WEBSITE)
     about.set_developers(["Hosty Contributors"])
     about.present(parent)
-
-
-# Need Gtk for License enum
-import gi
-gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk

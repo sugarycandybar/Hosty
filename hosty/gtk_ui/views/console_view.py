@@ -29,7 +29,7 @@ class ConsoleView(Gtk.Box):
         self._textview.set_cursor_visible(False)
         self._textview.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self._textview.set_monospace(True)
-        self._textview.set_top_margin(12)
+        self._textview.set_top_margin(0)
         self._textview.set_bottom_margin(12)
         self._textview.set_left_margin(16)
         self._textview.set_right_margin(16)

@@ -64,13 +64,6 @@ class WorldsMixin:
                 dim_row = Adw.ActionRow(title=label)
                 dim_row.set_activatable(False)
 
-                open_dim_btn = self._icon_button(
-                    "folder-open-symbolic",
-                    "Open dimension folder",
-                    lambda *_p, p=dim_path: self._open_target(p),
-                )
-                dim_row.add_suffix(open_dim_btn)
-
                 # Deleting the world root dimension would remove the full world.
                 if dim_path.resolve() != world_root:
                     delete_btn = self._icon_button(

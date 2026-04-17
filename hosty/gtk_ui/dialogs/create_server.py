@@ -128,13 +128,17 @@ class CreateServerDialog(Adw.Dialog):
             title="Minecraft EULA",
         )
 
-        self._eula_row = Adw.SwitchRow(
+        eula_row = Adw.ActionRow(
             title="I agree to Minecraft EULA",
             subtitle="Required to complete server creation",
         )
-        self._eula_row.set_active(False)
-        self._eula_row.connect("notify::active", self._validate)
-        legal_group.add(self._eula_row)
+        self._eula_check = Gtk.CheckButton()
+        self._eula_check.add_css_class("radio")
+        self._eula_check.set_active(False)
+        self._eula_check.connect("toggled", self._validate)
+        eula_row.add_prefix(self._eula_check)
+        eula_row.set_activatable_widget(self._eula_check)
+        legal_group.add(eula_row)
 
         page.add(legal_group)
 
@@ -347,7 +351,7 @@ class CreateServerDialog(Adw.Dialog):
         page = self._stack.get_visible_child_name()
 
         if page == "details":
-            has_eula = self._eula_row.get_active()
+            has_eula = self._eula_check.get_active()
             self._cancel_btn.set_label("Cancel")
             self._cancel_btn.set_sensitive(True)
             self._create_btn.set_label("Next")
@@ -385,7 +389,7 @@ class CreateServerDialog(Adw.Dialog):
         loader_version = self._loader_versions[loader_idx] if loader_idx < len(self._loader_versions) else ""
         ram_mb = int(self._ram_row.get_value())
         seed = self._seed_entry.get_text().strip()
-        eula_accepted = self._eula_row.get_active()
+        eula_accepted = self._eula_check.get_active()
         install_optimisations = bool(self._optimise_row.get_active())
 
         if not name or not mc_version or not loader_version or not eula_accepted:

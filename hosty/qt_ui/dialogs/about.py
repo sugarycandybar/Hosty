@@ -33,7 +33,10 @@ class AboutDialog(QDialog):
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_label.setFixedHeight(72)
 
-        icon_path = Path(__file__).resolve().parents[3] / "packaging" / "linux" / "io.github.sugarycandybar.Hosty-symbolic.svg"
+        icon_dir = Path(__file__).resolve().parents[3] / "packaging" / "linux"
+        icon_path = icon_dir / "io.github.sugarycandybar.Hosty.svg"
+        if not icon_path.exists():
+            icon_path = icon_dir / "io.github.sugarycandybar.Hosty-symbolic.svg"
         icon_pixmap = QIcon(str(icon_path)).pixmap(64, 64)
         if not icon_pixmap.isNull():
             icon_label.setPixmap(icon_pixmap)

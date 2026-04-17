@@ -62,6 +62,7 @@ class ServerDetailView(Gtk.Box):
         self._selection_banner = Adw.Banner()
         self._selection_banner.add_css_class("selection-context-banner")
         self._selection_banner.set_revealed(False)
+        self._selection_banner.set_visible(False)
         
         self._view_stack = Adw.ViewStack()
         self._view_stack.set_vexpand(True)
@@ -99,7 +100,6 @@ class ServerDetailView(Gtk.Box):
         self._detail_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._detail_content.set_hexpand(True)
         self._detail_content.set_vexpand(True)
-        self._detail_content.append(self._selection_banner)
         self._detail_content.append(self._view_stack)
         self._toolbar_view.set_content(self._detail_content)
         
@@ -202,9 +202,11 @@ class ServerDetailView(Gtk.Box):
                 f'Console and performance use "{running_name}" (running). '
                 f'Sidebar selection is "{selected_name}".'
             )
+            self._selection_banner.set_visible(True)
             self._selection_banner.set_revealed(True)
         else:
             self._selection_banner.set_revealed(False)
+            self._selection_banner.set_visible(False)
 
     def _attach_io_to_running_or_selected(self, server_info: ServerInfo):
         """
@@ -257,7 +259,7 @@ class ServerDetailView(Gtk.Box):
         mods_busy = bool(selected_id) and self._server_manager.is_mod_operation_active(selected_id)
 
         if status == ServerStatus.STARTING:
-            self._toggle_btn.set_label("Starting...")
+            self._toggle_btn.set_label("Starting")
             self._toggle_btn.remove_css_class("suggested-action")
             self._toggle_btn.remove_css_class("destructive-action")
             self._toggle_btn.add_css_class("hosty-starting-button")

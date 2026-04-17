@@ -96,7 +96,7 @@ _DARK = {
     "btn_default_hover":"#52483D",
     "btn_default_text": "#E8DDD0",
 
-    "console_bg":       "#231F1A",
+    "console_bg":       "#2A2520",
     "console_text":     "#E8DDD0",
 
     "sparkline_cpu":    "212, 148, 76",
@@ -152,7 +152,7 @@ _LIGHT = {
     "btn_default_hover":"#E5DFD5",
     "btn_default_text": "#3D3429",
 
-    "console_bg":       "#FFFFFF",
+    "console_bg":       "#FAF6F0",
     "console_text":     "#3D3429",
 
     "sparkline_cpu":    "107, 143, 94",

@@ -90,11 +90,11 @@ button.playit-compact-button {
 
 /* ===== Console View ===== */
 .console-view {
-    background-color: alpha(currentColor, 0.04);
+    background-color: @window_bg_color;
     color: currentColor;
     font-family: "Source Code Pro", "JetBrains Mono", "Fira Code", monospace;
     font-size: 13px;
-    padding: 12px 16px;
+    padding: 0 16px 12px 16px;
 }
 
 .console-view text {

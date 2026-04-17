@@ -17,11 +17,12 @@ from typing import Optional
 import urllib.parse
 import urllib.request
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QEasingCurve, QPropertyAnimation
 from PySide6.QtWidgets import (
     QCheckBox,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -226,9 +227,22 @@ class ConnectMixin:
         whitelist_layout.setSpacing(8)
         whitelist_layout.addWidget(self._whitelist_enabled_check)
 
-        self._whitelist_container = QVBoxLayout()
+        self._show_whitelist_btn = QToolButton()
+        self._show_whitelist_btn.setText("Show all whitelisted")
+        self._show_whitelist_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._show_whitelist_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self._show_whitelist_btn.setCheckable(True)
+        self._show_whitelist_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._show_whitelist_btn.toggled.connect(self._toggle_whitelist_section)
+        whitelist_layout.addWidget(self._show_whitelist_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self._whitelist_container_widget = QWidget()
+        self._whitelist_container = QVBoxLayout(self._whitelist_container_widget)
         self._whitelist_container.setSpacing(6)
-        whitelist_layout.addLayout(self._whitelist_container)
+        self._whitelist_container.setContentsMargins(12, 0, 0, 0)
+        self._whitelist_container_widget.setMaximumHeight(0)
+        self._whitelist_container_widget.setVisible(False)
+        whitelist_layout.addWidget(self._whitelist_container_widget)
 
         layout.addWidget(whitelist_group)
 
@@ -237,9 +251,25 @@ class ConnectMixin:
         banned_layout = QVBoxLayout(banned_group)
         banned_layout.setSpacing(8)
 
-        self._banned_container = QVBoxLayout()
+        self._show_banned_btn = QToolButton()
+        self._show_banned_btn.setText("Show all banned")
+        self._show_banned_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._show_banned_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self._show_banned_btn.setCheckable(True)
+        self._show_banned_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._show_banned_btn.toggled.connect(self._toggle_banned_section)
+        banned_layout.addWidget(self._show_banned_btn, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self._banned_container_widget = QWidget()
+        self._banned_container = QVBoxLayout(self._banned_container_widget)
         self._banned_container.setSpacing(6)
-        banned_layout.addLayout(self._banned_container)
+        self._banned_container.setContentsMargins(12, 0, 0, 0)
+        self._banned_container_widget.setMaximumHeight(0)
+        self._banned_container_widget.setVisible(False)
+        banned_layout.addWidget(self._banned_container_widget)
+
+        self._whitelist_section_anim: QPropertyAnimation | None = None
+        self._banned_section_anim: QPropertyAnimation | None = None
 
         layout.addWidget(banned_group)
 
@@ -578,10 +608,12 @@ class ConnectMixin:
 
         whitelist_path, banned_path = self._player_list_paths()
         if not whitelist_path or not banned_path:
+            self._update_player_section_toggle_labels(0, 0)
             return
 
         whitelist = self._read_player_list(whitelist_path)
         banned = self._read_player_list(banned_path)
+        self._update_player_section_toggle_labels(len(whitelist), len(banned))
 
         if not whitelist:
             lbl = QLabel("No whitelisted players")
@@ -604,6 +636,66 @@ class ConnectMixin:
                 reason = str(entry.get("reason", "Banned")).strip()
                 row = self._build_player_row(name, reason, is_whitelist=False)
                 self._banned_container.addWidget(row)
+
+        if self._show_whitelist_btn.isChecked():
+            self._whitelist_container_widget.setMaximumHeight(max(1, self._whitelist_container_widget.sizeHint().height()))
+        if self._show_banned_btn.isChecked():
+            self._banned_container_widget.setMaximumHeight(max(1, self._banned_container_widget.sizeHint().height()))
+
+    def _animate_section(self, widget: QWidget, expanded: bool, attr_name: str) -> None:
+        current_anim = getattr(self, attr_name, None)
+        if current_anim is not None:
+            try:
+                current_anim.stop()
+            except Exception:
+                pass
+
+        start_height = max(0, widget.maximumHeight())
+        if expanded:
+            widget.setVisible(True)
+            end_height = max(1, widget.sizeHint().height())
+            if start_height == 0:
+                start_height = 1
+        else:
+            if not widget.isVisible():
+                widget.setMaximumHeight(0)
+                return
+            end_height = 0
+            if start_height <= 0:
+                start_height = max(1, widget.height())
+
+        anim = QPropertyAnimation(widget, b"maximumHeight", self)
+        anim.setDuration(180)
+        anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
+        anim.setStartValue(start_height)
+        anim.setEndValue(end_height)
+
+        def on_finished():
+            if not expanded:
+                widget.setVisible(False)
+                widget.setMaximumHeight(0)
+            else:
+                widget.setMaximumHeight(max(1, widget.sizeHint().height()))
+
+        anim.finished.connect(on_finished)
+        setattr(self, attr_name, anim)
+        anim.start()
+
+    def _toggle_whitelist_section(self, expanded: bool) -> None:
+        self._show_whitelist_btn.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self._animate_section(self._whitelist_container_widget, expanded, "_whitelist_section_anim")
+
+    def _toggle_banned_section(self, expanded: bool) -> None:
+        self._show_banned_btn.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self._animate_section(self._banned_container_widget, expanded, "_banned_section_anim")
+
+    def _update_player_section_toggle_labels(self, whitelist_count: int, banned_count: int) -> None:
+        self._show_whitelist_btn.setText(
+            f"Show all whitelisted ({whitelist_count})"
+        )
+        self._show_banned_btn.setText(
+            f"Show all banned ({banned_count})"
+        )
 
     def _build_player_row(self, name: str, subtitle: str, is_whitelist: bool) -> QWidget:
         row = QWidget()
@@ -670,13 +762,30 @@ class ConnectMixin:
         if not name:
             self._player_status_label.setText("⚠ Enter a player name first.")
             return
-        self._add_player("banned", name)
 
-    def _add_player(self, list_type: str, name: str) -> None:
+        reason, ok = QInputDialog.getText(
+            self,
+            "Ban player",
+            f"Ban reason for {name}:",
+            text="Banned by Hosty",
+        )
+        if not ok:
+            return
+
+        clean_reason = self._normalize_ban_reason(reason)
+        self._add_player("banned", name, ban_reason=clean_reason)
+
+    def _normalize_ban_reason(self, reason: str) -> str:
+        cleaned = " ".join(str(reason or "").split())
+        return cleaned or "Banned by Hosty"
+
+    def _add_player(self, list_type: str, name: str, ban_reason: str = "Banned by Hosty") -> None:
         whitelist_path, banned_path = self._player_list_paths()
         path = whitelist_path if list_type == "whitelist" else banned_path
         if not path:
             return
+
+        reason_text = self._normalize_ban_reason(ban_reason)
 
         self._player_status_label.setText(f"Resolving {name}…")
 
@@ -688,7 +797,7 @@ class ConnectMixin:
             if list_type == "whitelist":
                 process.send_command(f"whitelist add {name}")
             else:
-                process.send_command(f"ban {name}")
+                process.send_command(f"ban {name} {reason_text}")
 
         def worker():
             resolved_name, resolved_uuid = self._resolve_profile(name)
@@ -711,7 +820,7 @@ class ConnectMixin:
                         "created": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S +0000"),
                         "source": "Hosty",
                         "expires": "forever",
-                        "reason": "Banned by Hosty",
+                        "reason": reason_text,
                     })
                     saved = self._write_player_list(path, entries)
                     if saved:

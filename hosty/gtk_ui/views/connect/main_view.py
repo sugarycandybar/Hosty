@@ -52,7 +52,9 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._suppress_whitelist_toggle = False
         self._whitelist_groups: list[Adw.PreferencesGroup] = []
         self._banned_groups: list[Adw.PreferencesGroup] = []
-        self._player_rows_by_group: dict[Adw.PreferencesGroup, list[Gtk.Widget]] = {}
+        self._player_rows_by_group: dict[Gtk.Widget, list[Gtk.Widget]] = {}
+        self._whitelist_list_rows: list[Adw.ExpanderRow] = []
+        self._banned_list_rows: list[Adw.ExpanderRow] = []
 
         self._banner = Adw.Banner()
         self._banner.set_title("Restart the server to apply changes")

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QRadioButton,
     QSpinBox,
     QStackedWidget,
     QVBoxLayout,
@@ -345,7 +346,7 @@ class CreateServerDialog(QDialog):
         eula_group = QGroupBox("Minecraft EULA")
         eula_layout = QVBoxLayout(eula_group)
 
-        self._eula_check = QCheckBox("I agree to the Minecraft EULA")
+        self._eula_check = QRadioButton("I agree to the Minecraft EULA")
         self._eula_check.setCursor(Qt.CursorShape.PointingHandCursor)
         self._eula_check.setToolTip("Required to complete server creation")
         self._eula_check.toggled.connect(self._validate)
