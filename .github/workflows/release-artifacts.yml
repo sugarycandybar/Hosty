@@ -123,12 +123,23 @@ jobs:
             exit 1
           fi
 
-      - name: Install Flatpak tooling
+      - name: Install Flatpak tooling and GNOME SDK
         run: |
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y flathub org.gnome.Platform//48 org.gnome.Sdk//48
+          # Install GNOME SDK and Platform 50 required by the manifest
+          flatpak --user install -y flathub org.gnome.Platform//50 org.gnome.Sdk//50
+
+      - name: Cache Flatpak downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/flatpak
+            ~/.var/app
+          key: ${{ runner.os }}-flatpak-sdk-50-${{ hashFiles('packaging/flatpak/**') }}
+          restore-keys: |
+            ${{ runner.os }}-flatpak-sdk-50-
 
       - name: Build Flatpak bundle
         run: |
