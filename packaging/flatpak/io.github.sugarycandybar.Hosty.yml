@@ -1,5 +1,4 @@
 app-id: io.github.sugarycandybar.Hosty
-branch: stable
 runtime: org.gnome.Platform
 runtime-version: "50"
 sdk: org.gnome.Sdk
@@ -49,6 +48,8 @@ modules:
       - install -Dm755 packaging/flatpak/hosty-wrapper.sh /app/bin/hosty
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.desktop /app/share/applications/io.github.sugarycandybar.Hosty.desktop
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml /app/share/metainfo/io.github.sugarycandybar.Hosty.metainfo.xml
+      - install -d /app/share/metainfo/screenshots
+      - cp -a packaging/linux/screenshots /app/share/metainfo/
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty-symbolic.svg /app/share/icons/hicolor/scalable/apps/io.github.sugarycandybar.Hosty-symbolic.svg
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty-symbolic.svg /app/share/icons/hicolor/symbolic/apps/io.github.sugarycandybar.Hosty-symbolic.svg
     sources:
