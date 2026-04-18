@@ -5,6 +5,6 @@ Comment=Fabric Minecraft server manager
 Exec=hosty
 Icon=io.github.sugarycandybar.Hosty
 Terminal=false
-Categories=Game;Utility;
+Categories=Utility;
 Keywords=minecraft;server;fabric;modrinth;
 StartupNotify=true

@@ -37,3 +37,8 @@ Thumbs.db
 # Logs
 *.log
 .flake8
+
+# Flatpak local build artifacts
+.flatpak-builder/
+build-dir/
+repo/
