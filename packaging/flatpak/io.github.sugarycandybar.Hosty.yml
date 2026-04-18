@@ -49,7 +49,11 @@ modules:
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.desktop /app/share/applications/io.github.sugarycandybar.Hosty.desktop
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml /app/share/metainfo/io.github.sugarycandybar.Hosty.metainfo.xml
       - install -d /app/share/metainfo/screenshots
-      - cp -a packaging/linux/screenshots /app/share/metainfo/
+      - install -Dm644 packaging/linux/screenshots/connect.png /app/share/metainfo/screenshots/connect.png
+      - install -Dm644 packaging/linux/screenshots/files.png /app/share/metainfo/screenshots/files.png
+      - install -Dm644 packaging/linux/screenshots/console.png /app/share/metainfo/screenshots/console.png
+      - install -Dm644 packaging/linux/screenshots/mods.png /app/share/metainfo/screenshots/mods.png
+      - install -Dm644 packaging/linux/screenshots/performance.png /app/share/metainfo/screenshots/performance.png
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty-symbolic.svg /app/share/icons/hicolor/scalable/apps/io.github.sugarycandybar.Hosty-symbolic.svg
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty-symbolic.svg /app/share/icons/hicolor/symbolic/apps/io.github.sugarycandybar.Hosty-symbolic.svg
     sources:
