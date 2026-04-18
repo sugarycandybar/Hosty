@@ -48,8 +48,14 @@ modules:
       - install -Dm755 packaging/flatpak/hosty-wrapper.sh /app/bin/hosty
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.desktop /app/share/applications/io.github.sugarycandybar.Hosty.desktop
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml /app/share/metainfo/io.github.sugarycandybar.Hosty.metainfo.xml
-      - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty-symbolic.svg /app/share/icons/hicolor/scalable/apps/io.github.sugarycandybar.Hosty-symbolic.svg
+      - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty.svg /app/share/icons/hicolor/scalable/apps/io.github.sugarycandybar.Hosty.svg
       - install -Dm644 packaging/linux/io.github.sugarycandybar.Hosty-symbolic.svg /app/share/icons/hicolor/symbolic/apps/io.github.sugarycandybar.Hosty-symbolic.svg
+      - install -d /app/share/app-info/media/io.github.sugarycandybar.Hosty
+      - install -Dm644 packaging/linux/screenshots/connect.png /app/share/app-info/media/io.github.sugarycandybar.Hosty/connect.png
+      - install -Dm644 packaging/linux/screenshots/files.png /app/share/app-info/media/io.github.sugarycandybar.Hosty/files.png
+      - install -Dm644 packaging/linux/screenshots/console.png /app/share/app-info/media/io.github.sugarycandybar.Hosty/console.png
+      - install -Dm644 packaging/linux/screenshots/mods.png /app/share/app-info/media/io.github.sugarycandybar.Hosty/mods.png
+      - install -Dm644 packaging/linux/screenshots/performance.png /app/share/app-info/media/io.github.sugarycandybar.Hosty/performance.png
     sources:
       - type: dir
         path: ../..
