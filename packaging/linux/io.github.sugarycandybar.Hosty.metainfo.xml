@@ -29,14 +29,17 @@
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
   <url type="vcs-browser">https://github.com/sugarycandybar/Hosty</url>
   <releases>
-    <release version="1.4.2" date="2026-04-14">
+    <release version="1.5.0" date="2026-04-18">
+    <description>
+      <p>Initial flatpak release</p>
+    </description>
     </release>
   </releases>
   <content_rating type="oars-1.1"/>
   <screenshots>
     <screenshot type="default">
       <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/connect.png</image>
-      <caption>Connect to and manage servers</caption>
+      <caption>Share local servers</caption>
     </screenshot>
     <screenshot>
       <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/files.png</image>
