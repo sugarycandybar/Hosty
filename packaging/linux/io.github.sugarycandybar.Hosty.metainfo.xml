@@ -38,23 +38,23 @@
   <content_rating type="oars-1.1"/>
   <screenshots>
     <screenshot type="default">
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/connect.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/15eb6fa5ffd58adc2883c1839d70ed969155b6af/images/connect.png</image>
       <caption>Share local servers</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/files.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/15eb6fa5ffd58adc2883c1839d70ed969155b6af/images/files.png</image>
       <caption>Manage world files and backups</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/console.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/15eb6fa5ffd58adc2883c1839d70ed969155b6af/images/console.png</image>
       <caption>Server console and logs</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/mods.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/15eb6fa5ffd58adc2883c1839d70ed969155b6af/images/mods.png</image>
       <caption>Install and manage mods</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/performance.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/15eb6fa5ffd58adc2883c1839d70ed969155b6af/images/performance.png</image>
       <caption>Monitor server performance</caption>
     </screenshot>
   </screenshots>
