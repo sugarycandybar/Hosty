@@ -27,6 +27,7 @@
   <launchable type="desktop-id">io.github.sugarycandybar.Hosty.desktop</launchable>
   <url type="homepage">https://github.com/sugarycandybar/Hosty</url>
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
+  <url type="vcs-browser">https://github.com/sugarycandybar/Hosty</url>
   <releases>
     <release version="1.4.2" date="2026-04-14">
     </release>
@@ -34,23 +35,23 @@
   <content_rating type="oars-1.1"/>
   <screenshots>
     <screenshot type="default">
-      <image>screenshots/connect.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/connect.png</image>
       <caption>Connect to and manage servers</caption>
     </screenshot>
     <screenshot>
-      <image>screenshots/files.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/files.png</image>
       <caption>Manage world files and backups</caption>
     </screenshot>
     <screenshot>
-      <image>screenshots/console.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/console.png</image>
       <caption>Server console and logs</caption>
     </screenshot>
     <screenshot>
-      <image>screenshots/mods.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/mods.png</image>
       <caption>Install and manage mods</caption>
     </screenshot>
     <screenshot>
-      <image>screenshots/performance.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/main/images/performance.png</image>
       <caption>Monitor server performance</caption>
     </screenshot>
   </screenshots>
