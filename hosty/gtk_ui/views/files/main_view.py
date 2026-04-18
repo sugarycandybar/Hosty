@@ -56,6 +56,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._worlds_snapshot: tuple[tuple[str, tuple[str, ...]], ...] = tuple()
 
         self._backups_group: Optional[Adw.PreferencesGroup] = None
+        self._backups_row: Optional[Adw.ActionRow] = None
         self._backup_rows: list[Gtk.Widget] = []
         self._backup_busy = False
         self._create_backup_row: Optional[Adw.ActionRow] = None
@@ -94,11 +95,12 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         backups_row = Adw.ActionRow(
             title="Backups",
-            subtitle="Create, restore, and manage backup archives",
+            subtitle="0 backups",
         )
         backups_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         backups_row.set_activatable(True)
         backups_row.connect("activated", self._push_backups_page)
+        self._backups_row = backups_row
         self._worlds_group.add(backups_row)
         page.add(self._worlds_group)
 
@@ -111,7 +113,6 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         modrinth_row = Adw.ActionRow(
             title="Modrinth",
-            subtitle="Discover and install compatible mods and modpacks",
         )
         modrinth_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         modrinth_row.set_activatable(True)
@@ -138,6 +139,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._server_info = server_info
         self._server_manager = server_manager
         self._worlds_snapshot = tuple()
+        self._refresh_backups_row_subtitle()
         self._rebuild_lists()
 
     def refresh_worlds_if_changed(self, force: bool = False) -> None:
@@ -187,6 +189,8 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         if not self._worlds_group or not self._mods_group:
             return
 
+        self._refresh_backups_row_subtitle()
+
         self._ensure_modpack_version_numbers_async()
 
         self._clear_group_rows(self._worlds_group, self._world_rows)
@@ -235,6 +239,19 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             self._mod_rows.append(row)
 
         self._worlds_snapshot = self._build_worlds_snapshot()
+
+    def _refresh_backups_row_subtitle(self) -> None:
+        if not self._backups_row:
+            return
+
+        bdir = self._backups_dir()
+        if not bdir:
+            self._backups_row.set_subtitle("No server selected")
+            return
+
+        count = sum(1 for _ in bdir.glob("*.zip"))
+        suffix = "backup" if count == 1 else "backups"
+        self._backups_row.set_subtitle(f"{count} {suffix}")
 
     def _build_worlds_snapshot(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
         root = self._server_dir()

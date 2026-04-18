@@ -50,8 +50,7 @@ class PlayersMixin:
         actions.add(self._players_name_row)
 
         add_row = Adw.ActionRow(
-            title="Add to whitelist",
-            subtitle="Allow this player to join",
+            title="Add to whitelist"
         )
         add_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
         add_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
@@ -61,7 +60,6 @@ class PlayersMixin:
 
         ban_row = Adw.ActionRow(
             title="Ban player",
-            subtitle="Block this player from joining",
         )
         ban_row.add_prefix(Gtk.Image.new_from_icon_name("user-trash-symbolic"))
         ban_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))

@@ -12,6 +12,7 @@ from gi.repository import Gtk, Adw
 from hosty.shared.backend.config_manager import ConfigManager
 from hosty.shared.backend.server_manager import ServerManager, ServerInfo
 from hosty.shared.utils.constants import (
+    DEFAULT_SERVER_PROPERTIES,
     DIFFICULTIES,
     GAMEMODES,
     LEVEL_TYPES,
@@ -20,6 +21,9 @@ from hosty.shared.utils.constants import (
     MAX_RAM_MB,
     DEFAULT_RAM_MB,
 )
+
+
+DIFFICULTY_MODES = [*DIFFICULTIES, "hardcore"]
 
 
 class PropertiesView(Gtk.Box):
@@ -58,8 +62,13 @@ class PropertiesView(Gtk.Box):
         self._widgets["max-players"] = self._add_spin_row(
             general, "Max Players", "max-players", 1, 1000, 20
         )
+        default_difficulty_mode = (
+            "hardcore"
+            if str(DEFAULT_SERVER_PROPERTIES.get("hardcore", "false")).lower() == "true"
+            else str(DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
+        )
         self._widgets["difficulty"] = self._add_combo_row(
-            general, "Difficulty", "difficulty", DIFFICULTIES, "easy"
+            general, "Difficulty", "difficulty", DIFFICULTY_MODES, default_difficulty_mode
         )
         self._widgets["gamemode"] = self._add_combo_row(
             general, "Default Gamemode", "gamemode", GAMEMODES, "survival"
@@ -137,6 +146,9 @@ class PropertiesView(Gtk.Box):
         self._widgets["allow-flight"] = self._add_switch_row(
             players, "Allow Flight", "allow-flight", False, ""
         )
+        self._widgets["keep-inventory"] = self._add_switch_row(
+            players, "Keep Inventory", "keep-inventory", False, ""
+        )
         
         page.add(players)
         
@@ -148,9 +160,6 @@ class PropertiesView(Gtk.Box):
         )
         self._widgets["allow-nether"] = self._add_switch_row(
             advanced, "Allow Nether", "allow-nether", True, ""
-        )
-        self._widgets["hardcore"] = self._add_switch_row(
-            advanced, "Hardcore Mode", "hardcore", False, ""
         )
         self._widgets["enable-rcon"] = self._add_switch_row(
             advanced, "Enable RCON", "enable-rcon", False, ""
@@ -267,10 +276,18 @@ class PropertiesView(Gtk.Box):
                 val = self._config.get_bool(key, widget.get_active())
                 widget.set_active(val)
             elif isinstance(widget, Adw.ComboRow):
-                val = self._config.get(key, "")
                 options = widget._options
+                if key == "difficulty":
+                    # Hardcore mode is represented as a virtual difficulty option in the UI.
+                    val = "hardcore" if self._config.get_bool("hardcore", False) else self._config.get("difficulty", "")
+                    try:
+                        idx = options.index(val)
+                        widget.set_selected(idx)
+                    except ValueError:
+                        widget.set_selected(0)
                 # For level-type, map from raw value to display name
-                if key == "level-type":
+                elif key == "level-type":
+                    val = self._config.get(key, "")
                     display_val = LEVEL_TYPE_NAMES.get(val, val)
                     try:
                         idx = options.index(display_val)
@@ -278,6 +295,7 @@ class PropertiesView(Gtk.Box):
                     except ValueError:
                         widget.set_selected(0)
                 else:
+                    val = self._config.get(key, "")
                     try:
                         idx = options.index(val)
                         widget.set_selected(idx)
@@ -306,7 +324,15 @@ class PropertiesView(Gtk.Box):
             elif isinstance(widget, Adw.ComboRow):
                 idx = widget.get_selected()
                 options = widget._options
-                if key == "level-type":
+                if key == "difficulty":
+                    val = options[idx] if idx < len(options) else options[0]
+                    if val == "hardcore":
+                        self._config.set_value("difficulty", "hard")
+                        self._config.set_value("hardcore", True)
+                    else:
+                        self._config.set_value("difficulty", val)
+                        self._config.set_value("hardcore", False)
+                elif key == "level-type":
                     # Map display name back to raw value
                     display_name = options[idx] if idx < len(options) else options[0]
                     raw_val = next(

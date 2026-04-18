@@ -46,14 +46,7 @@ class WorldsMixin:
             "Open world folder",
             lambda *_p, p=path: self._open_target(p),
         )
-        del_btn = self._icon_button(
-            "user-trash-symbolic",
-            "Delete world",
-            lambda *_p, p=path, n=path.name: self._confirm_delete_world(p, n),
-            destructive=True,
-        )
         row.add_suffix(open_btn)
-        row.add_suffix(del_btn)
         if not dims:
             none_row = Adw.ActionRow(title="No dimension folders found")
             none_row.set_activatable(False)
@@ -84,7 +77,7 @@ class WorldsMixin:
             return
 
         if dim_path.resolve() == world_path.resolve():
-            self._alert("Cannot delete world root", "Use Delete world to remove the entire world.")
+            self._alert("Cannot delete world root", "Delete only individual dimensions from this list.")
             return
 
         dialog = Adw.AlertDialog()
@@ -101,31 +94,6 @@ class WorldsMixin:
                 self._soft_delete_with_undo(
                     dim_path,
                     f"dimension \"{name}\"",
-                    on_refresh=self._rebuild_lists,
-                )
-
-        dialog.connect("response", on_response)
-        dialog.present(self.get_root())
-
-    def _confirm_delete_world(self, path: Path, name: str):
-        if self._is_running():
-            self._alert("Server is running", "Stop the server before deleting a world.")
-            return
-
-        dialog = Adw.AlertDialog()
-        dialog.set_heading("Delete world?")
-        dialog.set_body(f"Permanently delete “{name}” and all of its contents?")
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
-        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
-        dialog.set_default_response("cancel")
-        dialog.set_close_response("cancel")
-
-        def on_response(_d, response):
-            if response == "delete":
-                self._soft_delete_with_undo(
-                    path,
-                    f"world \"{name}\"",
                     on_refresh=self._rebuild_lists,
                 )
 

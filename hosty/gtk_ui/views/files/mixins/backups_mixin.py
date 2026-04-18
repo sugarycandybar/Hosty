@@ -95,6 +95,12 @@ class BackupsMixin:
         return self._build_subpage_shell("Backups", sw)
 
     def _refresh_backup_list(self) -> None:
+        if hasattr(self, "_refresh_backups_row_subtitle"):
+            try:
+                self._refresh_backups_row_subtitle()
+            except Exception:
+                pass
+
         if not self._backups_group:
             return
 

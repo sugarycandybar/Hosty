@@ -90,7 +90,7 @@ class IconPickerDialog(Adw.Dialog):
         
         # Info
         info_label = Gtk.Label(
-            label="Select a PNG, JPG, or WebP image.\nIt will be automatically cropped to a square and resized."
+            label="Select a PNG, JPG, or WebP image."
         )
         info_label.add_css_class("dim-label")
         info_label.set_halign(Gtk.Align.CENTER)

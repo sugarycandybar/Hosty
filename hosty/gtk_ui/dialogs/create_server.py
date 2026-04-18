@@ -35,6 +35,9 @@ OPTIMISATION_MODS = [
 ]
 
 
+DIFFICULTY_MODES = [*DIFFICULTIES, "hardcore"]
+
+
 class CreateServerDialog(Adw.Dialog):
     """Dialog for creating a new Fabric Minecraft server."""
     
@@ -83,7 +86,7 @@ class CreateServerDialog(Adw.Dialog):
         # ===== Second Step =====
         runtime_page = self._build_runtime_page()
         self._stack.add_named(runtime_page, "runtime")
-        
+
         # ===== Progress Page =====
         progress_page = self._build_progress_page()
         self._stack.add_named(progress_page, "progress")
@@ -97,7 +100,7 @@ class CreateServerDialog(Adw.Dialog):
         self._fetch_versions()
     
     def _build_details_page(self) -> Gtk.Widget:
-        """Build step 1: basic identity and legal confirmation."""
+        """Build step 1: basic server details."""
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
@@ -105,7 +108,6 @@ class CreateServerDialog(Adw.Dialog):
 
         info_group = Adw.PreferencesGroup(
             title="Server Info",
-            description="Name your server and configure initial world details",
         )
 
         self._name_entry = Adw.EntryRow(title="Server Name")
@@ -122,29 +124,36 @@ class CreateServerDialog(Adw.Dialog):
             title="Server Icon",
             subtitle="No icon selected",
         )
-        choose_icon_btn = Gtk.Button(label="Choose…")
-        choose_icon_btn.add_css_class("pill")
-        choose_icon_btn.connect("clicked", self._on_choose_icon)
-        self._icon_row.add_suffix(choose_icon_btn)
-        self._icon_row.set_activatable_widget(choose_icon_btn)
+        self._choose_icon_btn = Gtk.Button()
+        self._choose_icon_btn.add_css_class("flat")
+        self._choose_icon_btn.set_tooltip_text("Choose server icon")
+        self._choose_icon_btn.set_valign(Gtk.Align.CENTER)
+        self._choose_icon_btn.set_child(Gtk.Image.new_from_icon_name("folder-symbolic"))
+
+        self._choose_icon_btn.connect("clicked", self._on_choose_icon)
+        self._icon_row.add_suffix(self._choose_icon_btn)
+        self._icon_row.set_activatable_widget(self._choose_icon_btn)
         info_group.add(self._icon_row)
 
         page.add(info_group)
 
         world_group = Adw.PreferencesGroup(
             title="World defaults",
-            description="Initial gameplay settings applied to server.properties",
         )
 
-        self._difficulty_values = list(DIFFICULTIES)
-        difficulty_labels = [value.title() for value in self._difficulty_values]
+        self._difficulty_values = list(DIFFICULTY_MODES)
+        difficulty_labels = ["Hardcore" if value == "hardcore" else value.title() for value in self._difficulty_values]
         self._difficulty_row = Adw.ComboRow(
             title="Difficulty",
             model=Gtk.StringList.new(difficulty_labels),
         )
-        default_difficulty = str(DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
-        if default_difficulty in self._difficulty_values:
-            self._difficulty_row.set_selected(self._difficulty_values.index(default_difficulty))
+        default_is_hardcore = str(DEFAULT_SERVER_PROPERTIES.get("hardcore", "false")).lower() == "true"
+        if default_is_hardcore and "hardcore" in self._difficulty_values:
+            self._difficulty_row.set_selected(self._difficulty_values.index("hardcore"))
+        else:
+            default_difficulty = str(DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
+            if default_difficulty in self._difficulty_values:
+                self._difficulty_row.set_selected(self._difficulty_values.index(default_difficulty))
         world_group.add(self._difficulty_row)
 
         self._gamemode_values = list(GAMEMODES)
@@ -170,24 +179,6 @@ class CreateServerDialog(Adw.Dialog):
         world_group.add(self._level_type_row)
 
         page.add(world_group)
-
-        legal_group = Adw.PreferencesGroup(
-            title="Minecraft EULA",
-        )
-
-        eula_row = Adw.ActionRow(
-            title="I agree to Minecraft EULA",
-            subtitle="Required to complete server creation",
-        )
-        self._eula_check = Gtk.CheckButton()
-        self._eula_check.add_css_class("radio")
-        self._eula_check.set_active(False)
-        self._eula_check.connect("toggled", self._validate)
-        eula_row.add_prefix(self._eula_check)
-        eula_row.set_activatable_widget(self._eula_check)
-        legal_group.add(eula_row)
-
-        page.add(legal_group)
 
         scrolled.set_child(page)
         return scrolled
@@ -265,7 +256,7 @@ class CreateServerDialog(Adw.Dialog):
 
         scrolled.set_child(page)
         return scrolled
-    
+
     def _build_progress_page(self) -> Gtk.Widget:
         """Build the progress/installation page."""
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -349,7 +340,8 @@ class CreateServerDialog(Adw.Dialog):
         self._validate()
 
     def _on_cancel_clicked(self, button):
-        if self._stack.get_visible_child_name() == "runtime":
+        page = self._stack.get_visible_child_name()
+        if page == "runtime":
             self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_RIGHT)
             self._stack.set_visible_child_name("details")
             self._validate()
@@ -398,11 +390,10 @@ class CreateServerDialog(Adw.Dialog):
         page = self._stack.get_visible_child_name()
 
         if page == "details":
-            has_eula = self._eula_check.get_active()
             self._cancel_btn.set_label("Cancel")
             self._cancel_btn.set_sensitive(True)
             self._create_btn.set_label("Next")
-            self._create_btn.set_sensitive(bool(name) and has_eula)
+            self._create_btn.set_sensitive(bool(name))
             return
 
         if page == "runtime":
@@ -426,7 +417,9 @@ class CreateServerDialog(Adw.Dialog):
             self._validate()
             return
 
-        if page != "runtime":
+        if page == "runtime":
+            pass
+        else:
             return
 
         name = self._name_entry.get_text().strip()
@@ -442,6 +435,8 @@ class CreateServerDialog(Adw.Dialog):
             if difficulty_idx < len(self._difficulty_values)
             else str(DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
         )
+        hardcore_mode = difficulty == "hardcore"
+        difficulty_for_config = "hard" if hardcore_mode else difficulty
         gamemode_idx = self._gamemode_row.get_selected()
         gamemode = (
             self._gamemode_values[gamemode_idx]
@@ -454,10 +449,9 @@ class CreateServerDialog(Adw.Dialog):
             if level_type_idx < len(self._level_type_values)
             else str(DEFAULT_SERVER_PROPERTIES.get("level-type", "minecraft\\:normal"))
         )
-        eula_accepted = self._eula_check.get_active()
         install_optimisations = bool(self._optimise_row.get_active())
 
-        if not name or not mc_version or not loader_version or not eula_accepted:
+        if not name or not mc_version or not loader_version:
             return
 
         # Switch to progress page
@@ -474,10 +468,10 @@ class CreateServerDialog(Adw.Dialog):
                 loader_version,
                 ram_mb,
                 seed,
-                difficulty,
+                difficulty_for_config,
+                hardcore_mode,
                 gamemode,
                 level_type,
-                eula_accepted,
                 self._icon_source_path,
                 install_optimisations,
             ),
@@ -493,9 +487,9 @@ class CreateServerDialog(Adw.Dialog):
         ram_mb,
         seed,
         difficulty,
+        hardcore_mode,
         gamemode,
         level_type,
-        eula_accepted,
         icon_source_path,
         install_optimisations,
     ):
@@ -578,18 +572,19 @@ class CreateServerDialog(Adw.Dialog):
                 self._show_error(f"Fabric installation failed: {msg}")
                 return
 
-            # Step 5: Accept EULA
+            # Step 5: Apply server settings
             self._update_progress(0.88, "Applying server settings...", "")
             from hosty.shared.backend.config_manager import ConfigManager
             config = ConfigManager(str(server_info.server_dir))
             config.load()
             config.set_value("motd", DEFAULT_SERVER_PROPERTIES.get("motd", "a hosty server"))
             config.set_value("difficulty", difficulty)
+            config.set_value("hardcore", bool(hardcore_mode))
             config.set_value("gamemode", gamemode)
             config.set_value("level-type", level_type)
             config.set_value("level-seed", seed)
             config.save()
-            config.set_eula(bool(eula_accepted))
+            config.set_eula(True)
 
             # Step 6: Save icon if selected
             if icon_source_path:

@@ -1,7 +1,7 @@
 """
 Multi-step Create Server dialog for Hosty Windows UI.
 
-Step 1 (Details): Name, seed, icon, EULA
+Step 1 (Details): Name, seed, icon
 Step 2 (Runtime): MC version, loader, Java info, RAM, optimization mods
 Progress: animated progress bar with status text
 """
@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
-    QRadioButton,
     QSpinBox,
     QStackedWidget,
     QVBoxLayout,
@@ -92,7 +91,6 @@ class InstallWorker(QThread):
         difficulty: str = "easy",
         gamemode: str = "survival",
         level_type: str = "minecraft\\:normal",
-        eula: bool = True,
         icon_path: str = "",
         install_optimisations: bool = False,
     ):
@@ -106,7 +104,6 @@ class InstallWorker(QThread):
         self._difficulty = str(difficulty or "easy")
         self._gamemode = str(gamemode or "survival")
         self._level_type = str(level_type or "minecraft\\:normal")
-        self._eula = eula
         self._icon_path = icon_path
         self._install_optimisations = install_optimisations
 
@@ -193,7 +190,7 @@ class InstallWorker(QThread):
             if self._seed:
                 config.set_value("level-seed", self._seed)
             config.save()
-            config.set_eula(self._eula)
+            config.set_eula(True)
 
             # Step 7: Icon
             if self._icon_path:
@@ -395,23 +392,6 @@ class CreateServerDialog(QDialog):
         world_layout.addLayout(world_type_row)
 
         layout.addWidget(world_group)
-
-        # EULA group
-        eula_group = QGroupBox("Minecraft EULA")
-        eula_layout = QVBoxLayout(eula_group)
-
-        self._eula_check = QRadioButton("I agree to the Minecraft EULA")
-        self._eula_check.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._eula_check.setToolTip("Required to complete server creation")
-        self._eula_check.toggled.connect(self._validate)
-        eula_layout.addWidget(self._eula_check)
-
-        eula_info = QLabel("You must accept the Minecraft End User License Agreement to create a server.")
-        eula_info.setWordWrap(True)
-        eula_info.setProperty("class", "dim")
-        eula_layout.addWidget(eula_info)
-
-        layout.addWidget(eula_group)
         layout.addStretch()
 
     def _build_runtime_page(self) -> None:
@@ -600,8 +580,7 @@ class CreateServerDialog(QDialog):
         if page_idx == 0:
             # Details page
             name_ok = bool(self._name_input.text().strip())
-            eula_ok = self._eula_check.isChecked()
-            self._primary_btn.setEnabled(name_ok and eula_ok)
+            self._primary_btn.setEnabled(name_ok)
             self._primary_btn.setText("Next")
             self._cancel_btn.setText("Cancel")
             self._cancel_btn.setEnabled(True)
@@ -667,7 +646,6 @@ class CreateServerDialog(QDialog):
             difficulty=difficulty,
             gamemode=gamemode,
             level_type=level_type,
-            eula=self._eula_check.isChecked(),
             icon_path=self._icon_source_path,
             install_optimisations=self._optimise_check.isChecked(),
         )

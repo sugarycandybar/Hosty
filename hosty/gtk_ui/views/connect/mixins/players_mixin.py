@@ -44,13 +44,13 @@ class PlayersMixin:
         actions.add(name_row)
         self._players_name_rows.append(name_row)
 
-        add_row = Adw.ActionRow(title="Add to whitelist", subtitle="Allow this player to join")
+        add_row = Adw.ActionRow(title="Add to whitelist")
         add_row.add_prefix(Gtk.Image.new_from_icon_name("list-add-symbolic"))
         add_row.set_activatable(True)
         add_row.connect("activated", lambda *_args, r=name_row: self._on_add_whitelist(r))
         actions.add(add_row)
 
-        ban_row = Adw.ActionRow(title="Ban player", subtitle="Block this player from joining")
+        ban_row = Adw.ActionRow(title="Ban player")
         ban_row.add_prefix(Gtk.Image.new_from_icon_name("user-trash-symbolic"))
         ban_row.set_activatable(True)
         ban_row.connect("activated", lambda *_args, r=name_row: self._on_add_banned(r))

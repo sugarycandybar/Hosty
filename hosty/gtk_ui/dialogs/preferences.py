@@ -26,7 +26,6 @@ def show_preferences_window(parent: Gtk.Window, preferences: PreferencesManager,
     page = Adw.PreferencesPage(title="General")
     group = Adw.PreferencesGroup(
         title="Application",
-        description="Hosty stores server data under your user data directory.",
     )
     ver = Adw.ActionRow(title="Version", subtitle=APP_VERSION)
     ver.set_activatable(False)

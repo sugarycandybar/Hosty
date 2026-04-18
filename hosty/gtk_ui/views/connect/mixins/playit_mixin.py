@@ -115,9 +115,11 @@ class PlayitMixin:
             self._tunnel_domain_row.set_subtitle("Not available")
             self._tunnel_domain_row.set_activatable(False)
             self._copy_tunnel_domain_btn.set_sensitive(False)
+            self._copy_tunnel_domain_btn.set_visible(False)
             self._bedrock_domain_row.set_subtitle("Not available")
             self._bedrock_domain_row.set_activatable(False)
             self._copy_bedrock_domain_btn.set_sensitive(False)
+            self._copy_bedrock_domain_btn.set_visible(False)
             self._java_tunnel_action_btn.set_label("")
             self._java_tunnel_action_btn.set_icon_name("list-add-symbolic")
             self._java_tunnel_action_btn.set_tooltip_text("Add Java tunnel")
@@ -176,20 +178,24 @@ class PlayitMixin:
             self._tunnel_domain_row.set_subtitle(java_endpoint)
             self._tunnel_domain_row.set_activatable(True)
             self._copy_tunnel_domain_btn.set_sensitive(True)
+            self._copy_tunnel_domain_btn.set_visible(True)
         else:
             self._tunnel_domain_row.set_subtitle("Not available")
-            self._tunnel_domain_row.set_activatable(False)
+            self._tunnel_domain_row.set_activatable(True)
             self._copy_tunnel_domain_btn.set_sensitive(False)
+            self._copy_tunnel_domain_btn.set_visible(False)
 
         bedrock_endpoint = str(self._cfg.get("bedrock_endpoint", "")).strip()
         if bedrock_endpoint:
             self._bedrock_domain_row.set_subtitle(bedrock_endpoint)
             self._bedrock_domain_row.set_activatable(True)
             self._copy_bedrock_domain_btn.set_sensitive(True)
+            self._copy_bedrock_domain_btn.set_visible(True)
         else:
             self._bedrock_domain_row.set_subtitle("Not available")
-            self._bedrock_domain_row.set_activatable(False)
+            self._bedrock_domain_row.set_activatable(True)
             self._copy_bedrock_domain_btn.set_sensitive(False)
+            self._copy_bedrock_domain_btn.set_visible(False)
 
         if java_endpoint:
             self._java_tunnel_action_btn.set_label("")
@@ -272,6 +278,13 @@ class PlayitMixin:
         except Exception:
             pass
 
+    def _on_java_domain_row_activated(self, *_args):
+        endpoint = str(self._cfg.get("java_endpoint", "")).strip()
+        if endpoint:
+            self._on_copy_tunnel_domain()
+            return
+        self._on_manage_java_tunnel()
+
     def _on_copy_bedrock_domain(self, *_args):
         endpoint = str(self._cfg.get("bedrock_endpoint", "")).strip()
         if not endpoint:
@@ -286,6 +299,13 @@ class PlayitMixin:
             self._toast("Bedrock tunnel domain copied")
         except Exception:
             pass
+
+    def _on_bedrock_domain_row_activated(self, *_args):
+        endpoint = str(self._cfg.get("bedrock_endpoint", "")).strip()
+        if endpoint:
+            self._on_copy_bedrock_domain()
+            return
+        self._on_manage_bedrock_tunnel()
 
     def _on_tunnel_toggle(self, *_args):
         if not self._server_manager:
@@ -339,6 +359,26 @@ class PlayitMixin:
         dialog.connect("response", on_response)
         dialog.present(self.get_root())
 
+    def _confirm_regenerate_tunnel(self, tunnel_name: str, on_confirm):
+        dialog = Adw.AlertDialog()
+        dialog.set_heading(f"Regenerate {tunnel_name} tunnel?")
+        dialog.set_body(
+            "This will replace the current tunnel domain with a new one. "
+            "Players using the old domain will no longer be able to connect."
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("regenerate", "Regenerate")
+        dialog.set_response_appearance("regenerate", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def on_response(_dialog, response):
+            if response == "regenerate":
+                on_confirm()
+
+        dialog.connect("response", on_response)
+        dialog.present(self.get_root())
+
     def _on_regenerate_domain(self, *_args):
         # Backward-compatible handler alias.
         self._on_manage_java_tunnel()
@@ -365,38 +405,46 @@ class PlayitMixin:
         server_dir = str(self._server_info.server_dir)
         secret = str(self._cfg.get("secret", "")).strip()
         had_java_tunnel = bool(str(self._cfg.get("java_endpoint", "")).strip())
-        self._java_tunnel_in_progress = True
-        self._refresh_status_row()
 
-        def run():
-            if had_java_tunnel:
-                ok, msg, endpoint = self._server_manager.playit_manager.regenerate_java_tunnel(
-                    server_id,
-                    server_dir,
-                    secret=secret,
-                    auto_install=True,
-                )
-            else:
-                ok, msg, endpoint = self._server_manager.playit_manager.add_java_tunnel(
-                    server_id,
-                    server_dir,
-                    secret=secret,
-                    auto_install=True,
-                )
+        def start_operation():
+            self._java_tunnel_in_progress = True
+            self._refresh_status_row()
 
-            def ui_done():
-                self._java_tunnel_in_progress = False
-                if ok and endpoint:
-                    self._save_server_config({"java_endpoint": endpoint})
-                self._refresh_status_row()
-                if ok:
-                    self._toast(msg)
+            def run():
+                if had_java_tunnel:
+                    ok, msg, endpoint = self._server_manager.playit_manager.regenerate_java_tunnel(
+                        server_id,
+                        server_dir,
+                        secret=secret,
+                        auto_install=True,
+                    )
                 else:
-                    self._alert("Could not update Java tunnel", msg)
+                    ok, msg, endpoint = self._server_manager.playit_manager.add_java_tunnel(
+                        server_id,
+                        server_dir,
+                        secret=secret,
+                        auto_install=True,
+                    )
 
-            GLib.idle_add(ui_done)
+                def ui_done():
+                    self._java_tunnel_in_progress = False
+                    if ok and endpoint:
+                        self._save_server_config({"java_endpoint": endpoint})
+                    self._refresh_status_row()
+                    if ok:
+                        self._toast(msg)
+                    else:
+                        self._alert("Could not update Java tunnel", msg)
 
-        threading.Thread(target=run, daemon=True).start()
+                GLib.idle_add(ui_done)
+
+            threading.Thread(target=run, daemon=True).start()
+
+        if had_java_tunnel:
+            self._confirm_regenerate_tunnel("Java", start_operation)
+            return
+
+        start_operation()
 
     def _on_manage_bedrock_tunnel(self, *_args):
         if not self._server_manager or not self._server_info:
@@ -423,38 +471,46 @@ class PlayitMixin:
         server_dir = str(self._server_info.server_dir)
         secret = str(self._cfg.get("secret", "")).strip()
         had_bedrock_tunnel = bool(str(self._cfg.get("bedrock_endpoint", "")).strip())
-        self._bedrock_in_progress = True
-        self._refresh_status_row()
 
-        def run():
-            if had_bedrock_tunnel:
-                ok, msg, endpoint = self._server_manager.playit_manager.regenerate_bedrock_tunnel(
-                    server_id,
-                    server_dir,
-                    secret=secret,
-                    auto_install=True,
-                )
-            else:
-                ok, msg, endpoint = self._server_manager.playit_manager.add_bedrock_tunnel(
-                    server_id,
-                    server_dir,
-                    secret=secret,
-                    auto_install=True,
-                )
+        def start_operation():
+            self._bedrock_in_progress = True
+            self._refresh_status_row()
 
-            def ui_done():
-                self._bedrock_in_progress = False
-                if ok and endpoint:
-                    self._save_server_config({"bedrock_endpoint": endpoint})
-                self._refresh_status_row()
-                if ok:
-                    self._toast(msg)
+            def run():
+                if had_bedrock_tunnel:
+                    ok, msg, endpoint = self._server_manager.playit_manager.regenerate_bedrock_tunnel(
+                        server_id,
+                        server_dir,
+                        secret=secret,
+                        auto_install=True,
+                    )
                 else:
-                    self._alert("Could not update Bedrock tunnel", msg)
+                    ok, msg, endpoint = self._server_manager.playit_manager.add_bedrock_tunnel(
+                        server_id,
+                        server_dir,
+                        secret=secret,
+                        auto_install=True,
+                    )
 
-            GLib.idle_add(ui_done)
+                def ui_done():
+                    self._bedrock_in_progress = False
+                    if ok and endpoint:
+                        self._save_server_config({"bedrock_endpoint": endpoint})
+                    self._refresh_status_row()
+                    if ok:
+                        self._toast(msg)
+                    else:
+                        self._alert("Could not update Bedrock tunnel", msg)
 
-        threading.Thread(target=run, daemon=True).start()
+                GLib.idle_add(ui_done)
+
+            threading.Thread(target=run, daemon=True).start()
+
+        if had_bedrock_tunnel:
+            self._confirm_regenerate_tunnel("Bedrock", start_operation)
+            return
+
+        start_operation()
 
     def _on_delete_java_tunnel(self, *_args):
         if not self._server_manager or not self._server_info:
