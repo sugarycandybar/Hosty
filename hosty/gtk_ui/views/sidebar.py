@@ -216,21 +216,49 @@ class Sidebar(Gtk.Box):
     
     def _setup_context_menu(self):
         """Setup right-click context menu for server rows."""
-        gesture = Gtk.GestureClick(button=3)  # Right click
-        # Use released + correct coordinates so the menu is not under the pointer
-        # (avoids accidental activation of the first item on touchpads).
-        gesture.connect("released", self._on_right_click)
+        gesture = Gtk.GestureClick()
+        gesture.set_button(3)
+        # Capture right-click before ListBox selection handling so context-clicking
+        # does not switch the active server.
+        gesture.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        gesture.connect("pressed", self._on_right_click_pressed)
+        gesture.connect("released", self._on_right_click_released)
+        gesture.connect("cancel", self._on_right_click_cancel)
+        gesture.connect("unpaired-release", self._on_right_click_cancel)
         self._listbox.add_controller(gesture)
+        
+        # Keep track of which row is being pressed
+        self._active_context_row = None
     
-    def _on_right_click(self, gesture, n_press, x, y):
-        """Handle right-click on a server row."""
+    def _on_right_click_pressed(self, gesture, n_press, x, y):
+        """Handle right-click press on a server row."""
         if n_press != 1:
             return
         row = self._listbox.get_row_at_y(int(y))
         if not row or not isinstance(row, ServerRow):
             return
+
+        gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+        row.add_css_class("context-active")
+        self._active_context_row = row
+
+    def _on_right_click_cancel(self, gesture, *args):
+        if hasattr(self, "_active_context_row") and self._active_context_row:
+            self._active_context_row.remove_css_class("context-active")
+            self._active_context_row = None
+
+    def _on_right_click_released(self, gesture, n_press, x, y):
+        """Handle right-click release on a server row."""
+        if hasattr(self, "_active_context_row") and self._active_context_row:
+            row = self._active_context_row
+            row.remove_css_class("context-active")
+            self._active_context_row = None
+        else:
+            row = self._listbox.get_row_at_y(int(y))
+
+        if not row or not isinstance(row, ServerRow):
+            return
         
-        self._listbox.select_row(row)
         server_info = row.server_info
         
         # Build popup menu — Rename not first (reduces mis-taps on first item)
@@ -248,4 +276,12 @@ class Sidebar(Gtk.Box):
         rect.width = 1
         rect.height = 1
         popover.set_pointing_to(rect)
+
+        # Highlight the row while the menu is open
+        row.add_css_class("context-open")
+        def on_closed(p):
+            row.remove_css_class("context-open")
+        
+        popover.connect("closed", on_closed)
+
         popover.popup()

@@ -191,14 +191,16 @@ class BackupsMixin:
 
                 GLib.idle_add(ui_ok)
             except Exception as e:
-                def ui_err():
+                err_msg = str(e)
+
+                def ui_err(msg: str = err_msg):
                     self._backup_busy = False
                     if self._backup_spinner:
                         self._backup_spinner.stop()
                         self._backup_spinner.set_visible(False)
                     if self._create_backup_row:
                         self._create_backup_row.set_subtitle("Back up world folders only")
-                    self._alert("Backup failed", str(e))
+                    self._alert("Backup failed", msg)
 
                 GLib.idle_add(ui_err)
 
@@ -270,9 +272,11 @@ class BackupsMixin:
 
                 GLib.idle_add(ui_ok)
             except Exception as e:
-                def ui_err():
+                err_msg = str(e)
+
+                def ui_err(msg: str = err_msg):
                     self._backup_busy = False
-                    self._alert("Restore failed", str(e))
+                    self._alert("Restore failed", msg)
 
                 GLib.idle_add(ui_err)
 

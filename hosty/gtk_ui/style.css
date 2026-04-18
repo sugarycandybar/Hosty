@@ -155,3 +155,13 @@ button.playit-compact-button {
 .sparkline {
     min-height: 40px;
 }
+
+/* Context menu pressed state for sidebar rows */
+.server-sidebar row.context-active {
+    background-color: alpha(currentColor, 0.15);
+}
+
+/* Context menu opened state for sidebar rows (matches hover intensity) */
+.server-sidebar row.context-open {
+    background-color: alpha(currentColor, 0.06);
+}
