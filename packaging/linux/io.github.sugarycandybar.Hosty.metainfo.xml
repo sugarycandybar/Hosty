@@ -32,4 +32,26 @@
     </release>
   </releases>
   <content_rating type="oars-1.1"/>
+  <screenshots>
+    <screenshot type="default">
+      <image>screenshots/connect.png</image>
+      <caption>Connect to and manage servers</caption>
+    </screenshot>
+    <screenshot>
+      <image>screenshots/files.png</image>
+      <caption>Manage world files and backups</caption>
+    </screenshot>
+    <screenshot>
+      <image>screenshots/console.png</image>
+      <caption>Server console and logs</caption>
+    </screenshot>
+    <screenshot>
+      <image>screenshots/mods.png</image>
+      <caption>Install and manage mods</caption>
+    </screenshot>
+    <screenshot>
+      <image>screenshots/performance.png</image>
+      <caption>Monitor server performance</caption>
+    </screenshot>
+  </screenshots>
 </component>
