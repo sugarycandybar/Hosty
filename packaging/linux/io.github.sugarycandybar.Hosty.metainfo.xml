@@ -38,23 +38,23 @@
   <content_rating type="oars-1.1"/>
   <screenshots>
     <screenshot type="default">
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/ae3a3d031f61e394a2b3708712812426c6659b11/images/connect.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/cc552bab80c1bcfb809d5e88ed6552ea44ad7ac2/images/connect.png</image>
       <caption>Share local servers</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/ae3a3d031f61e394a2b3708712812426c6659b11/images/files.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/cc552bab80c1bcfb809d5e88ed6552ea44ad7ac2/images/files.png</image>
       <caption>Manage world files and backups</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/ae3a3d031f61e394a2b3708712812426c6659b11/images/console.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/cc552bab80c1bcfb809d5e88ed6552ea44ad7ac2/images/console.png</image>
       <caption>Server console and logs</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/ae3a3d031f61e394a2b3708712812426c6659b11/images/mods.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/cc552bab80c1bcfb809d5e88ed6552ea44ad7ac2/images/mods.png</image>
       <caption>Install and manage mods</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/ae3a3d031f61e394a2b3708712812426c6659b11/images/performance.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/cc552bab80c1bcfb809d5e88ed6552ea44ad7ac2/images/performance.png</image>
       <caption>Monitor server performance</caption>
     </screenshot>
   </screenshots>
