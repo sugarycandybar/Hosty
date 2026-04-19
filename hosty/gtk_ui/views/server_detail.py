@@ -112,6 +112,10 @@ class ServerDetailView(Gtk.Box):
         )
         self._toolbar_view.add_bottom_bar(self._switcher_bar)
         GLib.idle_add(self._sync_switcher_bar_reveal)
+        
+        # Force layout recalculation to prevent initial gap under command bar
+        # This ensures the ViewStack properly measures all children on startup
+        GLib.idle_add(lambda: self._view_stack.queue_allocate() or False)
 
         self._mods_operation_handler_id = self._server_manager.connect(
             "mods-operation-changed", self._on_mods_operation_changed

@@ -2,19 +2,29 @@
 <component type="desktop-application">
   <id>io.github.sugarycandybar.Hosty</id>
   <name>Hosty</name>
-  <summary>Create and manage local Fabric Minecraft servers</summary>
+  <summary>Host Minecraft servers</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <developer id="io.github.sugarycandybar">
     <name>Sugarycandybar</name>
   </developer>
-  <update_contact>maintainers@hosty.invalid</update_contact>
+  <update_contact>139514123+sugarycandybar@users.noreply.github.com</update_contact>
   <description>
-    <p>Hosty helps you create, run, and manage local Fabric Minecraft servers with a native GNOME interface.</p>
-    <p>Use Hosty to create servers, monitor performance, edit server properties, manage worlds and backups, and install compatible mods from Modrinth.</p>
+    <p>
+      Hosty simplifies the process of creating and managing Minecraft servers on Linux. 
+      It removes technical barriers by automating the installation of necessary server 
+      files and handling the required Java runtimes for you.
+    </p>
+    <ul>
+      <li>Built-in Modrinth browser for easy discovery and mod installation</li>
+      <li>Integrated Playit support for hosting without manual port forwarding</li>
+      <li>Graphical interface for viewing performance and editing server properties</li>
+      <li>Dedicated tools to create and restore server backups</li>
+    </ul>
   </description>
   <categories>
     <category>Utility</category>
+    <category>Game</category>
   </categories>
   <keywords>
     <keyword>minecraft</keyword>
@@ -22,15 +32,22 @@
     <keyword>fabric</keyword>
     <keyword>modrinth</keyword>
     <keyword>java</keyword>
+    <keyword>hosting</keyword>
+    <keyword>multiplayer</keyword>
+    <keyword>mc</keyword>
   </keywords>
+  <branding>
+    <color type="primary" scheme_preference="light">#4ec853</color>
+    <color type="primary" scheme_preference="dark">#236f5e</color>
+  </branding>
   <launchable type="desktop-id">io.github.sugarycandybar.Hosty.desktop</launchable>
   <url type="homepage">https://github.com/sugarycandybar/Hosty</url>
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
   <url type="vcs-browser">https://github.com/sugarycandybar/Hosty</url>
   <releases>
-    <release version="1.5.0" date="2026-04-18">
+    <release version="1.5.1" date="2026-04-19">
     <description>
-      <p>Initial flatpak release</p>
+      <p>Update flatpak release</p>
     </description>
     </release>
   </releases>

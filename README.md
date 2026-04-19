@@ -16,7 +16,9 @@ It keeps the full server workflow in one app: setup, start/stop, monitoring, mod
 
 ## Run Hosty
 
-- Linux: use the Flatpak release from GitHub Releases.
+[![Download on Flathub](https://flathub.org/assets/badges/flathub-badge-en.png)](https://flathub.org/en/apps/io.github.sugarycandybar.Hosty)
+
+- Linux: use the Flatpak release from [Flathub](https://flathub.org/en/apps/io.github.sugarycandybar.Hosty).
 - Windows: use the EXE release from GitHub Releases. (Note: The Windows version is currently a work in progress.)
 
 <details>
@@ -56,43 +58,43 @@ python hosty.py
 ## Screenshots
 
 <p align="center">
-	<img src="images/console.png" alt="Console view" width="900" />
+	<img src="packaging/linux/screenshots/console.png" alt="Console view" width="900" />
 </p>
 
 - Console: stream logs and send commands.
 
 <p align="center">
-	<img src="images/performance.png" alt="Performance view" width="900" />
+	<img src="packaging/linux/screenshots/performance.png" alt="Performance view" width="900" />
 </p>
 
 - Performance: monitor live server performance.
 
 <p align="center">
-	<img src="images/properties.png" alt="Properties view" width="900" />
+	<img src="packaging/linux/screenshots/properties.png" alt="Properties view" width="900" />
 </p>
 
 - Properties: edit server settings with autosave.
 
 <p align="center">
-	<img src="images/files.png" alt="Files and worlds view" width="900" />
+	<img src="packaging/linux/screenshots/files.png" alt="Files and worlds view" width="900" />
 </p>
 
 - Files: manage worlds, dimensions, and backups.
 
 <p align="center">
-	<img src="images/mods.png" alt="Mods view" width="900" />
+	<img src="packaging/linux/screenshots/mods.png" alt="Mods view" width="900" />
 </p>
 
 - Mods: browse Modrinth, install mods, and auto-manage dependencies.
 
 <p align="center">
-	<img src="images/connect.png" alt="Connect view" width="900" />
+	<img src="packaging/linux/screenshots/connect.png" alt="Connect view" width="900" />
 </p>
 
 - Connect: configure Playit and manage whitelist/ban lists.
 
 <p align="center">
-	<img src="images/backups.png" alt="Backups view" width="900" />
+	<img src="packaging/linux/screenshots/backups.png" alt="Backups view" width="900" />
 </p>
 
 - Backups: create and restore world backups.
