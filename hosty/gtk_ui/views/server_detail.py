@@ -96,6 +96,7 @@ class ServerDetailView(Gtk.Box):
         self._view_stack.add_titled_with_icon(
             self._files_view, "files", "Files", "folder-symbolic"
         )
+        self._view_stack.set_visible_child_name("connect")
         
         self._detail_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._detail_content.set_hexpand(True)
@@ -110,7 +111,6 @@ class ServerDetailView(Gtk.Box):
         self._view_switcher_title.connect(
             "notify::title-visible", self._on_switcher_title_visible_changed
         )
-        self._view_switcher_title.connect("map", self._on_switcher_title_mapped)
         self._toolbar_view.add_bottom_bar(self._switcher_bar)
         GLib.idle_add(self._sync_switcher_bar_reveal)
 
@@ -122,15 +122,9 @@ class ServerDetailView(Gtk.Box):
         """Reveal the bottom switcher only in compact layouts."""
         self._sync_switcher_bar_reveal()
 
-    def _on_switcher_title_mapped(self, *_args):
-        """Re-sync reveal state after first layout to avoid startup spacing glitches."""
-        GLib.idle_add(self._sync_switcher_bar_reveal)
-
     def _sync_switcher_bar_reveal(self):
         """Keep bottom switcher visibility in sync with title visibility."""
-        reveal = self._view_switcher_title.get_title_visible()
-        self._switcher_bar.set_reveal(reveal)
-        self._switcher_bar.set_visible(reveal)
+        self._switcher_bar.set_reveal(self._view_switcher_title.get_title_visible())
         return False
     
     def load_server(self, server_info: ServerInfo):
@@ -145,7 +139,6 @@ class ServerDetailView(Gtk.Box):
             f"{server_info.name} · {server_info.mc_version}"
         )
         self._view_switcher_title.set_subtitle("")
-        GLib.idle_add(self._sync_switcher_bar_reveal)
         
         # Get/create the server process for the selected server (start/stop, status row)
         selected = self._server_manager.get_process(server_info.id)
