@@ -110,12 +110,9 @@ class ServerDetailView(Gtk.Box):
         self._view_switcher_title.connect(
             "notify::title-visible", self._on_switcher_title_visible_changed
         )
+        self._view_switcher_title.connect("map", self._on_switcher_title_mapped)
         self._toolbar_view.add_bottom_bar(self._switcher_bar)
         GLib.idle_add(self._sync_switcher_bar_reveal)
-        
-        # Force layout recalculation to prevent initial gap under command bar
-        # This ensures the ViewStack properly measures all children on startup
-        GLib.idle_add(lambda: self._view_stack.queue_allocate() or False)
 
         self._mods_operation_handler_id = self._server_manager.connect(
             "mods-operation-changed", self._on_mods_operation_changed
@@ -125,9 +122,15 @@ class ServerDetailView(Gtk.Box):
         """Reveal the bottom switcher only in compact layouts."""
         self._sync_switcher_bar_reveal()
 
+    def _on_switcher_title_mapped(self, *_args):
+        """Re-sync reveal state after first layout to avoid startup spacing glitches."""
+        GLib.idle_add(self._sync_switcher_bar_reveal)
+
     def _sync_switcher_bar_reveal(self):
         """Keep bottom switcher visibility in sync with title visibility."""
-        self._switcher_bar.set_reveal(self._view_switcher_title.get_title_visible())
+        reveal = self._view_switcher_title.get_title_visible()
+        self._switcher_bar.set_reveal(reveal)
+        self._switcher_bar.set_visible(reveal)
         return False
     
     def load_server(self, server_info: ServerInfo):
@@ -142,6 +145,7 @@ class ServerDetailView(Gtk.Box):
             f"{server_info.name} · {server_info.mc_version}"
         )
         self._view_switcher_title.set_subtitle("")
+        GLib.idle_add(self._sync_switcher_bar_reveal)
         
         # Get/create the server process for the selected server (start/stop, status row)
         selected = self._server_manager.get_process(server_info.id)
