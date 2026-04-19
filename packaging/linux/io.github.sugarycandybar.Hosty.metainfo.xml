@@ -53,33 +53,33 @@
   </releases>
   <content_rating type="oars-1.1"/>
   <screenshots>
+    <screenshot>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/26202357aaf10bb8c358bb8b1bc2552bde177cb7/packaging/linux/screenshots/connect.png</image>
+      <caption xml:lang="en">Share local servers</caption>
+    </screenshot>
     <screenshot type="default">
       <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/26202357aaf10bb8c358bb8b1bc2552bde177cb7/packaging/linux/screenshots/console.png</image>
-      <caption>Server console and logs</caption>
+      <caption xml:lang="en">Server console and logs</caption>
     </screenshot>
     <screenshot>
       <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/26202357aaf10bb8c358bb8b1bc2552bde177cb7/packaging/linux/screenshots/properties.png</image>
-      <caption>Edit server properties</caption>
+      <caption xml:lang="en">Edit server properties</caption>
     </screenshot>
     <screenshot>
       <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/26202357aaf10bb8c358bb8b1bc2552bde177cb7/packaging/linux/screenshots/backups.png</image>
-      <caption>Create and restore backups</caption>
-    </screenshot>
-    <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/26202357aaf10bb8c358bb8b1bc2552bde177cb7/packaging/linux/screenshots/connect.png</image>
-      <caption>Share local servers</caption>
+      <caption xml:lang="en">Create and restore backups</caption>
     </screenshot>
     <screenshot>
       <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/26202357aaf10bb8c358bb8b1bc2552bde177cb7/packaging/linux/screenshots/files.png</image>
-      <caption>Manage world files and backups</caption>
+      <caption xml:lang="en">Manage world files and backups</caption>
     </screenshot>
     <screenshot>
       <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/26202357aaf10bb8c358bb8b1bc2552bde177cb7/packaging/linux/screenshots/mods.png</image>
-      <caption>Install and manage mods</caption>
+      <caption xml:lang="en">Install and manage mods</caption>
     </screenshot>
     <screenshot>
       <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/26202357aaf10bb8c358bb8b1bc2552bde177cb7/packaging/linux/screenshots/performance.png</image>
-      <caption>Monitor server performance</caption>
+      <caption xml:lang="en">Monitor server performance</caption>
     </screenshot>
   </screenshots>
 </component>
