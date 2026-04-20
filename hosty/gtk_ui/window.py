@@ -28,7 +28,7 @@ class HostyWindow(Adw.ApplicationWindow):
         self._playit_autostart_paused_server_id: str | None = None
         
         self.set_title("Hosty")
-        self.set_default_size(1100, 700)
+        self.set_default_size(1000, 700)
         self.set_size_request(400, 400)
         self.add_css_class("hosty-window")
         
