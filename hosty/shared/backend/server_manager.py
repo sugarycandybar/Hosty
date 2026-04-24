@@ -228,6 +228,10 @@ class ServerManager(EventEmitter):
             )
         
         return self._processes[server_id]
+
+    def get_existing_process(self, server_id: str) -> Optional[ServerProcess]:
+        """Get an existing ServerProcess without creating a new one."""
+        return self._processes.get(server_id)
     
     def get_config(self, server_id: str) -> Optional[ConfigManager]:
         """Get a ConfigManager for a server's server.properties."""

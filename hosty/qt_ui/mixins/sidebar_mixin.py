@@ -247,7 +247,7 @@ class SidebarMixin:
         )
 
     def _add_or_update_item(self, info: ServerInfo) -> None:
-        process = self._server_manager.get_process(info.id)
+        process = self._server_manager.get_existing_process(info.id)
         status = process.status if process else ServerStatus.STOPPED
 
         # Build display text

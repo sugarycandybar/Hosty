@@ -28,13 +28,20 @@ class ServerDetailView(Gtk.Box):
     def __init__(self, server_manager: ServerManager):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self._server_manager = server_manager
-        self._current_server: ServerInfo = None
-        self._selected_process: ServerProcess = None
-        self._console_attached_process: ServerProcess = None
+        self._current_server: Optional[ServerInfo] = None
+        self._selected_process: Optional[ServerProcess] = None
+        self._console_attached_process: Optional[ServerProcess] = None
         self._selected_status_handler_id = None
         self._running_status_handler_id = None
         self._running_watched_process: Optional[ServerProcess] = None
         self._mods_operation_handler_id = None
+
+        self._tab_hosts: dict[str, Gtk.Box] = {}
+        self._console_view: Optional[ConsoleView] = None
+        self._connect_view: Optional[ConnectView] = None
+        self._perf_view: Optional[PerformanceView] = None
+        self._props_view: Optional[PropertiesView] = None
+        self._files_view: Optional[FilesView] = None
         
         self._toolbar_view = Adw.ToolbarView()
         self._toolbar_view.set_hexpand(True)
@@ -68,35 +75,14 @@ class ServerDetailView(Gtk.Box):
         self._view_stack.set_vexpand(True)
         self._view_stack.connect("notify::visible-child-name", self._on_tab_changed)
         self._view_switcher_title.set_stack(self._view_stack)
-        
-        # Console view
-        self._console_view = ConsoleView()
-        self._view_stack.add_titled_with_icon(
-            self._console_view, "console", "Console", "utilities-terminal-symbolic"
-        )
 
-        self._connect_view = ConnectView()
-        self._view_stack.add_titled_with_icon(
-            self._connect_view, "connect", "Connect", "network-workgroup-symbolic"
-        )
-        
-        # Performance view
-        self._perf_view = PerformanceView()
-        self._view_stack.add_titled_with_icon(
-            self._perf_view, "performance", "Performance", "computer-symbolic"
-        )
-        
-        # Properties view
-        self._props_view = PropertiesView()
-        self._view_stack.add_titled_with_icon(
-            self._props_view, "properties", "Properties", "emblem-system-symbolic"
-        )
-        
-        self._files_view = FilesView()
-        self._view_stack.add_titled_with_icon(
-            self._files_view, "files", "Files", "folder-symbolic"
-        )
+        self._add_lazy_tab("console", "Console", "utilities-terminal-symbolic")
+        self._add_lazy_tab("connect", "Connect", "network-workgroup-symbolic")
+        self._add_lazy_tab("performance", "Performance", "computer-symbolic")
+        self._add_lazy_tab("properties", "Properties", "emblem-system-symbolic")
+        self._add_lazy_tab("files", "Files", "folder-symbolic")
         self._view_stack.set_visible_child_name("connect")
+        self._ensure_connect_view()
         
         self._detail_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._detail_content.set_hexpand(True)
@@ -117,6 +103,55 @@ class ServerDetailView(Gtk.Box):
         self._mods_operation_handler_id = self._server_manager.connect(
             "mods-operation-changed", self._on_mods_operation_changed
         )
+
+    def _add_lazy_tab(self, name: str, title: str, icon: str):
+        host = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        host.set_hexpand(True)
+        host.set_vexpand(True)
+        self._tab_hosts[name] = host
+        self._view_stack.add_titled_with_icon(host, name, title, icon)
+
+    def _ensure_console_view(self) -> ConsoleView:
+        if self._console_view is None:
+            self._console_view = ConsoleView()
+            self._tab_hosts["console"].append(self._console_view)
+            if self._console_attached_process:
+                self._console_view.set_process(self._console_attached_process)
+        return self._console_view
+
+    def _ensure_connect_view(self) -> ConnectView:
+        if self._connect_view is None:
+            self._connect_view = ConnectView()
+            self._tab_hosts["connect"].append(self._connect_view)
+            if self._current_server:
+                self._connect_view.set_server(self._current_server, self._server_manager)
+        return self._connect_view
+
+    def _ensure_perf_view(self) -> PerformanceView:
+        if self._perf_view is None:
+            self._perf_view = PerformanceView()
+            self._tab_hosts["performance"].append(self._perf_view)
+            if self._console_attached_process:
+                self._perf_view.set_process(self._console_attached_process)
+                self._sync_perf_with_io_process()
+        return self._perf_view
+
+    def _ensure_props_view(self) -> PropertiesView:
+        if self._props_view is None:
+            self._props_view = PropertiesView()
+            self._tab_hosts["properties"].append(self._props_view)
+            if self._current_server:
+                config = self._server_manager.get_config(self._current_server.id)
+                self._props_view.set_config(config, self._server_manager, self._current_server)
+        return self._props_view
+
+    def _ensure_files_view(self) -> FilesView:
+        if self._files_view is None:
+            self._files_view = FilesView()
+            self._tab_hosts["files"].append(self._files_view)
+            if self._current_server:
+                self._files_view.set_server(self._current_server, self._server_manager)
+        return self._files_view
 
     def _on_switcher_title_visible_changed(self, *_args):
         """Reveal the bottom switcher only in compact layouts."""
@@ -144,12 +179,14 @@ class ServerDetailView(Gtk.Box):
         selected = self._server_manager.get_process(server_info.id)
         self._set_selected_process(selected)
         self._attach_io_to_running_or_selected(server_info)
-        
-        # Load properties
-        config = self._server_manager.get_config(server_info.id)
-        self._props_view.set_config(config, self._server_manager, server_info)
-        self._files_view.set_server(server_info, self._server_manager)
-        self._connect_view.set_server(server_info, self._server_manager)
+
+        self._ensure_connect_view().set_server(server_info, self._server_manager)
+
+        if self._props_view:
+            config = self._server_manager.get_config(server_info.id)
+            self._props_view.set_config(config, self._server_manager, server_info)
+        if self._files_view:
+            self._files_view.set_server(server_info, self._server_manager)
         
         # Update toggle from the selected server's process
         self._update_toggle_for_selected(
@@ -227,20 +264,26 @@ class ServerDetailView(Gtk.Box):
             self._set_running_status_watch(None)
 
         if io_process is None:
+            self._console_attached_process = None
+            self._sync_perf_with_io_process()
             return
 
         # Clear console only when switching to a different attached process object
         prev = self._console_attached_process
-        if prev is not None and prev is not io_process:
+        if prev is not None and prev is not io_process and self._console_view:
             self._console_view.clear()
         self._console_attached_process = io_process
 
-        self._console_view.set_process(io_process)
-        self._perf_view.set_process(io_process)
+        if self._console_view:
+            self._console_view.set_process(io_process)
+        if self._perf_view:
+            self._perf_view.set_process(io_process)
         self._sync_perf_with_io_process()
 
     def _sync_perf_with_io_process(self):
         """Perf follows the process attached to the console (running server or selection)."""
+        if not self._perf_view:
+            return
         p = self._console_attached_process
         if p and p.is_running:
             self._perf_view.start_monitoring()
@@ -302,18 +345,25 @@ class ServerDetailView(Gtk.Box):
     def _on_tab_changed(self, stack, _pspec):
         """Keep tab navigation predictable when changing pages."""
         tab_name = stack.get_visible_child_name()
-        if tab_name == "performance":
-            self._perf_view.scroll_to_top()
+        if tab_name == "console":
+            self._ensure_console_view()
+        elif tab_name == "connect":
+            self._ensure_connect_view()
+        elif tab_name == "performance":
+            perf = self._ensure_perf_view()
+            perf.scroll_to_top()
         elif tab_name == "properties":
-            self._props_view.reload_from_disk()
-            GLib.idle_add(self._props_view.focus_save_button)
+            props = self._ensure_props_view()
+            props.reload_from_disk()
+            GLib.idle_add(props.focus_save_button)
         elif tab_name == "files":
-            self._files_view.refresh_worlds_if_changed(force=True)
+            files = self._ensure_files_view()
+            files.refresh_worlds_if_changed(force=True)
 
     def poll_runtime_state(self) -> None:
         """Refresh lightweight live UI bits from the window polling loop."""
         if self._view_stack.get_visible_child_name() == "files":
-            self._files_view.refresh_worlds_if_changed()
+            self._ensure_files_view().refresh_worlds_if_changed()
     
     def _on_toggle_clicked(self, button):
         """Handle start/stop button click."""
@@ -347,13 +397,13 @@ class ServerDetailView(Gtk.Box):
             self._selected_process.start()
     
     def get_console_view(self) -> ConsoleView:
-        return self._console_view
+        return self._ensure_console_view()
     
     def get_perf_view(self) -> PerformanceView:
-        return self._perf_view
+        return self._ensure_perf_view()
     
     def get_props_view(self) -> PropertiesView:
-        return self._props_view
+        return self._ensure_props_view()
     
     def get_files_view(self) -> FilesView:
-        return self._files_view
+        return self._ensure_files_view()

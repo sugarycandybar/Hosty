@@ -43,13 +43,8 @@ class ServerRow(Adw.ActionRow):
         self._status_dot.set_valign(Gtk.Align.CENTER)
         self.add_suffix(self._status_dot)
         
-        # Connect to process status changes
-        process = server_manager.get_process(server_info.id)
-        if process:
-            self._process = process
-            self._status_handler_id = process.connect('status-changed', self._on_status_changed)
-            self._players_handler_id = process.connect('players-changed', self._on_players_changed)
-            self._update_status(process.status)
+        # Keep startup fast by attaching to a process only when needed.
+        self.attach_existing_process()
 
     def _subtitle_text(self) -> str:
         if self._process and self._process.is_running:
@@ -82,6 +77,49 @@ class ServerRow(Adw.ActionRow):
         for cls in ["running", "starting", "stopping", "stopped"]:
             self._status_dot.remove_css_class(cls)
         self._status_dot.add_css_class(status)
+
+    def _disconnect_process_handlers(self):
+        if self._process and self._status_handler_id:
+            try:
+                self._process.disconnect(self._status_handler_id)
+            except Exception:
+                pass
+        if self._process and self._players_handler_id:
+            try:
+                self._process.disconnect(self._players_handler_id)
+            except Exception:
+                pass
+        self._status_handler_id = None
+        self._players_handler_id = None
+
+    def attach_existing_process(self):
+        """Attach to an already created process, if present."""
+        process = self._server_manager.get_existing_process(self.server_info.id)
+        if process is self._process:
+            return
+
+        self._disconnect_process_handlers()
+        self._process = process
+        if process:
+            self._status_handler_id = process.connect('status-changed', self._on_status_changed)
+            self._players_handler_id = process.connect('players-changed', self._on_players_changed)
+            self._update_status(process.status)
+        else:
+            self._update_status(ServerStatus.STOPPED)
+        self.set_subtitle(self._subtitle_text())
+
+    def ensure_process_attached(self):
+        """Create and attach a process when the user actually selects this server."""
+        if self._process:
+            return
+        process = self._server_manager.get_process(self.server_info.id)
+        if process:
+            self.attach_existing_process()
+
+    def cleanup(self):
+        """Disconnect signal handlers before row destruction."""
+        self._disconnect_process_handlers()
+        self._process = None
     
     def update_info(self, server_info: ServerInfo):
         """Update displayed info."""
@@ -174,6 +212,7 @@ class Sidebar(Gtk.Box):
     def _on_row_selected(self, listbox, row):
         """Handle server selection."""
         if row and isinstance(row, ServerRow):
+            row.ensure_process_attached()
             self.emit('server-selected', row.server_info.id)
     
     def _on_server_added(self, manager, server_id):
@@ -191,6 +230,7 @@ class Sidebar(Gtk.Box):
         row = self._rows.pop(server_id, None)
         was_selected = row is not None and self._listbox.get_selected_row() is row
         if row:
+            row.cleanup()
             self._listbox.remove(row)
 
         if was_selected:

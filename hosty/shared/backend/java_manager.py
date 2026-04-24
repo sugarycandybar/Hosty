@@ -24,10 +24,17 @@ class JavaManager:
     
     def __init__(self):
         self._system_java_version: Optional[int] = None
+        self._system_java_checked = False
+
+    def _ensure_system_java_detected(self):
+        """Detect system Java on first use to keep app startup fast."""
+        if self._system_java_checked:
+            return
         self._detect_system_java()
     
     def _detect_system_java(self):
         """Detect the system-installed Java version."""
+        self._system_java_checked = True
         try:
             result = subprocess.run(
                 ["java", "-version"],
@@ -54,6 +61,7 @@ class JavaManager:
     @property
     def system_java_version(self) -> Optional[int]:
         """The major version of system-installed Java, or None."""
+        self._ensure_system_java_detected()
         return self._system_java_version
     
     def get_java_path(self, java_version: int) -> Optional[str]:
@@ -67,6 +75,7 @@ class JavaManager:
             return managed_path
         
         # Fall back to system java if it matches
+        self._ensure_system_java_detected()
         if self._system_java_version and self._system_java_version >= java_version:
             return shutil.which("java")
         
