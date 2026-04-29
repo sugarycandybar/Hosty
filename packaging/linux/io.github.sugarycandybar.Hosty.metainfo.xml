@@ -37,8 +37,8 @@
     <keyword>mc</keyword>
   </keywords>
   <branding>
-    <color type="primary" scheme_preference="light">#4ec853</color>
-    <color type="primary" scheme_preference="dark">#236f5e</color>
+    <color type="primary" scheme_preference="light">#33d17a</color>
+    <color type="primary" scheme_preference="dark">#1e3a2f</color>
   </branding>
   <launchable type="desktop-id">io.github.sugarycandybar.Hosty.desktop</launchable>
   <url type="homepage">https://github.com/sugarycandybar/Hosty</url>
