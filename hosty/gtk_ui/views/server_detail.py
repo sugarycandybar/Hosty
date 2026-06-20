@@ -54,7 +54,7 @@ class ServerDetailView(Gtk.Box):
         self._outer_nav = Adw.NavigationView()
         self._outer_nav.set_hexpand(True)
         self._outer_nav.set_vexpand(True)
-        self._outer_nav_root = Adw.NavigationPage(title="Server Detail", child=self._toolbar_view)
+        self._outer_nav_root = Adw.NavigationPage(title=_("Server Detail"), child=self._toolbar_view)
         try:
             self._outer_nav_root.set_tag("hosty-detail-root")
         except Exception:
@@ -66,13 +66,13 @@ class ServerDetailView(Gtk.Box):
         self._header = Adw.HeaderBar()
         self._header.set_show_start_title_buttons(False)
 
-        # View switcher title — handles both title display and view switching
+        # View switcher title -- handles both title display and view switching
         self._view_switcher_title = Adw.ViewSwitcherTitle()
-        self._view_switcher_title.set_title("Server")
+        self._view_switcher_title.set_title(_("Server"))
         self._header.set_title_widget(self._view_switcher_title)
 
-        # Start/Stop button — use standard Adwaita suggested-action / destructive-action
-        self._toggle_btn = Gtk.Button(label="Start")
+        # Start/Stop button -- use standard Adwaita suggested-action / destructive-action
+        self._toggle_btn = Gtk.Button(label=_("Start"))
         self._toggle_btn.add_css_class("suggested-action")
         self._toggle_btn.connect("clicked", self._on_toggle_clicked)
         self._header.pack_end(self._toggle_btn)
@@ -85,12 +85,12 @@ class ServerDetailView(Gtk.Box):
         self._view_stack.connect("notify::visible-child-name", self._on_tab_changed)
         self._view_switcher_title.set_stack(self._view_stack)
 
-        self._add_lazy_tab("console", "Console", "utilities-terminal-symbolic")
+        self._add_lazy_tab("console", _("Console"), "utilities-terminal-symbolic")
         self._tab_hosts["console"].append(self._console_stack)
-        self._add_lazy_tab("connect", "Connect", "network-workgroup-symbolic")
-        self._add_lazy_tab("performance", "Performance", "power-profile-performance-symbolic")
-        self._add_lazy_tab("properties", "Properties", "emblem-system-symbolic")
-        self._add_lazy_tab("files", "Files", "folder-symbolic")
+        self._add_lazy_tab("connect", _("Connect"), "network-workgroup-symbolic")
+        self._add_lazy_tab("performance", _("Performance"), "power-profile-performance-symbolic")
+        self._add_lazy_tab("properties", _("Properties"), "emblem-system-symbolic")
+        self._add_lazy_tab("files", _("Files"), "folder-symbolic")
         self._view_stack.set_visible_child_name("connect")
         self._ensure_connect_view()
 
@@ -273,27 +273,27 @@ class ServerDetailView(Gtk.Box):
         mods_busy = bool(selected_id) and self._server_manager.is_mod_operation_active(selected_id)
 
         if status == ServerStatus.STARTING:
-            self._toggle_btn.set_label("Starting")
+            self._toggle_btn.set_label(_("Starting"))
             self._toggle_btn.remove_css_class("suggested-action")
             self._toggle_btn.remove_css_class("destructive-action")
             self._toggle_btn.add_css_class("hosty-starting-button")
             self._toggle_btn.set_sensitive(False)
-            self._toggle_btn.set_tooltip_text("Wait for the server to finish starting")
+            self._toggle_btn.set_tooltip_text(_("Wait for the server to finish starting"))
             return
 
         if status == ServerStatus.RUNNING:
-            self._toggle_btn.set_label("Stop")
+            self._toggle_btn.set_label(_("Stop"))
             self._toggle_btn.remove_css_class("suggested-action")
             self._toggle_btn.add_css_class("destructive-action")
             self._toggle_btn.set_sensitive(True)
             self._toggle_btn.set_tooltip_text(None)
         else:
-            self._toggle_btn.set_label("Start")
+            self._toggle_btn.set_label(_("Start"))
             self._toggle_btn.remove_css_class("destructive-action")
             self._toggle_btn.add_css_class("suggested-action")
             self._toggle_btn.set_sensitive(not mods_busy)
             if mods_busy:
-                self._toggle_btn.set_tooltip_text("Mods are currently installing/updating")
+                self._toggle_btn.set_tooltip_text(_("Mods are currently installing/updating"))
             else:
                 self._toggle_btn.set_tooltip_text(None)
 
@@ -341,7 +341,7 @@ class ServerDetailView(Gtk.Box):
     def _find_conflicting_server_name_for_port(self, port_type: str, port: int) -> str:
         """Return the name of the first server that conflicts on the given port."""
         if not self._current_server:
-            return "another server"
+            return _("another server")
         for sid, info in self._server_manager._servers.items():
             if sid == self._current_server.id:
                 continue
@@ -366,19 +366,18 @@ class ServerDetailView(Gtk.Box):
                     cinfo = self._server_manager.get_server(sid)
                     if cinfo:
                         return f'"{cinfo.name}"'
-        return "another server"
+        return _("another server")
 
     def _show_port_conflict_dialog(self, port_type: str, port: int):
         """Show a blocking dialog when a port conflict is detected."""
         conflict_name = self._find_conflicting_server_name_for_port(port_type, port)
         dialog = Adw.AlertDialog.new(
-            f"{port_type} Port In Use",
-            f"{port_type} port {port} is already in use by {conflict_name}. "
-            f"A server is already running on this port.\n\n"
-            f"To change the port, open the {port_type} tunnel management dialog "
-            f"in Connect view and edit the local port.",
+            _("{} Port In Use").format(port_type),
+            _("{} port {} is already in use by {}. A server is already running on this port.\n\n"
+              "To change the port, open the {} tunnel management dialog "
+              "in Connect view and edit the local port.").format(port_type, port, conflict_name, port_type),
         )
-        dialog.add_response("ok", "OK")
+        dialog.add_response("ok", _("OK"))
         dialog.set_default_response("ok")
         dialog.set_close_response("ok")
         dialog.present(self.get_root())
@@ -396,10 +395,10 @@ class ServerDetailView(Gtk.Box):
         else:
             if self._current_server and self._server_manager.is_mod_operation_active(self._current_server.id):
                 dialog = Adw.AlertDialog.new(
-                    "Cannot Start Server",
-                    "Mods are currently being installed or updated. Please wait for the operation to finish.",
+                    _("Cannot Start Server"),
+                    _("Mods are currently being installed or updated. Please wait for the operation to finish."),
                 )
-                dialog.add_response("ok", "OK")
+                dialog.add_response("ok", _("OK"))
                 dialog.present(self.get_root())
                 return
 

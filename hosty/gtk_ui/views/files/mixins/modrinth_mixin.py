@@ -1,5 +1,5 @@
 """
-FilesView — folders, worlds, backups, and Modrinth integration (per selected server).
+FilesView -- folders, worlds, backups, and Modrinth integration (per selected server).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ class ModrinthMixin:
         self._modrinth_nav.set_vexpand(True)
 
         search_page = Adw.NavigationPage(
-            title="Modrinth",
+            title=_("Modrinth"),
             child=self._build_modrinth_search_view(),
         )
         try:
@@ -34,7 +34,7 @@ class ModrinthMixin:
         self._modrinth_nav.push(search_page)
         self._modrinth_nav.connect("popped", lambda _nav, _page: self._refresh_modrinth_rows_install_state())
 
-        outer_page = Adw.NavigationPage(title="Modrinth", child=self._modrinth_nav)
+        outer_page = Adw.NavigationPage(title=_("Modrinth"), child=self._modrinth_nav)
         self._modrinth_page = outer_page
         if self._push_fullscreen_page_cb:
             if self._modrinth_header:
@@ -75,7 +75,7 @@ class ModrinthMixin:
         filter_btn.set_icon_name("sliders-horizontal-symbolic")
         filter_btn.add_css_class("flat")
         filter_btn.add_css_class("modrinth-filter-btn")
-        filter_btn.set_tooltip_text("Filters")
+        filter_btn.set_tooltip_text(_("Filters"))
         search_outer.append(filter_btn)
 
         header.set_title_widget(search_outer)
@@ -85,28 +85,28 @@ class ModrinthMixin:
         outer.set_hexpand(True)
 
         project_type_items = [
-            ("Mods", "mod"),
-            ("Modpacks", "modpack"),
-            ("Datapacks", "datapack"),
+            (_("Mods"), "mod"),
+            (_("Modpacks"), "modpack"),
+            (_("Datapacks"), "datapack"),
         ]
         category_items = [
-            ("Any category", ""),
-            ("Optimization", "optimization"),
-            ("Utility", "utility"),
-            ("Technology", "technology"),
-            ("Adventure", "adventure"),
-            ("Decoration", "decoration"),
-            ("Magic", "magic"),
-            ("Storage", "storage"),
-            ("Worldgen", "worldgen"),
-            ("Library", "library"),
+            (_("Any category"), ""),
+            (_("Optimization"), "optimization"),
+            (_("Utility"), "utility"),
+            (_("Technology"), "technology"),
+            (_("Adventure"), "adventure"),
+            (_("Decoration"), "decoration"),
+            (_("Magic"), "magic"),
+            (_("Storage"), "storage"),
+            (_("Worldgen"), "worldgen"),
+            (_("Library"), "library"),
         ]
         sort_items = [
-            ("Relevance", "relevance"),
-            ("Downloads", "downloads"),
-            ("Follows", "follows"),
-            ("Newest", "newest"),
-            ("Recently updated", "updated"),
+            (_("Relevance"), "relevance"),
+            (_("Downloads"), "downloads"),
+            (_("Follows"), "follows"),
+            (_("Newest"), "newest"),
+            (_("Recently updated"), "updated"),
         ]
 
         selected_type_idx = [0]
@@ -153,17 +153,17 @@ class ModrinthMixin:
         popover_content.set_margin_top(12)
         popover_content.set_margin_bottom(12)
 
-        type_label = Gtk.Label(label="Type", xalign=0.0)
+        type_label = Gtk.Label(label=_("Type"), xalign=0.0)
         type_label.add_css_class("modrinth-filter-label")
         popover_content.append(type_label)
         popover_content.append(type_box)
 
-        cat_label = Gtk.Label(label="Category", xalign=0.0)
+        cat_label = Gtk.Label(label=_("Category"), xalign=0.0)
         cat_label.add_css_class("modrinth-filter-label")
         popover_content.append(cat_label)
         popover_content.append(cat_box)
 
-        sort_label = Gtk.Label(label="Sort by", xalign=0.0)
+        sort_label = Gtk.Label(label=_("Sort by"), xalign=0.0)
         sort_label.add_css_class("modrinth-filter-label")
         popover_content.append(sort_label)
         popover_content.append(sort_box)
@@ -220,11 +220,11 @@ class ModrinthMixin:
         def update_search_hint() -> None:
             ptype = selected_project_type()
             if ptype == "modpack":
-                entry.set_placeholder_text("Search Fabric modpacks…")
+                entry.set_placeholder_text(_("Search Fabric modpacks…"))
             elif ptype == "datapack":
-                entry.set_placeholder_text("Search datapacks…")
+                entry.set_placeholder_text(_("Search datapacks…"))
             else:
-                entry.set_placeholder_text("Search Fabric mods…")
+                entry.set_placeholder_text(_("Search Fabric mods…"))
 
         def clear_results():
             while True:
@@ -246,14 +246,14 @@ class ModrinthMixin:
             set_busy(False)
             if err:
                 if not appending:
-                    results.append(self._empty_listbox_row("Could not fetch Modrinth results."))
+                    results.append(self._empty_listbox_row(_("Could not fetch Modrinth results.")))
                 return
             state["total"] = int(total)
             if not appending:
                 clear_results()
             if not hits:
                 if not appending:
-                    results.append(self._empty_listbox_row("No results"))
+                    results.append(self._empty_listbox_row(_("No results")))
                 state["all_loaded"] = True
                 return
 
@@ -411,21 +411,21 @@ class ModrinthMixin:
                     continue
                 is_modpack = getattr(row, "_is_modpack", False)
                 is_datapack = getattr(row, "_is_datapack", False)
-                btn_label = getattr(row, "_install_btn_label", "Install")
+                btn_label = getattr(row, "_install_btn_label", _("Install"))
                 best_version = getattr(row, "_best_version", [None])
 
                 if is_modpack and self._is_modpack_installed(hit.project_id):
-                    _set_row_btn("Installed", False)
+                    _set_row_btn(_("Installed"), False)
                 elif is_datapack and self._is_datapack_installed(hit.project_id):
-                    _set_row_btn("Installed", False)
+                    _set_row_btn(_("Installed"), False)
                 elif not is_modpack and not is_datapack:
                     if self._looks_installed(hit, installed_names):
-                        _set_row_btn("Installed", False)
+                        _set_row_btn(_("Installed"), False)
                     else:
                         first = best_version[0]
                         if first and first.filename.lower() in installed_names:
                             dependents = self._dependency_dependents(first.filename)
-                            _set_row_btn("Dependency" if dependents else "Installed", False)
+                            _set_row_btn(_("Dependency") if dependents else _("Installed"), False)
                         else:
                             _set_row_btn(btn_label, True)
             i += 1
@@ -512,7 +512,7 @@ class ModrinthMixin:
         row.add_css_class("card")
         row.set_margin_bottom(6)
 
-        btn_label = "Install"
+        btn_label = _("Install")
 
         compact_install = Gtk.Button(label=btn_label)
         compact_install.add_css_class("mod-install-btn-fixed")
@@ -530,11 +530,11 @@ class ModrinthMixin:
                     b.set_sensitive(sensitive)
 
         if is_modpack and self._is_modpack_installed(hit.project_id):
-            _set_row_btn("Installed", False)
+            _set_row_btn(_("Installed"), False)
         elif is_datapack and self._is_datapack_installed(hit.project_id):
-            _set_row_btn("Installed", False)
+            _set_row_btn(_("Installed"), False)
         elif (not is_modpack) and (not is_datapack) and self._looks_installed(hit, installed_names):
-            _set_row_btn("Installed", False)
+            _set_row_btn(_("Installed"), False)
 
         def _mk_text_col():
             c = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -631,23 +631,23 @@ class ModrinthMixin:
 
         def on_install(*_b):
             if self._is_running():
-                self._alert("Server is running", "Stop the server before installing mods.")
+                self._alert(_("Server is running"), _("Stop the server before installing mods."))
                 return
             if not mc_version and not is_datapack:
-                self._alert("Unknown version", "Could not read Minecraft version for this server.")
+                self._alert(_("Unknown version"), _("Could not read Minecraft version for this server."))
                 return
 
             chosen = best_version[0]
             if not chosen:
-                self._alert("No compatible version", "No compatible server version is available.")
+                self._alert(_("No compatible version"), _("No compatible server version is available."))
                 return
 
             op_token = self._begin_mod_operation()
             if not op_token:
-                self._alert("No server selected", "Select a server before installing mods.")
+                self._alert(_("No server selected"), _("Select a server before installing mods."))
                 return
 
-            _set_row_btn("Installing…", False)
+            _set_row_btn(_("Installing…"), False)
             self._perform_install(hit, chosen, mc_version, row_btns, btn_label, is_modpack, is_datapack, op_token)
 
         def load_best_version():
@@ -686,7 +686,7 @@ class ModrinthMixin:
                         dependents = (
                             self._dependency_dependents(first.filename) if not (is_modpack or is_datapack) else []
                         )
-                        _set_row_btn("Dependency" if dependents else "Installed", False)
+                        _set_row_btn(_("Dependency") if dependents else _("Installed"), False)
                     else:
                         _set_row_btn(btn_label, True)
 
@@ -729,7 +729,7 @@ class ModrinthMixin:
         if is_datapack:
 
             def ui_ok_dp(fname: str, dep_count: int):
-                _set_btns("Installed", False)
+                _set_btns(_("Installed"), False)
                 self._record_datapack_install(
                     hit.project_id,
                     hit.title,
@@ -738,15 +738,15 @@ class ModrinthMixin:
                     version_number=chosen.version_number,
                 )
                 if dep_count > 0:
-                    self._toast(f"Installed {dep_count} required dependencies")
-                self._toast(f"Installed datapack {fname}")
+                    self._toast(_("Installed {} required dependencies").format(dep_count))
+                self._toast(_("Installed datapack {}").format(fname))
                 self._end_mod_operation(op_token)
                 self._rebuild_lists()
 
             def ui_err_dp(msg: str):
-                _set_btns("Install", True)
+                _set_btns(_("Install"), True)
                 self._end_mod_operation(op_token)
-                self._alert("Install failed", msg)
+                self._alert(_("Install failed"), msg)
 
             def install_dp_thread(deps_to_install: list):
                 try:
@@ -789,12 +789,12 @@ class ModrinthMixin:
                     more = f"\n- and {len(dep_names) - 6} more"
 
                 dialog = Adw.AlertDialog()
-                dialog.set_heading("Install required dependencies?")
+                dialog.set_heading(_("Install required dependencies?"))
                 dialog.set_body(
-                    f"This datapack requires additional dependencies:\n\n{preview}{more}\n\nInstall them as well?"
+                    _("This datapack requires additional dependencies:\n\n{}{}\n\nInstall them as well?").format(preview, more)
                 )
-                dialog.add_response("cancel", "Cancel")
-                dialog.add_response("install", "Install")
+                dialog.add_response("cancel", _("Cancel"))
+                dialog.add_response("install", _("Install"))
                 dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
                 dialog.set_default_response("install")
                 dialog.set_close_response("cancel")
@@ -803,7 +803,7 @@ class ModrinthMixin:
                     if response == "install":
                         threading.Thread(target=install_dp_thread, args=(deps_to_install,), daemon=True).start()
                     else:
-                        _set_btns("Install", True)
+                        _set_btns(_("Install"), True)
                         self._end_mod_operation(op_token)
 
                 dialog.connect("response", on_response)
@@ -835,10 +835,10 @@ class ModrinthMixin:
             return
 
         if is_modpack:
-            _set_btns("Installing...")
+            _set_btns(_("Installing..."))
 
             def ui_ok_pack(downloaded_count: int, override_count: int, managed_mods: list[str]):
-                _set_btns("Installed", False)
+                _set_btns(_("Installed"), False)
                 self._record_modpack_install(
                     hit.project_id,
                     chosen.version_id,
@@ -852,23 +852,23 @@ class ModrinthMixin:
                         }
                     ),
                 )
-                self._toast(f"Installed modpack ({downloaded_count} files)")
+                self._toast(_("Installed modpack ({} files)").format(downloaded_count))
                 self._end_mod_operation(op_token)
                 self._rebuild_lists()
 
             def ui_err_pack(msg: str):
                 if self._is_modpack_installed(hit.project_id):
-                    _set_btns("Installed", False)
+                    _set_btns(_("Installed"), False)
                     self._end_mod_operation(op_token)
-                    self._alert("Install failed", msg)
+                    self._alert(_("Install failed"), msg)
                     return
-                _set_btns("Install", True)
+                _set_btns(_("Install"), True)
                 self._end_mod_operation(op_token)
-                self._alert("Install failed", msg)
+                self._alert(_("Install failed"), msg)
 
             def ui_progress_pack(done: int, total: int):
                 if int(total) <= 0:
-                    _set_btns("Installing...")
+                    _set_btns(_("Installing..."))
                 else:
                     _set_btns(f"{done}/{total}")
 
@@ -899,7 +899,7 @@ class ModrinthMixin:
             return
 
         def ui_ok(fname: str, dep_count: int):
-            _set_btns("Installed", False)
+            _set_btns(_("Installed"), False)
             self._record_individual_mod_install(
                 hit.project_id,
                 hit.title,
@@ -908,17 +908,17 @@ class ModrinthMixin:
                 version_number=chosen.version_number,
             )
             if dep_count > 0:
-                self._toast(f"Installed {dep_count} required dependencies")
-            self._toast(f"Installed {fname}")
+                self._toast(_("Installed {} required dependencies").format(dep_count))
+            self._toast(_("Installed {}").format(fname))
             if self._is_running():
-                self._toast("Restart the server for mod changes to apply")
+                self._toast(_("Restart the server for mod changes to apply"))
             self._end_mod_operation(op_token)
             self._rebuild_lists()
 
         def ui_err(msg: str):
-            _set_btns("Install", True)
+            _set_btns(_("Install"), True)
             self._end_mod_operation(op_token)
-            self._alert("Install failed", msg)
+            self._alert(_("Install failed"), msg)
 
         def thread_fn(deps_to_install: list, all_required_deps: list):
             try:
@@ -972,10 +972,10 @@ class ModrinthMixin:
                 more = f"\n- and {len(dep_names) - 6} more"
 
             dialog = Adw.AlertDialog()
-            dialog.set_heading("Install required dependencies?")
-            dialog.set_body(f"This mod requires additional dependencies:\n\n{preview}{more}\n\nInstall them as well?")
-            dialog.add_response("cancel", "Cancel")
-            dialog.add_response("install", "Install")
+            dialog.set_heading(_("Install required dependencies?"))
+            dialog.set_body(_("This mod requires additional dependencies:\n\n{}{}\n\nInstall them as well?").format(preview, more))
+            dialog.add_response("cancel", _("Cancel"))
+            dialog.add_response("install", _("Install"))
             dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
             dialog.set_default_response("install")
             dialog.set_close_response("cancel")
@@ -984,7 +984,7 @@ class ModrinthMixin:
                 if response == "install":
                     threading.Thread(target=thread_fn, args=(deps_to_install, all_required_deps), daemon=True).start()
                 else:
-                    _set_btns("Install", True)
+                    _set_btns(_("Install"), True)
                     self._end_mod_operation(op_token)
 
             dialog.connect("response", on_response)
@@ -1026,7 +1026,7 @@ class ModrinthMixin:
         is_modpack = ptype == "modpack"
         is_datapack = ptype == "datapack"
 
-        btn_label = "Install"
+        btn_label = _("Install")
 
         tv = Adw.ToolbarView()
         tv.set_hexpand(True)
@@ -1137,7 +1137,7 @@ class ModrinthMixin:
         content.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         version_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        version_title = Gtk.Label(label="Versions", xalign=0.0)
+        version_title = Gtk.Label(label=_("Versions"), xalign=0.0)
         version_title.add_css_class("title-3")
         version_section.append(version_title)
 
@@ -1146,14 +1146,14 @@ class ModrinthMixin:
         version_listbox.add_css_class("boxed-list")
         loading_row = Gtk.ListBoxRow()
         loading_row.set_activatable(False)
-        loading_lbl = Gtk.Label(label="Loading versions…", xalign=0.0, margin_top=10, margin_bottom=10)
+        loading_lbl = Gtk.Label(label=_("Loading versions…"), xalign=0.0, margin_top=10, margin_bottom=10)
         loading_lbl.add_css_class("dim-label")
         loading_row.set_child(loading_lbl)
         version_listbox.append(loading_row)
         version_section.append(version_listbox)
         content.append(version_section)
 
-        open_btn = Gtk.Button(label="Open in Modrinth")
+        open_btn = Gtk.Button(label=_("Open in Modrinth"))
         open_btn.add_css_class("pill")
         open_btn.set_halign(Gtk.Align.START)
 
@@ -1166,7 +1166,7 @@ class ModrinthMixin:
             else:
                 route = "mod"
             if not _open_uri(f"https://modrinth.com/{route}/{slug}"):
-                self._alert("Could not open browser", "Unable to open the Modrinth page.")
+                self._alert(_("Could not open browser"), _("Unable to open the Modrinth page."))
 
         open_btn.connect("clicked", on_open_page)
         content.append(open_btn)
@@ -1246,13 +1246,13 @@ class ModrinthMixin:
                     if installed_state.get("version_id", "") == chosen.version_id:
                         is_installed = True
                     else:
-                        label = "Replace"
+                        label = _("Replace")
                 elif chosen.filename.lower() in installed_names:
                     is_installed = True
 
             if is_installed:
                 dependents = self._dependency_dependents(chosen.filename) if not (is_modpack or is_datapack) else []
-                _set_dbtn("Dependency" if dependents else "Installed", False)
+                _set_dbtn(_("Dependency") if dependents else _("Installed"), False)
             else:
                 _set_dbtn(label, sensitive)
 
@@ -1263,23 +1263,23 @@ class ModrinthMixin:
 
         def on_install(*_b):
             if self._is_running():
-                self._alert("Server is running", "Stop the server before installing mods.")
+                self._alert(_("Server is running"), _("Stop the server before installing mods."))
                 return
             if not mc_version and not is_datapack:
-                self._alert("Unknown version", "Could not read Minecraft version for this server.")
+                self._alert(_("Unknown version"), _("Could not read Minecraft version for this server."))
                 return
 
             chosen = selected_version()
             if not chosen:
-                self._alert("No compatible version", "No compatible server version is available.")
+                self._alert(_("No compatible version"), _("No compatible server version is available."))
                 return
 
             op_token = self._begin_mod_operation()
             if not op_token:
-                self._alert("No server selected", "Select a server before installing mods.")
+                self._alert(_("No server selected"), _("Select a server before installing mods."))
                 return
 
-            _set_dbtn("Installing…", False)
+            _set_dbtn(_("Installing…"), False)
             self._perform_install(hit, chosen, mc_version, _detail_btns, btn_label, is_modpack, is_datapack, op_token)
 
         install_btn_wide.connect("clicked", on_install)
@@ -1297,8 +1297,10 @@ class ModrinthMixin:
                     if follows:
                         GLib.idle_add(
                             lambda: stats_lbl.set_label(
-                                f"{_format_compact_count(int(hit.downloads or 0))} downloads · "
-                                f"{_format_compact_count(follows)} follows"
+                                _("{} downloads · {} follows").format(
+                                    _format_compact_count(int(hit.downloads or 0)),
+                                    _format_compact_count(follows),
+                                )
                             )
                         )
 
@@ -1363,7 +1365,7 @@ class ModrinthMixin:
         if not versions:
             item = Gtk.ListBoxRow()
             item.set_activatable(False)
-            lbl = Gtk.Label(label="No compatible versions", xalign=0.0, margin_top=8, margin_bottom=8)
+            lbl = Gtk.Label(label=_("No compatible versions"), xalign=0.0, margin_top=8, margin_bottom=8)
             lbl.add_css_class("dim-label")
             item.set_child(lbl)
             version_listbox.append(item)
@@ -1430,12 +1432,12 @@ class ModrinthMixin:
                 if installed_state.get("version_id", "") == first.version_id:
                     is_installed = True
                 else:
-                    label = "Replace"
+                    label = _("Replace")
             elif first.filename.lower() in installed_names:
                 is_installed = True
 
         if is_installed:
             dependents = self._dependency_dependents(first.filename) if not (is_modpack or is_datapack) else []
-            _set_btn("Dependency" if dependents else "Installed", False)
+            _set_btn(_("Dependency") if dependents else _("Installed"), False)
         else:
             _set_btn(label, sensitive)

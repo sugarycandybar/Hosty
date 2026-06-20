@@ -99,7 +99,7 @@ class MetricCard(Gtk.Box):
         self._title_label.add_css_class("dim-label")
         self._title_label.set_halign(Gtk.Align.START)
 
-        self._value_label = Gtk.Label(label=f"— {unit}")
+        self._value_label = Gtk.Label(label=f"- {unit}")
         self._value_label.add_css_class("title-3")
         self._value_label.set_halign(Gtk.Align.START)
 
@@ -119,7 +119,7 @@ class MetricCard(Gtk.Box):
 
     def reset(self):
         self._sparkline.clear()
-        self._value_label.set_label(f"— {self._unit}")
+        self._value_label.set_label(f"- {self._unit}")
 
 
 class PerformanceView(Gtk.Box):
@@ -144,40 +144,40 @@ class PerformanceView(Gtk.Box):
         content.set_margin_end(24)
 
         # CPU Metric
-        cpu_title = Gtk.Label(label="CPU Usage", xalign=0)
+        cpu_title = Gtk.Label(label=_("CPU Usage"), xalign=0)
         cpu_title.add_css_class("title-4")
         cpu_title.set_margin_bottom(4)
         content.append(cpu_title)
-        self._cpu_card = MetricCard("CPU", "Total Usage", "%", (0.22, 0.53, 0.91), 100.0)
+        self._cpu_card = MetricCard("CPU", _("Total Usage"), "%", (0.22, 0.53, 0.91), 100.0)
         content.append(self._cpu_card)
 
         # RAM Metric
-        ram_title = Gtk.Label(label="Memory Usage", xalign=0)
+        ram_title = Gtk.Label(label=_("Memory Usage"), xalign=0)
         ram_title.add_css_class("title-4")
         ram_title.set_margin_bottom(4)
         content.append(ram_title)
-        self._ram_card = MetricCard("RAM", "Allocated RAM Consumed", "GB", (0.48, 0.42, 0.94), 100.0)
+        self._ram_card = MetricCard("RAM", _("Allocated RAM Consumed"), "GB", (0.48, 0.42, 0.94), 100.0)
         content.append(self._ram_card)
 
         # TPS Metric
-        tps_title = Gtk.Label(label="Ticks Per Second", xalign=0)
+        tps_title = Gtk.Label(label=_("Ticks Per Second"), xalign=0)
         tps_title.add_css_class("title-4")
         tps_title.set_margin_bottom(4)
         content.append(tps_title)
-        self._tps_card = MetricCard("TPS", "Server Ticks", "t/s", (0.97, 0.65, 0.14), 20.0)
+        self._tps_card = MetricCard("TPS", _("Server Ticks"), "t/s", (0.97, 0.65, 0.14), 20.0)
         content.append(self._tps_card)
 
         # Process Info group
-        self._info_group = Adw.PreferencesGroup(title="Process Information")
-        self._pid_row = Adw.ActionRow(title="Process ID", subtitle="—")
+        self._info_group = Adw.PreferencesGroup(title=_("Process Information"))
+        self._pid_row = Adw.ActionRow(title=_("Process ID"), subtitle="-")
         self._pid_row.set_activatable(False)
         self._info_group.add(self._pid_row)
 
-        self._uptime_row = Adw.ActionRow(title="Uptime", subtitle="—")
+        self._uptime_row = Adw.ActionRow(title=_("Uptime"), subtitle="-")
         self._uptime_row.set_activatable(False)
         self._info_group.add(self._uptime_row)
 
-        self._ram_alloc_row = Adw.ActionRow(title="RAM Allocation", subtitle="—")
+        self._ram_alloc_row = Adw.ActionRow(title=_("RAM Allocation"), subtitle="-")
         self._ram_alloc_row.set_activatable(False)
         self._info_group.add(self._ram_alloc_row)
 
@@ -233,8 +233,8 @@ class PerformanceView(Gtk.Box):
         self._ram_card.reset()
         self._tps_card.reset()
 
-        self._pid_row.set_subtitle("—")
-        self._uptime_row.set_subtitle("—")
+        self._pid_row.set_subtitle("-")
+        self._uptime_row.set_subtitle("-")
         self._psutil_process = None
 
     def _update_stats(self) -> bool:
@@ -274,7 +274,7 @@ class PerformanceView(Gtk.Box):
                 hours = int(uptime_secs // 3600)
                 mins = int((uptime_secs % 3600) // 60)
                 secs = int(uptime_secs % 60)
-                self._uptime_row.set_subtitle(f"{hours}h {mins}m {secs}s")
+                self._uptime_row.set_subtitle(_("{}h {}m {}s").format(hours, mins, secs))
 
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 self._psutil_process = None

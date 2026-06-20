@@ -147,7 +147,7 @@ class JavaManager:
                 archive_path = JRES_DIR / f"jre-{java_version}.tar.gz"
 
             if progress_callback:
-                progress_callback(0.0, f"Downloading JRE {java_version}...")
+                progress_callback(0.0, _("Downloading JRE {}...").format(java_version))
 
             # Download with progress
             response = requests.get(url, stream=True, timeout=60, allow_redirects=True)
@@ -164,10 +164,10 @@ class JavaManager:
                         frac = downloaded / total_size * 0.7  # 70% for download
                         size_mb = downloaded / (1024 * 1024)
                         total_mb = total_size / (1024 * 1024)
-                        progress_callback(frac, f"Downloading JRE {java_version}... {size_mb:.1f}/{total_mb:.1f} MB")
+                        progress_callback(frac, _("Downloading JRE {}... {:.1f}/{:.1f} MB").format(java_version, size_mb, total_mb))
 
             if progress_callback:
-                progress_callback(0.75, f"Extracting JRE {java_version}...")
+                progress_callback(0.75, _("Extracting JRE {}...").format(java_version))
 
             # Extract
             if jre_dir.exists():
@@ -191,16 +191,16 @@ class JavaManager:
                 if sys.platform != "win32":
                     Path(java_path).chmod(0o755)
                 if progress_callback:
-                    progress_callback(1.0, f"JRE {java_version} ready")
+                    progress_callback(1.0, _("JRE {} ready").format(java_version))
                 if done_callback:
-                    done_callback(True, f"JRE {java_version} installed successfully")
+                    done_callback(True, _("JRE {} installed successfully").format(java_version))
             else:
                 if done_callback:
-                    done_callback(False, f"JRE {java_version} extraction failed: java binary not found")
+                    done_callback(False, _("JRE {} extraction failed: java binary not found").format(java_version))
 
         except Exception as e:
             if done_callback:
-                done_callback(False, f"Failed to download JRE {java_version}: {e}")
+                done_callback(False, _("Failed to download JRE {}: {}").format(java_version, e))
 
     def download_jre_sync(self, java_version: int, progress_callback=None) -> tuple[bool, str]:
         """Synchronous JRE download. Returns (success, message)."""

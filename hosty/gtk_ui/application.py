@@ -14,6 +14,7 @@ from pathlib import Path
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
+from hosty.i18n import setup_gettext
 from hosty.gtk_ui.window import HostyWindow
 from hosty.shared.backend.server_manager import ServerManager
 from hosty.shared.core.events import set_main_thread_dispatcher
@@ -47,6 +48,8 @@ class HostyApplication(Adw.Application):
         Adw.Application.do_startup(self)
 
         set_main_thread_dispatcher(lambda callback, *args, **kwargs: GLib.idle_add(callback, *args, **kwargs))
+
+        setup_gettext()
 
         # Load custom CSS
         self._load_css()
@@ -256,7 +259,7 @@ class HostyApplication(Adw.Application):
         info = self._server_manager.get_server(server_id)
         if info:
             self._window.detail_view.load_server(info)
-        self._window.show_toast("Server created")
+        self._window.show_toast(_("Server created"))
 
     def _on_about(self, action, param):
         """Show about dialog."""
@@ -300,10 +303,10 @@ class HostyApplication(Adw.Application):
 
         # Use Adw.AlertDialog for rename
         dialog = Adw.AlertDialog()
-        dialog.set_heading("Rename Server")
-        dialog.set_body("Enter a new name for the server:")
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("rename", "Rename")
+        dialog.set_heading(_("Rename Server"))
+        dialog.set_body(_("Enter a new name for the server:"))
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("rename", _("Rename"))
         dialog.set_response_appearance("rename", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response("rename")
         dialog.set_close_response("cancel")
@@ -326,7 +329,7 @@ class HostyApplication(Adw.Application):
                         info = self._server_manager.get_server(server_id)
                         if info:
                             self._window.detail_view.load_server(info)
-                    self._window.show_toast(f'Server renamed to "{new_name}"')
+                    self._window.show_toast(_('Server renamed to "{}"').format(new_name))
 
         dialog.connect("response", on_response)
         dialog.present(self._window)
@@ -344,7 +347,7 @@ class HostyApplication(Adw.Application):
 
         def on_icon_selected(d, icon_path):
             self._server_manager.set_server_icon(server_id, icon_path)
-            self._window.show_toast("Server icon updated")
+            self._window.show_toast(_("Server icon updated"))
 
         dialog.connect("icon-selected", on_icon_selected)
         dialog.present(self._window)
@@ -357,12 +360,12 @@ class HostyApplication(Adw.Application):
             return
 
         dialog = Adw.AlertDialog()
-        dialog.set_heading("Delete Server?")
+        dialog.set_heading(_("Delete Server?"))
         dialog.set_body(
-            f'Are you sure you want to delete "{server_info.name}"?\n\nAll server files will be permanently deleted.'
+            _('Are you sure you want to delete "{}"?\n\nAll server files will be permanently deleted.').format(server_info.name)
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("delete", _("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -384,9 +387,9 @@ class HostyApplication(Adw.Application):
                         info = self._server_manager.get_server(server_id)
                         if info:
                             self._window.detail_view.load_server(info)
-                        self._window.show_toast(f'Server "{server_info.name}" restored')
+                        self._window.show_toast(_('Server "{}" restored').format(server_info.name))
                     else:
-                        self._window.show_toast("Could not restore deleted server")
+                        self._window.show_toast(_("Could not restore deleted server"))
 
                 def finalize_delete():
                     if state["undone"]:
@@ -398,8 +401,8 @@ class HostyApplication(Adw.Application):
                     return False
 
                 self._window.show_toast(
-                    f'Server "{server_info.name}" deleted',
-                    button_label="Undo",
+                    _('Server "{}" deleted').format(server_info.name),
+                    button_label=_("Undo"),
                     on_button=undo_delete,
                     timeout=6,
                 )

@@ -5,7 +5,7 @@
  * (console dark theme, status indicators, performance gauges).
  */
 
-/* Sidebar header — closer to GNOME Files (monospace title) */
+/* Sidebar header (monospace title) */
 .sidebar-header-title {
     font-family: "JetBrains Mono", "Roboto Mono", ui-monospace, monospace;
     font-weight: 700;
@@ -165,7 +165,7 @@ headerbar.modrinth-header {
     background: transparent;
 }
 
-/* Filter button — match surrounding pill radius */
+/* Filter button -- match surrounding pill radius */
 .modrinth-filter-btn {
     border-radius: 99px;
     margin: 2px;
@@ -192,7 +192,7 @@ headerbar.modrinth-header {
     color: @theme_text_color;
 }
 
-/* Install button — enforce a comfortable slightly compact minimum width */
+/* Install button -- enforce a comfortable slightly compact minimum width */
 .mod-install-btn {
     min-width: 86px;
 }

@@ -32,7 +32,7 @@ class WelcomeView(Gtk.Box):
 
         # Header bar with window controls
         self._header = Adw.HeaderBar()
-        self._header.set_title_widget(Gtk.Label(label="Hosty"))
+        self._header.set_title_widget(Gtk.Label(label=_("Hosty")))
         self._toolbar_view.add_top_bar(self._header)
 
         # Use an explicit centered layout so the icon is rendered at a fixed size
@@ -57,21 +57,20 @@ class WelcomeView(Gtk.Box):
             icon.set_from_icon_name(APP_ID)
         content.append(icon)
 
-        title = Gtk.Label(label="Welcome to Hosty")
+        title = Gtk.Label(label=_("Welcome to Hosty"))
         title.add_css_class("title-1")
         title.set_halign(Gtk.Align.CENTER)
         content.append(title)
 
         description = Gtk.Label(
-            label=("Create and manage your Fabric Minecraft servers\nwith an easy-to-use interface.")
+            label=_("Create and manage your Fabric Minecraft servers\nwith an easy-to-use interface.")
         )
         description.set_justify(Gtk.Justification.CENTER)
         description.set_wrap(True)
         description.set_halign(Gtk.Align.CENTER)
         content.append(description)
 
-        # Create server button — use standard Adwaita suggested-action
-        btn = Gtk.Button(label="Create Server")
+        btn = Gtk.Button(label=_("Create Server"))
         btn.set_halign(Gtk.Align.CENTER)
         btn.add_css_class("suggested-action")
         btn.add_css_class("pill")

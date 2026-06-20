@@ -40,6 +40,7 @@ jobs:
             mingw-w64-ucrt-x86_64-webp-pixbuf-loader
             mingw-w64-ucrt-x86_64-adwaita-icon-theme
             mingw-w64-ucrt-x86_64-gsettings-desktop-schemas
+            mingw-w64-ucrt-x86_64-gettext
 
       - name: Install PyInstaller
         shell: msys2 {0}
@@ -128,6 +129,15 @@ jobs:
 
           BUNDLE_PIXBUF_LOADERS="$(cygpath -w "$BUNDLE_PIXBUF_DIR/loaders")"
           GDK_PIXBUF_MODULEDIR="$BUNDLE_PIXBUF_LOADERS" gdk-pixbuf-query-loaders > "$BUNDLE_PIXBUF_DIR/loaders.cache"
+
+          # Compile .po translations into .mo and bundle them
+          for po_file in po/*.po; do
+            lang=$(basename "$po_file" .po)
+            mo_dir="dist/Hosty/share/locale/$lang/LC_MESSAGES"
+            mkdir -p "$mo_dir"
+            msgfmt "$po_file" -o "$mo_dir/hosty.mo"
+            echo "Compiled $po_file -> $mo_dir/hosty.mo"
+          done
 
       - name: Sign Windows app and build installer
         shell: pwsh

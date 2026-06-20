@@ -37,11 +37,11 @@ def show_preferences_window(
     # Properties like default_size or modal are handled differently in Adw.Dialog
     # if at all, but we can set them if supported or skip them.
 
-    page = Adw.PreferencesPage(title="General")
+    page = Adw.PreferencesPage(title=_("General"))
     group = Adw.PreferencesGroup(
-        title="Application",
+        title=_("Application"),
     )
-    data_row = Adw.ActionRow(title="Data folder", subtitle=str(DATA_DIR))
+    data_row = Adw.ActionRow(title=_("Data folder"), subtitle=str(DATA_DIR))
     data_button = Gtk.Button(valign=Gtk.Align.CENTER)
     data_image = Gtk.Image.new_from_icon_name("folder-open-symbolic")
     data_button.set_child(data_image)
@@ -50,12 +50,12 @@ def show_preferences_window(
     group.add(data_row)
 
     bg_row = Adw.SwitchRow(
-        title="Run in background",
+        title=_("Run in background"),
     )
     bg_row.set_active(preferences.run_in_background_on_close)
 
     startup_row = Adw.SwitchRow(
-        title="Open Hosty on startup",
+        title=_("Open Hosty on startup"),
     )
     startup_row.set_active(preferences.open_on_startup)
     startup_row.set_sensitive(preferences.run_in_background_on_close)
@@ -100,7 +100,7 @@ def show_preferences_window(
     group.add(startup_row)
 
     autobackup_row = Adw.SwitchRow(
-        title="Auto backup world on stop",
+        title=_("Auto backup world on stop"),
     )
     autobackup_row.set_active(preferences.auto_backup_on_stop)
 
@@ -111,7 +111,7 @@ def show_preferences_window(
     group.add(autobackup_row)
 
     dep_row = Adw.SwitchRow(
-        title="Auto resolve mod dependencies",
+        title=_("Auto resolve mod dependencies"),
     )
     dep_row.set_active(preferences.auto_resolve_mod_dependencies)
 

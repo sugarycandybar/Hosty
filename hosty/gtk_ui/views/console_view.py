@@ -56,7 +56,7 @@ class ConsoleView(Gtk.Box):
 
         # Command entry
         self._entry = Gtk.Entry()
-        self._entry.set_placeholder_text("Type a command...")
+        self._entry.set_placeholder_text(_("Type a command..."))
         self._entry.set_hexpand(True)
         self._entry.add_css_class("console-input")
         self._entry.connect("activate", self._on_entry_activate)
@@ -64,7 +64,7 @@ class ConsoleView(Gtk.Box):
 
         # Send button
         send_btn = Gtk.Button(icon_name="mail-send-symbolic")
-        send_btn.set_tooltip_text("Send command")
+        send_btn.set_tooltip_text(_("Send command"))
         send_btn.add_css_class("flat")
         send_btn.connect("clicked", self._on_send_clicked)
         input_bar.append(send_btn)
@@ -149,6 +149,6 @@ class ConsoleView(Gtk.Box):
             self.append_text(f"> {text}\n")
             self._process.send_command(text)
         else:
-            self.append_text("[Hosty] No server process connected\n")
+            self.append_text(_("[Hosty] No server process connected\n"))
 
         self._entry.set_text("")

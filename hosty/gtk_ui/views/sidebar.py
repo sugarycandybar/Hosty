@@ -154,31 +154,31 @@ class Sidebar(Gtk.Box):
         self._rows: dict[str, ServerRow] = {}
         self.add_css_class("server-sidebar")
 
-        # Header bar — GNOME Files–like: new server top-left, centered title, menu top-right
+        # Header bar -- GNOME Files–like: new server top-left, centered title, menu top-right
         header = Adw.HeaderBar()
         header.set_show_end_title_buttons(False)
 
         add_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
-        add_btn.set_tooltip_text("Create new server")
+        add_btn.set_tooltip_text(_("Create new server"))
         add_btn.add_css_class("flat")
         add_btn.set_action_name("app.new-server")
         add_btn.set_focusable(True)
         self._add_btn = add_btn
         header.pack_start(add_btn)
 
-        title = Gtk.Label(label="Servers")
+        title = Gtk.Label(label=_("Servers"))
         title.add_css_class("sidebar-header-title")
         header.set_title_widget(title)
 
         menu_btn = Gtk.MenuButton(valign=Gtk.Align.CENTER)
         menu_btn.set_icon_name("open-menu-symbolic")
-        menu_btn.set_tooltip_text("Main menu")
+        menu_btn.set_tooltip_text(_("Main menu"))
         menu_btn.add_css_class("flat")
         menu_btn.set_focusable(True)
         menu = Gio.Menu()
-        menu.append("Preferences", "app.preferences")
-        menu.append("Keyboard Shortcuts", "app.shortcuts")
-        menu.append("About Hosty", "app.about")
+        menu.append(_("Preferences"), "app.preferences")
+        menu.append(_("Keyboard Shortcuts"), "app.shortcuts")
+        menu.append(_("About Hosty"), "app.about")
         menu_btn.set_menu_model(menu)
         self._menu_btn = menu_btn
         header.pack_end(menu_btn)
@@ -309,9 +309,9 @@ class Sidebar(Gtk.Box):
         row.grab_focus()
 
         menu = Gio.Menu()
-        menu.append("Change Icon", f"app.change-icon::{row.server_info.id}")
-        menu.append("Rename…", f"app.rename-server::{row.server_info.id}")
-        menu.append("Delete", f"app.delete-server::{row.server_info.id}")
+        menu.append(_("Change Icon"), f"app.change-icon::{row.server_info.id}")
+        menu.append(_("Rename…"), f"app.rename-server::{row.server_info.id}")
+        menu.append(_("Delete"), f"app.delete-server::{row.server_info.id}")
 
         popover = Gtk.PopoverMenu(menu_model=menu)
         popover.set_parent(row)
@@ -391,11 +391,11 @@ class Sidebar(Gtk.Box):
 
         server_info = row.server_info
 
-        # Build popup menu — Rename not first (reduces mis-taps on first item)
+        # Build popup menu -- Rename not first (reduces mis-taps on first item)
         menu = Gio.Menu()
-        menu.append("Change Icon", f"app.change-icon::{server_info.id}")
-        menu.append("Rename…", f"app.rename-server::{server_info.id}")
-        menu.append("Delete", f"app.delete-server::{server_info.id}")
+        menu.append(_("Change Icon"), f"app.change-icon::{server_info.id}")
+        menu.append(_("Rename…"), f"app.rename-server::{server_info.id}")
+        menu.append(_("Delete"), f"app.delete-server::{server_info.id}")
 
         popover = Gtk.PopoverMenu(menu_model=menu)
         # Parent must match coordinate space of the gesture (listbox), not the row

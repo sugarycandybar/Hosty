@@ -43,8 +43,8 @@ class PropertiesView(Gtk.Box):
 
         # Restart banner
         self._banner = Adw.Banner()
-        self._banner.set_title("Restart the server to apply changes")
-        self._banner.set_button_label("Dismiss")
+        self._banner.set_title(_("Restart the server to apply changes"))
+        self._banner.set_button_label(_("Dismiss"))
         self._banner.set_revealed(False)
         self._banner.connect("button-clicked", lambda b: b.set_revealed(False))
         self.append(self._banner)
@@ -57,41 +57,41 @@ class PropertiesView(Gtk.Box):
         page = Adw.PreferencesPage()
 
         # ===== General Group =====
-        general = Adw.PreferencesGroup(title="General")
+        general = Adw.PreferencesGroup(title=_("General"))
 
         self._autostart_row = Adw.SwitchRow(
-            title="Start on Launch",
-            subtitle="Start this server automatically when Hosty opens",
+            title=_("Start on Launch"),
+            subtitle=_("Start this server automatically when Hosty opens"),
         )
         general.add(self._autostart_row)
 
-        self._version_row = Adw.ActionRow(title="Minecraft Version", subtitle="Unknown")
+        self._version_row = Adw.ActionRow(title=_("Minecraft Version"), subtitle=_("Unknown"))
 
         self._change_version_btn = Gtk.Button(icon_name="software-update-available-symbolic", valign=Gtk.Align.CENTER)
         self._change_version_btn.add_css_class("flat")
-        self._change_version_btn.set_tooltip_text("Upgrade server version")
+        self._change_version_btn.set_tooltip_text(_("Upgrade server version"))
         self._change_version_btn.set_sensitive(False)
         self._change_version_btn.connect("clicked", self._on_change_version_clicked)
         self._version_row.add_suffix(self._change_version_btn)
         general.add(self._version_row)
 
-        self._widgets["motd"] = self._add_entry_row(general, "Message of the Day", "motd", "a hosty server")
+        self._widgets["motd"] = self._add_entry_row(general, _("Message of the Day"), "motd", _("a hosty server"))
 
-        self._widgets["max-players"] = self._add_spin_row(general, "Max Players", "max-players", 1, 1000, 20)
+        self._widgets["max-players"] = self._add_spin_row(general, _("Max Players"), "max-players", 1, 1000, 20)
         default_difficulty_mode = (
             "hardcore"
             if str(DEFAULT_SERVER_PROPERTIES.get("hardcore", "false")).lower() == "true"
             else str(DEFAULT_SERVER_PROPERTIES.get("difficulty", "easy"))
         )
         self._widgets["difficulty"] = self._add_combo_row(
-            general, "Difficulty", "difficulty", DIFFICULTY_MODES, default_difficulty_mode
+            general, _("Difficulty"), "difficulty", DIFFICULTY_MODES, default_difficulty_mode
         )
-        self._widgets["gamemode"] = self._add_combo_row(general, "Default Gamemode", "gamemode", GAMEMODES, "survival")
+        self._widgets["gamemode"] = self._add_combo_row(general, _("Default Gamemode"), "gamemode", GAMEMODES, "survival")
 
         page.add(general)
 
-        # ===== Resources (Hosty — not in server.properties) =====
-        resources = Adw.PreferencesGroup(title="Resources")
+        # ===== Resources (Hosty - not in server.properties) =====
+        resources = Adw.PreferencesGroup(title=_("Resources"))
         ram_adj = Gtk.Adjustment(
             value=DEFAULT_RAM_MB,
             lower=MIN_RAM_MB,
@@ -100,53 +100,53 @@ class PropertiesView(Gtk.Box):
             page_increment=1024,
         )
         self._ram_row = Adw.SpinRow(
-            title="Allocated RAM (MB)",
+            title=_("Allocated RAM (MB)"),
             adjustment=ram_adj,
         )
-        self._ram_row.set_tooltip_text(f"Megabytes for the Java heap. Range {MIN_RAM_MB}–{MAX_RAM_MB}. ")
+        self._ram_row.set_tooltip_text(_("Megabytes for the Java heap. Range {}–{}.").format(MIN_RAM_MB, MAX_RAM_MB))
         resources.add(self._ram_row)
         page.add(resources)
 
         # ===== World Group =====
-        world = Adw.PreferencesGroup(title="World")
+        world = Adw.PreferencesGroup(title=_("World"))
 
         # level-type is now read-only in the World Manager
-        self._widgets["view-distance"] = self._add_spin_row(world, "View Distance", "view-distance", 2, 32, 10)
+        self._widgets["view-distance"] = self._add_spin_row(world, _("View Distance"), "view-distance", 2, 32, 10)
         self._widgets["simulation-distance"] = self._add_spin_row(
-            world, "Simulation Distance", "simulation-distance", 2, 32, 10
+            world, _("Simulation Distance"), "simulation-distance", 2, 32, 10
         )
         self._widgets["spawn-protection"] = self._add_spin_row(
-            world, "Spawn Protection Radius", "spawn-protection", 0, 256, 16
+            world, _("Spawn Protection Radius"), "spawn-protection", 0, 256, 16
         )
         self._widgets["max-world-size"] = self._add_spin_row(
-            world, "Max World Size", "max-world-size", 1000, 29999984, 29999984
+            world, _("Max World Size"), "max-world-size", 1000, 29999984, 29999984
         )
 
         page.add(world)
 
         # ===== Network Group =====
-        network = Adw.PreferencesGroup(title="Network")
+        network = Adw.PreferencesGroup(title=_("Network"))
 
-        self._widgets["enable-query"] = self._add_switch_row(network, "Enable Query", "enable-query", False, "")
+        self._widgets["enable-query"] = self._add_switch_row(network, _("Enable Query"), "enable-query", False, "")
 
         page.add(network)
 
         # ===== Players Group =====
-        players = Adw.PreferencesGroup(title="Players")
+        players = Adw.PreferencesGroup(title=_("Players"))
 
-        self._widgets["pvp"] = self._add_switch_row(players, "PvP", "pvp", True, "")
-        self._widgets["allow-flight"] = self._add_switch_row(players, "Allow Flight", "allow-flight", False, "")
-        self._widgets["keep-inventory"] = self._add_switch_row(players, "Keep Inventory", "keep-inventory", False, "")
+        self._widgets["pvp"] = self._add_switch_row(players, _("PvP"), "pvp", True, "")
+        self._widgets["allow-flight"] = self._add_switch_row(players, _("Allow Flight"), "allow-flight", False, "")
+        self._widgets["keep-inventory"] = self._add_switch_row(players, _("Keep Inventory"), "keep-inventory", False, "")
 
         page.add(players)
 
         # ===== Advanced Group =====
-        advanced = Adw.PreferencesGroup(title="Advanced")
+        advanced = Adw.PreferencesGroup(title=_("Advanced"))
 
         self._widgets["enable-command-block"] = self._add_switch_row(
-            advanced, "Command Blocks", "enable-command-block", False, ""
+            advanced, _("Command Blocks"), "enable-command-block", False, ""
         )
-        self._widgets["allow-nether"] = self._add_switch_row(advanced, "Allow Nether", "allow-nether", True, "")
+        self._widgets["allow-nether"] = self._add_switch_row(advanced, _("Allow Nether"), "allow-nether", True, "")
 
         page.add(advanced)
 
@@ -191,7 +191,7 @@ class PropertiesView(Gtk.Box):
 
     def _on_entry_apply(self, row, title):
         """Handle entry row apply/confirmation."""
-        self._show_toast("Property updated")
+        self._show_toast(_("Property updated"))
 
     def _show_toast(self, message: str, timeout: int = 2):
         """Show a toast notification."""
@@ -258,7 +258,7 @@ class PropertiesView(Gtk.Box):
         self._server_info = server_info
 
         if self._server_info and hasattr(self, "_version_row"):
-            version_text = self._server_info.mc_version or "Unknown"
+            version_text = self._server_info.mc_version or _("Unknown")
             if self._server_info.loader_version:
                 version_text += f" ({self._server_info.loader_version})"
             self._version_row.set_subtitle(version_text)
@@ -272,7 +272,7 @@ class PropertiesView(Gtk.Box):
         if not self._server_manager or not self._server_info or not self._change_version_btn:
             return
         self._change_version_btn.set_sensitive(False)
-        self._change_version_btn.set_tooltip_text("Checking for newer Minecraft versions...")
+        self._change_version_btn.set_tooltip_text(_("Checking for newer Minecraft versions..."))
 
         def worker():
             versions = self._server_manager.download_manager.fetch_game_versions()
@@ -282,9 +282,9 @@ class PropertiesView(Gtk.Box):
             def done():
                 self._change_version_btn.set_sensitive(has_upgrade)
                 if has_upgrade:
-                    self._change_version_btn.set_tooltip_text("Upgrade server version")
+                    self._change_version_btn.set_tooltip_text(_("Upgrade server version"))
                 else:
-                    self._change_version_btn.set_tooltip_text("No newer Minecraft versions available")
+                    self._change_version_btn.set_tooltip_text(_("No newer Minecraft versions available"))
                 return False
 
             GLib.idle_add(done)
@@ -293,11 +293,11 @@ class PropertiesView(Gtk.Box):
 
     def _on_change_version_clicked(self, button):
         if not self._server_manager or not self._server_info:
-            self._show_toast("Select a server first", timeout=3)
+            self._show_toast(_("Select a server first"), timeout=3)
             return
 
         dialog = Adw.Dialog()
-        dialog.set_title("Update Version")
+        dialog.set_title(_("Update Version"))
         dialog.set_content_width(520)
         dialog.set_content_height(420)
 
@@ -305,8 +305,8 @@ class PropertiesView(Gtk.Box):
         header = Adw.HeaderBar()
         header.set_show_start_title_buttons(False)
         header.set_show_end_title_buttons(False)
-        cancel_btn = Gtk.Button(label="Cancel")
-        primary_btn = Gtk.Button(label="Next")
+        cancel_btn = Gtk.Button(label=_("Cancel"))
+        primary_btn = Gtk.Button(label=_("Next"))
         primary_btn.add_css_class("suggested-action")
         primary_btn.set_sensitive(False)
         header.pack_start(cancel_btn)
@@ -318,23 +318,23 @@ class PropertiesView(Gtk.Box):
 
         runtime_page = Adw.PreferencesPage()
         runtime_group = Adw.PreferencesGroup(
-            title="Runtime",
+            title=_("Runtime"),
         )
         mc_values: list[str] = []
         loader_values: list[str] = []
-        mc_row = Adw.ComboRow(title="Minecraft version", model=Gtk.StringList.new(["Loading..."]))
+        mc_row = Adw.ComboRow(title=_("Minecraft version"), model=Gtk.StringList.new([_("Loading...")]))
         runtime_group.add(mc_row)
 
         fabric_version_row = Adw.ActionRow(
-            title="Fabric loader",
-            subtitle="Loading...",
+            title=_("Fabric loader"),
+            subtitle=_("Loading..."),
         )
         fabric_version_row.set_activatable(False)
         runtime_group.add(fabric_version_row)
 
         java_info_row = Adw.ActionRow(
-            title="Java Runtime",
-            subtitle="Detecting...",
+            title=_("Java Runtime"),
+            subtitle=_("Detecting..."),
         )
         java_info_row.set_activatable(False)
         runtime_group.add(java_info_row)
@@ -344,14 +344,14 @@ class PropertiesView(Gtk.Box):
 
         mods_page = Adw.PreferencesPage()
         review_group = Adw.PreferencesGroup(
-            title="Mod Compatibility",
+            title=_("Mod Compatibility"),
         )
         mods_page.add(review_group)
         stack.add_named(mods_page, "mods")
 
         progress_page = Adw.PreferencesPage()
-        progress_group = Adw.PreferencesGroup(title="Updating Server")
-        progress_row = Adw.ActionRow(title="Preparing update", subtitle="")
+        progress_group = Adw.PreferencesGroup(title=_("Updating Server"))
+        progress_row = Adw.ActionRow(title=_("Preparing update"), subtitle="")
         progress_spinner = Gtk.Spinner()
         progress_row.add_suffix(progress_spinner)
         progress_group.add(progress_row)
@@ -371,8 +371,8 @@ class PropertiesView(Gtk.Box):
         dialog.set_child(toolbar)
 
         def update_java_info(mc_version: str) -> None:
-            if not mc_version or mc_version == "No versions found":
-                java_info_row.set_subtitle("Select a Minecraft version")
+            if not mc_version or mc_version == _("No versions found"):
+                java_info_row.set_subtitle(_("Select a Minecraft version"))
                 return
             try:
                 java_ver = get_required_java_version(mc_version)
@@ -380,13 +380,13 @@ class PropertiesView(Gtk.Box):
                 java_ver = 21
             java_mgr = self._server_manager.java_manager
             if java_mgr.is_java_available(java_ver):
-                java_info_row.set_subtitle(f"Java {java_ver} ✓ Available")
+                java_info_row.set_subtitle(_("Java {} ✓ Available").format(java_ver))
             else:
                 system_ver = java_mgr.system_java_version
                 if system_ver and system_ver >= java_ver:
-                    java_info_row.set_subtitle(f"Java {java_ver} needed — system Java {system_ver} can be used")
+                    java_info_row.set_subtitle(_("Java {} needed - system Java {} can be used").format(java_ver, system_ver))
                 else:
-                    java_info_row.set_subtitle(f"Java {java_ver} needed — will be downloaded automatically")
+                    java_info_row.set_subtitle(_("Java {} needed - will be downloaded automatically").format(java_ver))
 
         def selected_mc_version() -> str:
             idx = int(mc_row.get_selected())
@@ -404,8 +404,8 @@ class PropertiesView(Gtk.Box):
             visible = stack.get_visible_child_name()
             if visible == "mods":
                 stack.set_visible_child_name("runtime")
-                cancel_btn.set_label("Cancel")
-                primary_btn.set_label("Next")
+                cancel_btn.set_label(_("Cancel"))
+                primary_btn.set_label(_("Next"))
                 primary_btn.set_sensitive(bool(mc_values) and bool(loader_values))
                 return
             if visible == "progress":
@@ -427,9 +427,9 @@ class PropertiesView(Gtk.Box):
             if not items:
                 add_review_row(Adw.ActionRow(title=fallback))
                 return
-            expander = Adw.ExpanderRow(title=title, subtitle=f"{len(items)} item(s)")
+            expander = Adw.ExpanderRow(title=title, subtitle=_("{} item(s)").format(len(items)))
             for item in items:
-                label = str(item.get("title") or item.get("filename") or "Unknown")
+                label = str(item.get("title") or item.get("filename") or _("Unknown"))
                 version = str(item.get("version_number") or item.get("version_id") or "").strip()
                 filename = str(item.get("filename") or item.get("current_filename") or "").strip()
                 subtitle = " · ".join([x for x in (version, filename) if x])
@@ -451,7 +451,7 @@ class PropertiesView(Gtk.Box):
                 mc_values.extend(next_games)
                 loader_values.clear()
                 loader_values.extend(next_loaders)
-                mc_row.set_model(Gtk.StringList.new(mc_values or ["No versions found"]))
+                mc_row.set_model(Gtk.StringList.new(mc_values or [_("No versions found")]))
                 if mc_values:
                     mc_row.set_selected(0)
                 # Automatically use the newest loader (first in list)
@@ -472,11 +472,11 @@ class PropertiesView(Gtk.Box):
             # Use the automatically selected newest loader
             selected_loader["value"] = loader_values[0]
             primary_btn.set_sensitive(False)
-            primary_btn.set_label("Update")
-            cancel_btn.set_label("Back")
+            primary_btn.set_label(_("Update"))
+            cancel_btn.set_label(_("Back"))
             stack.set_visible_child_name("mods")
             clear_review_rows()
-            loading_row = Adw.ActionRow(title="Checking installed mods and datapacks...")
+            loading_row = Adw.ActionRow(title=_("Checking installed mods and datapacks..."))
             loading_spinner = Gtk.Spinner()
             loading_spinner.start()
             loading_row.add_suffix(loading_spinner)
@@ -496,22 +496,22 @@ class PropertiesView(Gtk.Box):
                     incompatible = plan.get("incompatible", {})
                     unknown = plan.get("unknown", {})
                     add_plan_group(
-                        "Compatible and Will Be Updated",
+                        _("Compatible and Will Be Updated"),
                         [
                             *compatible.get("modpacks", []),
                             *compatible.get("mods", []),
                             *compatible.get("datapacks", []),
                         ],
-                        "No tracked compatible items found",
+                        _("No tracked compatible items found"),
                     )
                     add_plan_group(
-                        "Incompatible and Will Be Disabled",
+                        _("Incompatible and Will Be Disabled"),
                         [
                             *incompatible.get("modpacks", []),
                             *incompatible.get("mods", []),
                             *incompatible.get("datapacks", []),
                         ],
-                        "No incompatible items found",
+                        _("No incompatible items found"),
                     )
                     unknown_items = [
                         *unknown.get("modpacks", []),
@@ -519,8 +519,8 @@ class PropertiesView(Gtk.Box):
                         *unknown.get("datapacks", []),
                     ]
                     if unknown_items:
-                        add_plan_group("Could Not Check", unknown_items, "")
-                    primary_btn.set_label("Update")
+                        add_plan_group(_("Could Not Check"), unknown_items, "")
+                    primary_btn.set_label(_("Update"))
                     primary_btn.set_sensitive(True)
                     return False
 
@@ -536,11 +536,11 @@ class PropertiesView(Gtk.Box):
                 return
             primary_btn.set_sensitive(False)
             cancel_btn.set_sensitive(False)
-            primary_btn.set_label("Update")
+            primary_btn.set_label(_("Update"))
             stack.set_visible_child_name("progress")
             progress_spinner.start()
             progress_bar.set_fraction(0.0)
-            progress_row.set_title("Updating server")
+            progress_row.set_title(_("Updating server"))
             progress_row.set_subtitle("")
 
             def progress(frac, message):
@@ -574,8 +574,8 @@ class PropertiesView(Gtk.Box):
                         dialog.close()
                     else:
                         cancel_btn.set_sensitive(True)
-                        cancel_btn.set_label("Back")
-                        primary_btn.set_label("Update")
+                        cancel_btn.set_label(_("Back"))
+                        primary_btn.set_label(_("Update"))
                         primary_btn.set_sensitive(True)
                         stack.set_visible_child_name("mods")
                         progress_spinner.stop()

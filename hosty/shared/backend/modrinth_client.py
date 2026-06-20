@@ -1,5 +1,5 @@
 """
-Modrinth API v2 — search and download Fabric mods and modpacks (stdlib only).
+Modrinth API v2 -- search and download Fabric mods and modpacks (stdlib only).
 """
 
 from __future__ import annotations
@@ -185,7 +185,7 @@ def search_mods(
         ptype = "mod"
 
     if ptype == "datapack":
-        # Datapacks are a first-class project_type on Modrinth — no loader facet needed.
+        # Datapacks are a first-class project_type on Modrinth -- no loader facet needed.
         facets_raw: list[list[str]] = [["project_type:datapack"]]
     else:
         facets_raw: list[list[str]] = [[f"project_type:{ptype}"], [f"categories:{loader}"]]

@@ -95,12 +95,12 @@ class DownloadManager:
         cached_jar = CACHE_DIR / f"fabric-installer-{version}.jar"
         if cached_jar.exists():
             if progress_callback:
-                progress_callback(1.0, "Using cached installer")
+                progress_callback(1.0, _("Using cached installer"))
             return str(cached_jar)
 
         try:
             if progress_callback:
-                progress_callback(0.0, "Downloading Fabric installer...")
+                progress_callback(0.0, _("Downloading Fabric installer..."))
 
             resp = requests.get(url, stream=True, timeout=60)
             resp.raise_for_status()
@@ -114,10 +114,10 @@ class DownloadManager:
                     downloaded += len(chunk)
                     if total > 0 and progress_callback:
                         frac = downloaded / total
-                        progress_callback(frac, f"Downloading installer... {downloaded / 1024:.0f} KB")
+                        progress_callback(frac, _("Downloading installer... {:.0f} KB").format(downloaded / 1024))
 
             if progress_callback:
-                progress_callback(1.0, "Installer downloaded")
+                progress_callback(1.0, _("Installer downloaded"))
 
             return str(cached_jar)
 
@@ -173,21 +173,21 @@ class DownloadManager:
         # Skip if already present
         if dest.exists() and dest.stat().st_size > 1000:
             if progress_callback:
-                progress_callback(1.0, "server.jar already present")
-            return True, "server.jar already present"
+                progress_callback(1.0, _("server.jar already present"))
+            return True, _("server.jar already present")
 
         try:
             # Step 1: Get version JSON URL from manifest
             if progress_callback:
-                progress_callback(0.05, f"Fetching MC {mc_version} metadata...")
+                progress_callback(0.05, _("Fetching MC {} metadata...").format(mc_version))
 
             version_url = self._get_version_json_url(mc_version)
             if not version_url:
-                return False, f"Minecraft version {mc_version} not found in Mojang manifest"
+                return False, _("Minecraft version {} not found in Mojang manifest").format(mc_version)
 
             # Step 2: Fetch version JSON
             if progress_callback:
-                progress_callback(0.1, "Reading version details...")
+                progress_callback(0.1, _("Reading version details..."))
 
             resp = requests.get(version_url, timeout=15)
             resp.raise_for_status()
@@ -197,17 +197,17 @@ class DownloadManager:
             downloads = version_data.get("downloads", {})
             server_info = downloads.get("server")
             if not server_info:
-                return False, f"No server download available for MC {mc_version}"
+                return False, _("No server download available for MC {}").format(mc_version)
 
             jar_url = server_info.get("url")
             jar_size = server_info.get("size", 0)
 
             if not jar_url:
-                return False, "server.jar URL not found in version metadata"
+                return False, _("server.jar URL not found in version metadata")
 
             # Step 4: Download server.jar
             if progress_callback:
-                progress_callback(0.15, "Downloading server.jar...")
+                progress_callback(0.15, _("Downloading server.jar..."))
 
             resp = requests.get(jar_url, stream=True, timeout=120)
             resp.raise_for_status()
@@ -225,17 +225,17 @@ class DownloadManager:
                         frac = 0.15 + (downloaded / total) * 0.85
                         size_mb = downloaded / (1024 * 1024)
                         total_mb = total / (1024 * 1024)
-                        progress_callback(frac, f"Downloading server.jar... {size_mb:.1f}/{total_mb:.1f} MB")
+                        progress_callback(frac, _("Downloading server.jar... {:.1f}/{:.1f} MB").format(size_mb, total_mb))
 
             if progress_callback:
-                progress_callback(1.0, "server.jar downloaded")
+                progress_callback(1.0, _("server.jar downloaded"))
 
-            return True, "server.jar downloaded successfully"
+            return True, _("server.jar downloaded successfully")
 
         except Exception as e:
             # Clean up partial download
             dest.unlink(missing_ok=True)
-            return False, f"Failed to download server.jar: {e}"
+            return False, _("Failed to download server.jar: {}").format(e)
 
     # ----- Fabric installation -----
 
@@ -281,7 +281,7 @@ class DownloadManager:
             cmd.extend(["-loader", loader_version])
 
         if progress_callback:
-            progress_callback(0.5, f"Installing Fabric server for MC {mc_version}...")
+            progress_callback(0.5, _("Installing Fabric server for MC {}...").format(mc_version))
 
         try:
             result = subprocess.run(
@@ -298,18 +298,18 @@ class DownloadManager:
                 launch_jar = Path(server_dir) / "fabric-server-launch.jar"
                 if launch_jar.exists():
                     if progress_callback:
-                        progress_callback(1.0, "Fabric server installed successfully")
-                    return True, "Installation successful"
+                        progress_callback(1.0, _("Fabric server installed successfully"))
+                    return True, _("Installation successful")
                 else:
-                    return False, "Installation completed but fabric-server-launch.jar not found"
+                    return False, _("Installation completed but fabric-server-launch.jar not found")
             else:
-                error_msg = result.stderr or result.stdout or "Unknown error"
-                return False, f"Installation failed: {error_msg}"
+                error_msg = result.stderr or result.stdout or _("Unknown error")
+                return False, _("Installation failed: {}").format(error_msg)
 
         except subprocess.TimeoutExpired:
-            return False, "Installation timed out (5 minutes)"
+            return False, _("Installation timed out (5 minutes)")
         except Exception as e:
-            return False, f"Installation error: {e}"
+            return False, _("Installation error: {}").format(e)
 
     def fetch_all_versions_async(self, callback: Callable[[list[str], list[str]], None]):
         """

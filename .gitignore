@@ -30,6 +30,9 @@ htmlcov/
 .vscode/
 .idea/
 
+# Backup files
+*~
+
 # OS/filesystem noise
 .DS_Store
 Thumbs.db

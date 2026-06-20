@@ -176,34 +176,34 @@ class PlayitMixin:
 
     def _refresh_status_row(self):
         if not self._server_manager:
-            self._tunnel_row.set_subtitle("Stopped")
-            self._tunnel_domain_row.set_subtitle("Not available")
+            self._tunnel_row.set_subtitle(_("Stopped"))
+            self._tunnel_domain_row.set_subtitle(_("Not available"))
             self._tunnel_domain_row.set_activatable(False)
             self._copy_tunnel_domain_btn.set_sensitive(False)
             self._copy_tunnel_domain_btn.set_visible(False)
-            self._bedrock_domain_row.set_subtitle("Not available")
+            self._bedrock_domain_row.set_subtitle(_("Not available"))
             self._bedrock_domain_row.set_activatable(False)
             self._copy_bedrock_domain_btn.set_sensitive(False)
             self._copy_bedrock_domain_btn.set_visible(False)
-            self._voicechat_domain_row.set_subtitle("Not available")
+            self._voicechat_domain_row.set_subtitle(_("Not available"))
             self._voicechat_domain_row.set_activatable(False)
             self._copy_voicechat_domain_btn.set_sensitive(False)
             self._copy_voicechat_domain_btn.set_visible(False)
             self._java_tunnel_action_btn.set_label("")
             self._java_tunnel_action_btn.set_icon_name("list-add-symbolic")
-            self._java_tunnel_action_btn.set_tooltip_text("Add Java tunnel")
+            self._java_tunnel_action_btn.set_tooltip_text(_("Add Java tunnel"))
             self._java_tunnel_action_btn.remove_css_class("pill")
             self._java_tunnel_action_btn.add_css_class("flat")
             self._java_tunnel_action_btn.set_sensitive(False)
             self._bedrock_tunnel_action_btn.set_label("")
             self._bedrock_tunnel_action_btn.set_icon_name("list-add-symbolic")
-            self._bedrock_tunnel_action_btn.set_tooltip_text("Add Bedrock tunnel")
+            self._bedrock_tunnel_action_btn.set_tooltip_text(_("Add Bedrock tunnel"))
             self._bedrock_tunnel_action_btn.remove_css_class("pill")
             self._bedrock_tunnel_action_btn.add_css_class("flat")
             self._bedrock_tunnel_action_btn.set_sensitive(False)
             self._voicechat_tunnel_action_btn.set_label("")
             self._voicechat_tunnel_action_btn.set_icon_name("list-add-symbolic")
-            self._voicechat_tunnel_action_btn.set_tooltip_text("Add Voice Chat tunnel")
+            self._voicechat_tunnel_action_btn.set_tooltip_text(_("Add Voice Chat tunnel"))
             self._voicechat_tunnel_action_btn.remove_css_class("pill")
             self._voicechat_tunnel_action_btn.add_css_class("flat")
             self._voicechat_tunnel_action_btn.set_sensitive(False)
@@ -214,7 +214,7 @@ class PlayitMixin:
             self._bedrock_tunnel_spinner.set_spinning(False)
             self._voicechat_tunnel_spinner.set_visible(False)
             self._voicechat_tunnel_spinner.set_spinning(False)
-            self._tunnel_btn.set_label("Start Agent")
+            self._tunnel_btn.set_label(_("Start Agent"))
             self._tunnel_btn.remove_css_class("destructive-action")
             self._tunnel_btn.add_css_class("suggested-action")
             self._tunnel_btn.remove_css_class("hosty-starting-button")
@@ -223,14 +223,14 @@ class PlayitMixin:
         playit = self._server_manager.playit_manager
         endpoint_for_this_server = playit.get_endpoint_for(self._server_info.id) if self._server_info else ""
         if playit.is_running:
-            self._tunnel_row.set_subtitle("Running")
-            self._tunnel_btn.set_label("Stop")
+            self._tunnel_row.set_subtitle(_("Running"))
+            self._tunnel_btn.set_label(_("Stop"))
             self._tunnel_btn.remove_css_class("suggested-action")
             self._tunnel_btn.add_css_class("destructive-action")
             self._tunnel_btn.set_sensitive(True)
         else:
-            self._tunnel_row.set_subtitle("Stopped")
-            self._tunnel_btn.set_label("Start")
+            self._tunnel_row.set_subtitle(_("Stopped"))
+            self._tunnel_btn.set_label(_("Start"))
             self._tunnel_btn.remove_css_class("destructive-action")
             self._tunnel_btn.add_css_class("suggested-action")
             self._tunnel_btn.set_sensitive(True)
@@ -247,7 +247,7 @@ class PlayitMixin:
             self._copy_tunnel_domain_btn.set_sensitive(True)
             self._copy_tunnel_domain_btn.set_visible(True)
         else:
-            self._tunnel_domain_row.set_subtitle("Not available")
+            self._tunnel_domain_row.set_subtitle(_("Not available"))
             self._tunnel_domain_row.set_activatable(True)
             self._copy_tunnel_domain_btn.set_sensitive(False)
             self._copy_tunnel_domain_btn.set_visible(False)
@@ -265,7 +265,7 @@ class PlayitMixin:
             self._copy_bedrock_domain_btn.set_sensitive(True)
             self._copy_bedrock_domain_btn.set_visible(True)
         else:
-            self._bedrock_domain_row.set_subtitle("Not available")
+            self._bedrock_domain_row.set_subtitle(_("Not available"))
             self._bedrock_domain_row.set_activatable(True)
             self._copy_bedrock_domain_btn.set_sensitive(False)
             self._copy_bedrock_domain_btn.set_visible(False)
@@ -273,13 +273,13 @@ class PlayitMixin:
         if java_endpoint:
             self._java_tunnel_action_btn.set_label("")
             self._java_tunnel_action_btn.set_icon_name("emblem-system-symbolic")
-            self._java_tunnel_action_btn.set_tooltip_text("Manage Java tunnel")
+            self._java_tunnel_action_btn.set_tooltip_text(_("Manage Java tunnel"))
             self._java_tunnel_action_btn.remove_css_class("pill")
             self._java_tunnel_action_btn.add_css_class("flat")
         else:
             self._java_tunnel_action_btn.set_label("")
             self._java_tunnel_action_btn.set_icon_name("list-add-symbolic")
-            self._java_tunnel_action_btn.set_tooltip_text("Add Java tunnel")
+            self._java_tunnel_action_btn.set_tooltip_text(_("Add Java tunnel"))
             self._java_tunnel_action_btn.remove_css_class("flat")
             self._java_tunnel_action_btn.add_css_class("flat")
 
@@ -296,13 +296,13 @@ class PlayitMixin:
         if bedrock_endpoint:
             self._bedrock_tunnel_action_btn.set_label("")
             self._bedrock_tunnel_action_btn.set_icon_name("emblem-system-symbolic")
-            self._bedrock_tunnel_action_btn.set_tooltip_text("Manage Bedrock tunnel")
+            self._bedrock_tunnel_action_btn.set_tooltip_text(_("Manage Bedrock tunnel"))
             self._bedrock_tunnel_action_btn.remove_css_class("pill")
             self._bedrock_tunnel_action_btn.add_css_class("flat")
         else:
             self._bedrock_tunnel_action_btn.set_label("")
             self._bedrock_tunnel_action_btn.set_icon_name("list-add-symbolic")
-            self._bedrock_tunnel_action_btn.set_tooltip_text("Add Bedrock tunnel")
+            self._bedrock_tunnel_action_btn.set_tooltip_text(_("Add Bedrock tunnel"))
             self._bedrock_tunnel_action_btn.remove_css_class("flat")
             self._bedrock_tunnel_action_btn.add_css_class("flat")
 
@@ -329,7 +329,7 @@ class PlayitMixin:
             self._copy_voicechat_domain_btn.set_sensitive(True)
             self._copy_voicechat_domain_btn.set_visible(True)
         else:
-            self._voicechat_domain_row.set_subtitle("Not available")
+            self._voicechat_domain_row.set_subtitle(_("Not available"))
             self._voicechat_domain_row.set_activatable(True)
             self._copy_voicechat_domain_btn.set_sensitive(False)
             self._copy_voicechat_domain_btn.set_visible(False)
@@ -337,13 +337,13 @@ class PlayitMixin:
         if voicechat_endpoint:
             self._voicechat_tunnel_action_btn.set_label("")
             self._voicechat_tunnel_action_btn.set_icon_name("emblem-system-symbolic")
-            self._voicechat_tunnel_action_btn.set_tooltip_text("Manage Voice Chat tunnel")
+            self._voicechat_tunnel_action_btn.set_tooltip_text(_("Manage Voice Chat tunnel"))
             self._voicechat_tunnel_action_btn.remove_css_class("pill")
             self._voicechat_tunnel_action_btn.add_css_class("flat")
         else:
             self._voicechat_tunnel_action_btn.set_label("")
             self._voicechat_tunnel_action_btn.set_icon_name("list-add-symbolic")
-            self._voicechat_tunnel_action_btn.set_tooltip_text("Add Voice Chat tunnel")
+            self._voicechat_tunnel_action_btn.set_tooltip_text(_("Add Voice Chat tunnel"))
             self._voicechat_tunnel_action_btn.remove_css_class("flat")
             self._voicechat_tunnel_action_btn.add_css_class("flat")
 
@@ -368,7 +368,7 @@ class PlayitMixin:
         self._voicechat_tunnel_action_btn.set_sensitive(not tunnel_actions_locked)
 
         if self._start_in_progress:
-            self._tunnel_btn.set_label("Starting...")
+            self._tunnel_btn.set_label(_("Starting..."))
             self._tunnel_btn.set_sensitive(False)
             self._tunnel_btn.add_css_class("hosty-starting-button")
         elif self._java_tunnel_in_progress or self._bedrock_in_progress or self._voicechat_in_progress:
@@ -398,7 +398,7 @@ class PlayitMixin:
                 return
             clipboard = display.get_clipboard()
             clipboard.set(endpoint)
-            self._toast("Java tunnel domain copied")
+            self._toast(_("Java tunnel domain copied"))
         except Exception:
             pass
 
@@ -423,7 +423,7 @@ class PlayitMixin:
                 return
             clipboard = display.get_clipboard()
             clipboard.set(domain_only)
-            self._toast("Bedrock tunnel domain copied")
+            self._toast(_("Bedrock tunnel domain copied"))
         except Exception:
             pass
 
@@ -448,7 +448,7 @@ class PlayitMixin:
                 return
             clipboard = display.get_clipboard()
             clipboard.set(domain_only)
-            self._toast("Voice Chat tunnel domain copied")
+            self._toast(_("Voice Chat tunnel domain copied"))
         except Exception:
             pass
 
@@ -485,20 +485,20 @@ class PlayitMixin:
         self._load_server_config()
         self._refresh_mode()
         self._refresh_status_row()
-        self._toast("Playit setup completed")
+        self._toast(_("Playit setup completed"))
 
     def _on_open_dashboard(self, *_args):
         if not _open_uri(PLAYIT_DASHBOARD_URL):
-            self._alert("Could not open browser", "Unable to open playit dashboard.")
+            self._alert(_("Could not open browser"), _("Unable to open playit dashboard."))
 
     def _confirm_delete_tunnel(self, tunnel_name: str, on_confirm):
         dialog = Adw.AlertDialog()
-        dialog.set_heading(f"Delete {tunnel_name} tunnel?")
+        dialog.set_heading(_("Delete {} tunnel?").format(tunnel_name))
         dialog.set_body(
-            "This will remove the current tunnel domain for this server. You can add a new tunnel again later."
+            _("This will remove the current tunnel domain for this server. You can add a new tunnel again later.")
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("delete", _("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -512,13 +512,13 @@ class PlayitMixin:
 
     def _confirm_regenerate_tunnel(self, tunnel_name: str, on_confirm):
         dialog = Adw.AlertDialog()
-        dialog.set_heading(f"Regenerate {tunnel_name} tunnel?")
+        dialog.set_heading(_("Regenerate {} tunnel?").format(tunnel_name))
         dialog.set_body(
-            "This will replace the current tunnel domain with a new one. "
-            "Players using the old domain will no longer be able to connect."
+            _("This will replace the current tunnel domain with a new one. "
+              "Players using the old domain will no longer be able to connect.")
         )
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("regenerate", "Regenerate")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("regenerate", _("Regenerate"))
         dialog.set_response_appearance("regenerate", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -541,10 +541,10 @@ class PlayitMixin:
             self._on_open_setup_dialog()
             return
         if self._start_in_progress:
-            self._toast("Playit startup is already in progress")
+            self._toast(_("Playit startup is already in progress"))
             return
         if self._java_tunnel_in_progress or self._bedrock_in_progress:
-            self._toast("A tunnel operation is already in progress")
+            self._toast(_("A tunnel operation is already in progress"))
             return
 
         self._save_server_config()
@@ -583,7 +583,7 @@ class PlayitMixin:
                     if ok:
                         self._toast(msg)
                     else:
-                        self._alert("Could not update Java tunnel", msg)
+                        self._alert(_("Could not update Java tunnel"), msg)
 
                 GLib.idle_add(ui_done)
 
@@ -597,7 +597,7 @@ class PlayitMixin:
                     return
                 old_port = server_port
                 self._server_manager.set_java_port(server_id, new_port)
-                self._toast(f"Java port changed to {new_port}")
+                self._toast(_("Java port changed to {}").format(new_port))
                 self._java_tunnel_in_progress = True
                 self._refresh_status_row()
 
@@ -618,14 +618,14 @@ class PlayitMixin:
                             self._save_server_config({"java_endpoint": endpoint})
                         self._refresh_status_row()
                         if not ok:
-                            self._alert("Could not create Java tunnel", msg)
+                            self._alert(_("Could not create Java tunnel"), msg)
 
                     GLib.idle_add(ui_done)
 
                 threading.Thread(target=run, daemon=True).start()
 
             dialog = ManagePlayitTunnelDialog(
-                "Java", "Minecraft Java (TCP)", server_port, str(self._cfg.get("java_endpoint", "")).strip()
+                "Java", _("Minecraft Java (TCP)"), server_port, str(self._cfg.get("java_endpoint", "")).strip()
             )
             dialog.connect("regenerate", lambda *_: self._confirm_regenerate_tunnel("Java", start_operation))
             dialog.connect("delete", lambda *_: self._on_delete_java_tunnel())
@@ -642,13 +642,13 @@ class PlayitMixin:
             self._on_open_setup_dialog()
             return
         if self._start_in_progress:
-            self._toast("Playit startup is already in progress")
+            self._toast(_("Playit startup is already in progress"))
             return
         if self._java_tunnel_in_progress:
-            self._toast("Java tunnel operation is already in progress")
+            self._toast(_("Java tunnel operation is already in progress"))
             return
         if self._bedrock_in_progress:
-            self._toast("Bedrock tunnel creation is already in progress")
+            self._toast(_("Bedrock tunnel creation is already in progress"))
             return
 
         self._save_server_config()
@@ -691,7 +691,7 @@ class PlayitMixin:
                     if ok:
                         self._toast(msg)
                     else:
-                        self._alert("Could not update Bedrock tunnel", msg)
+                        self._alert(_("Could not update Bedrock tunnel"), msg)
 
                 GLib.idle_add(ui_done)
 
@@ -708,7 +708,7 @@ class PlayitMixin:
                 self._cfg["bedrock_port"] = new_port
                 self._save_server_config()
                 self._server_manager.playit_manager.configure_geyser_mod(server_dir, new_port)
-                self._toast(f"Bedrock port changed to {new_port}")
+                self._toast(_("Bedrock port changed to {}").format(new_port))
                 self._bedrock_in_progress = True
                 self._refresh_status_row()
 
@@ -730,14 +730,14 @@ class PlayitMixin:
                             self._save_server_config({"bedrock_endpoint": endpoint})
                         self._refresh_status_row()
                         if not ok:
-                            self._alert("Could not create Bedrock tunnel", msg)
+                            self._alert(_("Could not create Bedrock tunnel"), msg)
 
                     GLib.idle_add(ui_done)
 
                 threading.Thread(target=run, daemon=True).start()
 
             dialog = ManagePlayitTunnelDialog(
-                "Bedrock", "Minecraft Bedrock (UDP)", br_port, str(self._cfg.get("bedrock_endpoint", "")).strip()
+                "Bedrock", _("Minecraft Bedrock (UDP)"), br_port, str(self._cfg.get("bedrock_endpoint", "")).strip()
             )
             dialog.connect("regenerate", lambda *_: self._confirm_regenerate_tunnel("Bedrock", start_operation))
             dialog.connect("delete", lambda *_: self._on_delete_bedrock_tunnel())
@@ -764,13 +764,13 @@ class PlayitMixin:
             self._on_open_setup_dialog()
             return
         if self._start_in_progress:
-            self._toast("Playit startup is already in progress")
+            self._toast(_("Playit startup is already in progress"))
             return
         if self._java_tunnel_in_progress or self._bedrock_in_progress:
-            self._toast("A tunnel operation is already in progress")
+            self._toast(_("A tunnel operation is already in progress"))
             return
         if self._voicechat_in_progress:
-            self._toast("Voice Chat tunnel creation is already in progress")
+            self._toast(_("Voice Chat tunnel creation is already in progress"))
             return
 
         self._save_server_config()
@@ -814,7 +814,7 @@ class PlayitMixin:
                     if ok:
                         self._toast(msg)
                     else:
-                        self._alert("Could not update Voice Chat tunnel", msg)
+                        self._alert(_("Could not update Voice Chat tunnel"), msg)
 
                 GLib.idle_add(ui_done)
 
@@ -835,7 +835,7 @@ class PlayitMixin:
                     server_id,
                     voicechat_port=new_port,
                 )
-                self._toast(f"Voice Chat port changed to {new_port}")
+                self._toast(_("Voice Chat port changed to {}").format(new_port))
                 self._voicechat_in_progress = True
                 self._refresh_status_row()
 
@@ -861,14 +861,14 @@ class PlayitMixin:
                             self._save_server_config({"voicechat_endpoint": endpoint})
                         self._refresh_status_row()
                         if not ok:
-                            self._alert("Could not create Voice Chat tunnel", msg)
+                            self._alert(_("Could not create Voice Chat tunnel"), msg)
 
                     GLib.idle_add(ui_done)
 
                 threading.Thread(target=run, daemon=True).start()
 
             dialog = ManagePlayitTunnelDialog(
-                "Voice Chat", "Simple Voice Chat (UDP)", vc_port, str(self._cfg.get("voicechat_endpoint", "")).strip()
+                "Voice Chat", _("Simple Voice Chat (UDP)"), vc_port, str(self._cfg.get("voicechat_endpoint", "")).strip()
             )
             dialog.connect("regenerate", lambda *_: self._confirm_regenerate_tunnel("Voice Chat", start_operation))
             dialog.connect("delete", lambda *_: self._on_delete_voicechat_tunnel())
@@ -897,7 +897,7 @@ class PlayitMixin:
             or self._voicechat_in_progress
             or self._start_in_progress
         ):
-            self._toast("A tunnel operation is already in progress")
+            self._toast(_("A tunnel operation is already in progress"))
             return
 
         def confirmed_delete():
@@ -924,9 +924,9 @@ class PlayitMixin:
                     if ok:
                         self._toast(msg)
                     elif "No java tunnel found" in str(msg):
-                        self._toast("Java tunnel already missing")
+                        self._toast(_("Java tunnel already missing"))
                     else:
-                        self._alert("Could not delete Java tunnel", msg)
+                        self._alert(_("Could not delete Java tunnel"), msg)
 
                 GLib.idle_add(ui_done)
 
@@ -946,7 +946,7 @@ class PlayitMixin:
             or self._voicechat_in_progress
             or self._start_in_progress
         ):
-            self._toast("A tunnel operation is already in progress")
+            self._toast(_("A tunnel operation is already in progress"))
             return
 
         def confirmed_delete():
@@ -973,9 +973,9 @@ class PlayitMixin:
                     if ok:
                         self._toast(msg)
                     elif "No bedrock tunnel found" in str(msg):
-                        self._toast("Bedrock tunnel already missing")
+                        self._toast(_("Bedrock tunnel already missing"))
                     else:
-                        self._alert("Could not delete Bedrock tunnel", msg)
+                        self._alert(_("Could not delete Bedrock tunnel"), msg)
 
                 GLib.idle_add(ui_done)
 
@@ -995,7 +995,7 @@ class PlayitMixin:
             or self._voicechat_in_progress
             or self._start_in_progress
         ):
-            self._toast("A tunnel operation is already in progress")
+            self._toast(_("A tunnel operation is already in progress"))
             return
 
         def confirmed_delete():
@@ -1022,9 +1022,9 @@ class PlayitMixin:
                     if ok:
                         self._toast(msg)
                     elif "No voice chat tunnel found" in str(msg):
-                        self._toast("Voice Chat tunnel already missing")
+                        self._toast(_("Voice Chat tunnel already missing"))
                     else:
-                        self._alert("Could not delete Voice Chat tunnel", msg)
+                        self._alert(_("Could not delete Voice Chat tunnel"), msg)
 
                 GLib.idle_add(ui_done)
 
@@ -1133,12 +1133,12 @@ class PlayitMixin:
 
     def _install_tunnel_mod(self, project_id: str, title: str) -> tuple[bool, str]:
         if not self._server_info:
-            return False, "No server selected"
+            return False, _("No server selected")
         from hosty.shared.backend import modrinth_client
 
         version = self._exact_compatible_modrinth_version(project_id)
         if not version:
-            return False, f"{title} is not available for Minecraft {self._server_info.mc_version}"
+            return False, _("{} is not available for Minecraft {}").format(title, self._server_info.mc_version)
 
         mods_dir = self._server_info.server_dir / "mods"
         mods_dir.mkdir(parents=True, exist_ok=True)
@@ -1181,16 +1181,16 @@ class PlayitMixin:
                 voicechat_port=vc_port,
             )
 
-        return True, f"Installed {title}"
+        return True, _("Installed {}").format(title)
 
     def _confirm_required_mod_install(self, tunnel_name: str, mods: list[tuple[str, str]], on_confirm):
         dialog = Adw.AlertDialog()
-        dialog.set_heading(f"Add {tunnel_name} tunnel?")
+        dialog.set_heading(_("Add {} tunnel?").format(tunnel_name))
         names = ", ".join(title for _project_id, title in mods)
-        dialog.set_body(f"This tunnel needs {names}. Hosty can install compatible Fabric versions automatically.")
+        dialog.set_body(_("This tunnel needs {}. Hosty can install compatible Fabric versions automatically.").format(names))
 
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("install", "Install Mods")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("install", _("Install Mods"))
 
         dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response("install")
@@ -1205,7 +1205,7 @@ class PlayitMixin:
             elif tunnel_name == "Voice Chat":
                 self._voicechat_in_progress = True
             self._refresh_status_row()
-            self._toast(f"Installing {tunnel_name} mod support...")
+            self._toast(_("Installing {} mod support...").format(tunnel_name))
 
             def worker():
                 warnings: list[str] = []
@@ -1216,7 +1216,7 @@ class PlayitMixin:
                     try:
                         ok, msg = self._install_tunnel_mod(project_id, title)
                     except Exception as exc:
-                        ok, msg = False, f"Could not install {title}: {exc}"
+                        ok, msg = False, _("Could not install {}: {}").format(title, exc)
                     if ok:
                         installed.append(title)
                     else:
@@ -1229,12 +1229,12 @@ class PlayitMixin:
                         self._voicechat_in_progress = False
                     self._refresh_status_row()
                     if installed:
-                        self._toast(f"Installed {', '.join(installed)}")
+                        self._toast(_("Installed {}").format(', '.join(installed)))
                     if warnings:
                         warn = Adw.AlertDialog()
-                        warn.set_heading("Some mods were not installed")
-                        warn.set_body("\n".join(warnings) + "\n\nHosty will create the tunnel anyway.")
-                        warn.add_response("ok", "OK")
+                        warn.set_heading(_("Some mods were not installed"))
+                        warn.set_body(_("{}\n\nHosty will create the tunnel anyway.").format("\n".join(warnings)))
+                        warn.add_response("ok", _("OK"))
                         warn.set_default_response("ok")
                         warn.set_close_response("ok")
                         warn.connect("response", lambda *_: on_confirm())
@@ -1257,11 +1257,11 @@ class PlayitMixin:
             self._on_open_setup_dialog()
             return
         if self._java_tunnel_in_progress or self._bedrock_in_progress or self._voicechat_in_progress:
-            self._toast("A tunnel operation is already in progress")
+            self._toast(_("A tunnel operation is already in progress"))
             return
         if self._start_in_progress:
             self._refresh_status_row()
-            self._toast("Playit startup is already in progress")
+            self._toast(_("Playit startup is already in progress"))
             return
 
         self._save_server_config()
@@ -1300,9 +1300,9 @@ class PlayitMixin:
                 self._start_in_progress = False
                 self._refresh_status_row()
                 if ok:
-                    self._toast("Playit agent started")
+                    self._toast(_("Playit agent started"))
                 else:
-                    self._alert("Could not start playit", msg)
+                    self._alert(_("Could not start playit"), msg)
 
             GLib.idle_add(ui_done)
 
@@ -1315,6 +1315,6 @@ class PlayitMixin:
         ok, msg = self._server_manager.playit_manager.stop()
         self._refresh_status_row()
         if ok:
-            self._toast("Playit agent stopped")
+            self._toast(_("Playit agent stopped"))
         else:
-            self._alert("Could not stop playit", msg)
+            self._alert(_("Could not stop playit"), msg)

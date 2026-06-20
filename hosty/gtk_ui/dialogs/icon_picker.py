@@ -32,7 +32,7 @@ class IconPickerDialog(Adw.Dialog):
         self._crop_y = 0.0
         self._crop_size = 1.0
 
-        self.set_title("Change Server Icon")
+        self.set_title(_("Change Server Icon"))
         self.set_content_width(450)
         self.set_content_height(500)
 
@@ -42,11 +42,11 @@ class IconPickerDialog(Adw.Dialog):
         header.set_show_start_title_buttons(False)
         header.set_show_end_title_buttons(False)
 
-        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn = Gtk.Button(label=_("Cancel"))
         cancel_btn.connect("clicked", lambda b: self.close())
         header.pack_start(cancel_btn)
 
-        self._apply_btn = Gtk.Button(label="Apply")
+        self._apply_btn = Gtk.Button(label=_("Apply"))
         self._apply_btn.add_css_class("suggested-action")
         self._apply_btn.set_sensitive(False)
         self._apply_btn.connect("clicked", self._on_apply)
@@ -75,7 +75,7 @@ class IconPickerDialog(Adw.Dialog):
         result_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         result_box.set_halign(Gtk.Align.CENTER)
 
-        result_label = Gtk.Label(label="Preview:")
+        result_label = Gtk.Label(label=_("Preview:"))
         result_label.add_css_class("dim-label")
         result_box.append(result_label)
 
@@ -85,14 +85,14 @@ class IconPickerDialog(Adw.Dialog):
         content.append(result_box)
 
         # File chooser button
-        choose_btn = Gtk.Button(label="Choose Image…")
+        choose_btn = Gtk.Button(label=_("Choose Image…"))
         choose_btn.add_css_class("pill")
         choose_btn.set_halign(Gtk.Align.CENTER)
         choose_btn.connect("clicked", self._on_choose_image)
         content.append(choose_btn)
 
         # Info
-        info_label = Gtk.Label(label="Select a PNG, JPG, or WebP image.")
+        info_label = Gtk.Label(label=_("Select a PNG, JPG, or WebP image."))
         info_label.add_css_class("dim-label")
         info_label.set_halign(Gtk.Align.CENTER)
         info_label.set_justify(Gtk.Justification.CENTER)
@@ -104,11 +104,11 @@ class IconPickerDialog(Adw.Dialog):
     def _on_choose_image(self, button):
         """Open file chooser for image selection."""
         dialog = Gtk.FileDialog()
-        dialog.set_title("Select Server Icon")
+        dialog.set_title(_("Select Server Icon"))
 
         # File filters
         filter_images = Gtk.FileFilter()
-        filter_images.set_name("Images")
+        filter_images.set_name(_("Images"))
         filter_images.add_mime_type("image/png")
         filter_images.add_mime_type("image/jpeg")
         filter_images.add_mime_type("image/webp")

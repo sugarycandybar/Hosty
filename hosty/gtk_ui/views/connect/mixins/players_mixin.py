@@ -26,39 +26,39 @@ from ..utils import *
 
 class PlayersMixin:
     def _append_players_groups(self, page: Adw.PreferencesPage):
-        whitelist_group = Adw.PreferencesGroup(title="Whitelist")
+        whitelist_group = Adw.PreferencesGroup(title=_("Whitelist"))
         wl_add_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
         wl_add_btn.add_css_class("flat")
-        wl_add_btn.set_tooltip_text("Add to whitelist")
+        wl_add_btn.set_tooltip_text(_("Add to whitelist"))
         wl_add_btn.connect("clicked", lambda *_: self._show_add_whitelist_dialog())
         whitelist_group.set_header_suffix(wl_add_btn)
 
-        banned_group = Adw.PreferencesGroup(title="Banned Players")
+        banned_group = Adw.PreferencesGroup(title=_("Banned Players"))
         ban_add_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
         ban_add_btn.add_css_class("flat")
-        ban_add_btn.set_tooltip_text("Ban player")
+        ban_add_btn.set_tooltip_text(_("Ban player"))
         ban_add_btn.connect("clicked", lambda *_: self._show_add_banned_dialog())
         banned_group.set_header_suffix(ban_add_btn)
 
         wl_toggle = Adw.SwitchRow(
-            title="Whitelist enabled",
-            subtitle="Only whitelisted players can join",
+            title=_("Whitelist enabled"),
+            subtitle=_("Only whitelisted players can join"),
         )
         wl_toggle.connect("notify::active", self._on_whitelist_toggled)
         whitelist_group.add(wl_toggle)
         self._whitelist_toggle_rows.append(wl_toggle)
 
         wl_show = Adw.ExpanderRow(
-            title="Show all whitelisted",
-            subtitle="No players",
+            title=_("Show all whitelisted"),
+            subtitle=_("No players"),
         )
         wl_show.set_expanded(False)
         whitelist_group.add(wl_show)
         self._whitelist_list_rows.append(wl_show)
 
         banned_show = Adw.ExpanderRow(
-            title="Show all banned",
-            subtitle="No players",
+            title=_("Show all banned"),
+            subtitle=_("No players"),
         )
         banned_show.set_expanded(False)
         banned_group.add(banned_show)
@@ -72,11 +72,11 @@ class PlayersMixin:
         page.add(banned_group)
 
     def _update_player_section_summaries(self, whitelist_count: int, banned_count: int):
-        wl_summary = f"{whitelist_count} player{'s' if whitelist_count != 1 else ''}"
+        wl_summary = _("{} player(s)").format(whitelist_count)
         for row in self._whitelist_list_rows:
             row.set_subtitle(wl_summary)
 
-        ban_summary = f"{banned_count} player{'s' if banned_count != 1 else ''}"
+        ban_summary = _("{} player(s)").format(banned_count)
         for row in self._banned_list_rows:
             row.set_subtitle(ban_summary)
 
@@ -143,9 +143,9 @@ class PlayersMixin:
         if not whitelist_path or not banned_path:
             self._update_player_section_summaries(0, 0)
             for row in self._whitelist_list_rows:
-                self._add_info_row(row, "No server selected")
+                self._add_info_row(row, _("No server selected"))
             for row in self._banned_list_rows:
-                self._add_info_row(row, "No server selected")
+                self._add_info_row(row, _("No server selected"))
             return
 
         whitelist = self._read_player_list(whitelist_path)
@@ -153,11 +153,11 @@ class PlayersMixin:
 
         if not whitelist:
             for container in self._whitelist_list_rows:
-                self._add_info_row(container, "No whitelisted players")
+                self._add_info_row(container, _("No whitelisted players"))
         else:
             for entry in whitelist:
                 name = str(entry.get("name", "")).strip()
-                subtitle = str(entry.get("uuid", "Unknown UUID"))
+                subtitle = str(entry.get("uuid", _("Unknown UUID")))
                 for container in self._whitelist_list_rows:
                     row = Adw.ActionRow(title=name)
                     row.set_subtitle(subtitle)
@@ -165,7 +165,7 @@ class PlayersMixin:
                     remove_btn = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER)
                     remove_btn.add_css_class("flat")
                     remove_btn.add_css_class("destructive-action")
-                    remove_btn.set_tooltip_text("Remove from whitelist")
+                    remove_btn.set_tooltip_text(_("Remove from whitelist"))
                     remove_btn.connect("clicked", lambda *_a, n=name: self._remove_whitelist_player(n))
                     row.add_suffix(remove_btn)
 
@@ -174,18 +174,18 @@ class PlayersMixin:
 
         if not banned:
             for container in self._banned_list_rows:
-                self._add_info_row(container, "No banned players")
+                self._add_info_row(container, _("No banned players"))
         else:
             for entry in banned:
                 name = str(entry.get("name", "")).strip()
-                reason = str(entry.get("reason", "Banned")).strip()
+                reason = str(entry.get("reason", _("Banned"))).strip()
                 for container in self._banned_list_rows:
                     row = Adw.ActionRow(title=name)
                     row.set_subtitle(reason)
                     row.set_activatable(False)
-                    remove_btn = Gtk.Button(label="Pardon", valign=Gtk.Align.CENTER)
+                    remove_btn = Gtk.Button(label=_("Pardon"), valign=Gtk.Align.CENTER)
                     remove_btn.add_css_class("flat")
-                    remove_btn.set_tooltip_text("Pardon player")
+                    remove_btn.set_tooltip_text(_("Pardon player"))
                     remove_btn.connect("clicked", lambda *_a, n=name: self._remove_banned_player(n))
                     row.add_suffix(remove_btn)
 
@@ -223,15 +223,15 @@ class PlayersMixin:
         self._wl_dialog_open = True
 
         dialog = Adw.AlertDialog()
-        dialog.set_heading("Add to whitelist")
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("add", "Add")
+        dialog.set_heading(_("Add to whitelist"))
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("add", _("Add"))
         dialog.set_response_appearance("add", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_default_response("add")
         dialog.set_close_response("cancel")
 
         group = Adw.PreferencesGroup()
-        name_entry = Adw.EntryRow(title="Player name")
+        name_entry = Adw.EntryRow(title=_("Player name"))
         group.add(name_entry)
         dialog.set_extra_child(group)
 
@@ -251,20 +251,20 @@ class PlayersMixin:
         self._ban_dialog_open = True
 
         dialog = Adw.AlertDialog()
-        dialog.set_heading("Ban player")
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("ban", "Ban")
+        dialog.set_heading(_("Ban player"))
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("ban", _("Ban"))
         dialog.set_response_appearance("ban", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("ban")
         dialog.set_close_response("cancel")
 
         group = Adw.PreferencesGroup()
 
-        name_entry = Adw.EntryRow(title="Player name")
+        name_entry = Adw.EntryRow(title=_("Player name"))
         group.add(name_entry)
 
-        reason_entry = Adw.EntryRow(title="Reason")
-        reason_entry.set_text("Banned by Hosty")
+        reason_entry = Adw.EntryRow(title=_("Reason"))
+        reason_entry.set_text(_("Banned by Hosty"))
         group.add(reason_entry)
 
         dialog.set_extra_child(group)
@@ -282,15 +282,17 @@ class PlayersMixin:
 
     def _normalize_ban_reason(self, reason: str) -> str:
         cleaned = " ".join(str(reason or "").split())
-        return cleaned or "Banned by Hosty"
+        return cleaned or _("Banned by Hosty")
 
-    def _add_player_direct(self, list_type: str, name: str, ban_reason: str = "Banned by Hosty"):
+    def _add_player_direct(self, list_type: str, name: str, ban_reason: str = ""):
+        if not ban_reason:
+            ban_reason = _("Banned by Hosty")
         reason_text = self._normalize_ban_reason(ban_reason)
 
         whitelist_path, banned_path = self._player_list_paths()
         path = whitelist_path if list_type == "whitelist" else banned_path
         if not path:
-            self._alert("No server selected", "Select a server first.")
+            self._alert(_("No server selected"), _("Select a server first."))
             return
 
         process = None
@@ -308,14 +310,14 @@ class PlayersMixin:
             def ui_apply():
                 entries = self._read_player_list(path)
                 if any(str(e.get("name", "")).lower() == resolved_name.lower() for e in entries):
-                    self._toast(f"{resolved_name} is already listed")
+                    self._toast(_("{} is already listed").format(resolved_name))
                     return
 
                 if list_type == "whitelist":
                     entries.append({"uuid": resolved_uuid, "name": resolved_name})
                     saved = self._write_player_list(path, entries)
                     if saved:
-                        self._toast(f"Added {resolved_name} to whitelist")
+                        self._toast(_("Added {} to whitelist").format(resolved_name))
                 else:
                     entries.append(
                         {
@@ -329,12 +331,12 @@ class PlayersMixin:
                     )
                     saved = self._write_player_list(path, entries)
                     if saved:
-                        self._toast(f"Banned {resolved_name}")
+                        self._toast(_("Banned {}").format(resolved_name))
 
                 if saved:
                     self._refresh_player_lists()
                 else:
-                    self._alert("Could not save", "Failed to write player list file.")
+                    self._alert(_("Could not save"), _("Failed to write player list file."))
 
             GLib.idle_add(ui_apply)
 
@@ -373,11 +375,11 @@ class PlayersMixin:
                     if process and process.is_running:
                         process.send_command(f"whitelist add {name}")
                     self._refresh_player_lists()
-                    self._toast(f"Restored {name} to whitelist")
+                    self._toast(_("Restored {} to whitelist").format(name))
 
             self._toast(
-                f"Removed {name} from whitelist",
-                button_label="Undo",
+                _("Removed {} from whitelist").format(name),
+                button_label=_("Undo"),
                 on_button=undo_remove,
                 timeout=6,
             )
@@ -415,11 +417,11 @@ class PlayersMixin:
                     if process and process.is_running:
                         process.send_command(f"ban {name}")
                     self._refresh_player_lists()
-                    self._toast(f"Restored ban for {name}")
+                    self._toast(_("Restored ban for {}").format(name))
 
             self._toast(
-                f"Unbanned {name}",
-                button_label="Undo",
+                _("Unbanned {}").format(name),
+                button_label=_("Undo"),
                 on_button=undo_remove,
                 timeout=6,
             )

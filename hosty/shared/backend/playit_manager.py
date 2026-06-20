@@ -291,7 +291,7 @@ class PlayitManager(EventEmitter):
             raise RuntimeError(f"Invalid JSON response: {body}") from e
 
         if not isinstance(payload, dict):
-            raise RuntimeError("Invalid playit API response")
+            raise RuntimeError(_("Invalid playit API response"))
         return payload
 
     def _load_config(self) -> bool:
@@ -451,15 +451,15 @@ class PlayitManager(EventEmitter):
 
             assets = data.get("assets") or []
             if not isinstance(assets, list):
-                return False, "Release assets unavailable"
+                return False, _("Release assets unavailable")
 
             asset = self._select_asset(assets)
             if not asset:
-                return False, "No compatible playit build found for this platform"
+                return False, _("No compatible playit build found for this platform")
 
             download_url = str(asset.get("browser_download_url", "")).strip()
             if not download_url:
-                return False, "Download URL missing"
+                return False, _("Download URL missing")
 
             target = self.binary_path
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -566,11 +566,11 @@ class PlayitManager(EventEmitter):
     def link_account(self, setup_code: str, timeout: int = 20) -> tuple[bool, str]:
         code = str(setup_code or "").strip()
         if not code:
-            return False, "Missing playit setup code"
+            return False, _("Missing playit setup code")
 
         binary = self.resolve_binary()
         if not binary:
-            return False, "playit binary not found"
+            return False, _("playit binary not found")
 
         major, minor, patch = self._detect_version(binary)
         platform_name = "windows" if sys.platform == "win32" else ("macos" if sys.platform == "darwin" else "linux")
@@ -591,17 +591,17 @@ class PlayitManager(EventEmitter):
                 timeout=timeout,
             )
         except requests.RequestException as e:
-            return False, f"Failed to reach playit link service: {e}"
+            return False, _("Failed to reach playit link service: {}").format(e)
 
         raw_text = response.text
         try:
             data = response.json()
         except ValueError:
-            return False, f"Link service returned invalid JSON (HTTP {response.status_code}): {raw_text}"
+            return False, _("Link service returned invalid JSON (HTTP {}): {}").format(response.status_code, raw_text)
 
         if response.status_code >= 400:
             error_detail = data.get("error") or data.get("message") or data.get("detail") or raw_text
-            return False, f"Link service returned HTTP {response.status_code}: {error_detail}"
+            return False, _("Link service returned HTTP {}: {}").format(response.status_code, error_detail)
 
         if data.get("status", "fail") == "success":
             payload_data = data.get("data") or {}
@@ -609,10 +609,10 @@ class PlayitManager(EventEmitter):
             self._secret_key = str(payload_data.get("agent_secret_key", "") or "") or None
 
         if not self._secret_key:
-            return False, f"Link service did not return a key: {data}"
+            return False, _("Link service did not return a key: {}").format(data)
 
         if not self._write_secret_key(self._secret_key):
-            return False, "Failed to write playit.toml"
+            return False, _("Failed to write playit.toml")
 
         self._claim_url = ""
         self._emit_endpoint_changed()
@@ -620,28 +620,28 @@ class PlayitManager(EventEmitter):
 
         # Warm up API session, but don't fail linking if playit API is briefly out-of-sync.
         if self._initialize_with_retry(max_attempts=15, delay_seconds=1.0):
-            return True, "playit account linked"
+            return True, _("playit account linked")
 
         if self._is_invalid_agent_key_error(self._last_error):
             self.unlink_account()
             return (
                 False,
-                "playit rejected the linked key (InvalidAgentKey). Please generate a new setup code and try again",
+                _("playit rejected the linked key (InvalidAgentKey). Please generate a new setup code and try again"),
             )
 
-        return True, "playit account linked (API sync pending)"
+        return True, _("playit account linked (API sync pending)")
 
     def validate_existing_link(self, retry_attempts: int = 3) -> tuple[bool, str]:
         if not self.read_claimed_secret():
-            return False, "not linked"
+            return False, _("not linked")
 
         if self._initialize_with_retry(max_attempts=max(1, int(retry_attempts)), delay_seconds=0.5):
-            return True, "linked"
+            return True, _("linked")
 
-        detail = self._last_error or "unknown error"
+        detail = self._last_error or _("unknown error")
         if self._is_invalid_agent_key_error(detail):
             self.unlink_account()
-            return False, "linked key is invalid and was cleared"
+            return False, _("linked key is invalid and was cleared")
 
         return False, detail
 
@@ -659,13 +659,13 @@ class PlayitManager(EventEmitter):
         self._last_error = ""
         binary = self.resolve_binary()
         if not binary:
-            self._last_error = "playit binary not found"
+            self._last_error = _("playit binary not found")
             return False
 
         secret = self.read_claimed_secret()
         if not secret:
             self.initialized = False
-            self._last_error = "playit secret key not found"
+            self._last_error = _("playit secret key not found")
             return False
 
         self._secret_key = secret
@@ -677,7 +677,7 @@ class PlayitManager(EventEmitter):
             self._agent_id = str(response_data.get("agent_id", "")) or None
             if not self._agent_id:
                 self.initialized = False
-                self._last_error = "agents/rundata did not include agent_id"
+                self._last_error = _("agents/rundata did not include agent_id")
                 return False
 
             self.agent_web_url = f"{self._web_base}/account/agents/{self._agent_id}"
@@ -793,8 +793,8 @@ class PlayitManager(EventEmitter):
 
         if not self._check_tunnel_limit():
             raise self.TunnelException(
-                f"This account cannot create more than {self.max_tunnels} tunnel(s). "
-                "You can increase your limit here: https://playit.gg/account/upgrade"
+                _("This account cannot create more than {} tunnel(s). "
+                  "You can increase your limit here: {}").format(self.max_tunnels, "https://playit.gg/account/upgrade")
             )
 
         if tunnel_type is None:
@@ -942,7 +942,7 @@ class PlayitManager(EventEmitter):
     ) -> tuple[bool, str]:
         if self.is_running:
             if server_id in self._active_server_ids:
-                return True, "playit is already running for this server"
+                return True, _("playit is already running for this server")
 
             self._active_server_ids[server_id] = {
                 "tunnel_id": None,
@@ -950,17 +950,17 @@ class PlayitManager(EventEmitter):
                 "port": None,
             }
 
-            return True, "playit agent is running"
+            return True, _("playit agent is running")
 
         binary = self.resolve_binary()
         if not binary:
             if auto_install:
                 ok, msg = self.install_latest_binary()
                 if not ok:
-                    return False, f"playit install failed: {msg}"
+                    return False, _("playit install failed: {}").format(msg)
                 binary = self.resolve_binary()
             if not binary:
-                return False, "playit binary not found"
+                return False, _("playit binary not found")
 
         # Ensure binary is pinned to v0.17.1 (marker avoids repeat downloads)
         if binary and not self._is_pinned_binary():
@@ -968,7 +968,7 @@ class PlayitManager(EventEmitter):
             if ok:
                 binary = self.resolve_binary()
             else:
-                return False, f"Failed to install playit v0.17.1: {msg}"
+                return False, _("Failed to install playit v0.17.1: {}").format(msg)
 
         provided_secret = str(secret or "").strip()
         existing_secret = self.read_claimed_secret()
@@ -978,21 +978,21 @@ class PlayitManager(EventEmitter):
 
         if not existing_secret:
             if not allow_unclaimed:
-                return False, "playit is not linked yet"
+                return False, _("playit is not linked yet")
             self._claim_url = self.setup_url
             self._emit_endpoint_changed()
-            return True, "playit setup is required"
+            return True, _("playit setup is required")
 
         if not self.initialized and not self._initialize_with_retry(max_attempts=25, delay_seconds=1.0):
-            detail = self._last_error or "unknown error"
+            detail = self._last_error or _("unknown error")
             if self._is_invalid_agent_key_error(detail):
                 self.unlink_account()
                 if allow_unclaimed:
                     self._claim_url = self.setup_url
                     self._emit_endpoint_changed()
-                    return True, "playit key invalid, setup is required"
-                return False, "linked playit key is invalid; run setup again"
-            return False, f"failed to initialize playit API session: {detail}"
+                    return True, _("playit key invalid, setup is required")
+                return False, _("linked playit key is invalid; run setup again")
+            return False, _("failed to initialize playit API session: {}").format(detail)
 
         self._active_server_ids[server_id] = {
             "tunnel_id": None,
@@ -1002,7 +1002,7 @@ class PlayitManager(EventEmitter):
 
         if not self._start_agent_service(binary):
             self._active_server_ids.pop(server_id, None)
-            return False, "failed to start playit agent"
+            return False, _("failed to start playit agent")
 
         self._claim_url = ""
         self._set_status("running")
@@ -1013,7 +1013,7 @@ class PlayitManager(EventEmitter):
         self._watch_thread = threading.Thread(target=self._watch_exit, daemon=True)
         self._watch_thread.start()
 
-        return True, "playit started"
+        return True, _("playit started")
 
     def regenerate_domain(
         self,
@@ -1047,7 +1047,7 @@ class PlayitManager(EventEmitter):
                 return False, str(e)
 
             if not tunnel:
-                return False, "failed to allocate a new playit tunnel"
+                return False, _("failed to allocate a new playit tunnel")
 
             tunnel.in_use = True
             self._active_server_ids[server_id] = {
@@ -1059,8 +1059,8 @@ class PlayitManager(EventEmitter):
                 self._emit_endpoint_changed(server_id)
 
             if deleted_any:
-                return True, "playit tunnel domain regenerated"
-            return True, "playit tunnel created for this server"
+                return True, _("playit tunnel domain regenerated")
+            return True, _("playit tunnel created for this server")
 
         return self.start(
             server_id,
@@ -1076,10 +1076,10 @@ class PlayitManager(EventEmitter):
             if auto_install:
                 ok, msg = self.install_latest_binary()
                 if not ok:
-                    return False, f"playit install failed: {msg}"
+                    return False, _("playit install failed: {}").format(msg)
                 binary = self.resolve_binary()
             if not binary:
-                return False, "playit binary not found"
+                return False, _("playit binary not found")
 
         # Ensure binary is pinned to v0.17.1 (marker avoids repeat downloads)
         if binary and not self._is_pinned_binary():
@@ -1087,7 +1087,7 @@ class PlayitManager(EventEmitter):
             if ok:
                 binary = self.resolve_binary()
             else:
-                return False, f"Failed to install playit v0.17.1: {msg}"
+                return False, _("Failed to install playit v0.17.1: {}").format(msg)
 
         provided_secret = str(secret or "").strip()
         existing_secret = self.read_claimed_secret()
@@ -1096,14 +1096,14 @@ class PlayitManager(EventEmitter):
                 existing_secret = provided_secret
 
         if not existing_secret:
-            return False, "playit is not linked yet"
+            return False, _("playit is not linked yet")
 
         if not self.initialized and not self._initialize_with_retry(max_attempts=25, delay_seconds=1.0):
-            detail = self._last_error or "unknown error"
+            detail = self._last_error or _("unknown error")
             if self._is_invalid_agent_key_error(detail):
                 self.unlink_account()
-                return False, "linked playit key is invalid; run setup again"
-            return False, f"failed to initialize playit API session: {detail}"
+                return False, _("linked playit key is invalid; run setup again")
+            return False, _("failed to initialize playit API session: {}").format(detail)
 
         return True, ""
 
@@ -1138,15 +1138,15 @@ class PlayitManager(EventEmitter):
         if tunnel_kind == "voicechat":
             port = voicechat_port if 1024 <= voicechat_port <= 65535 else 24454
             tunnel_label = "voicechat"
-            display_name = "Voice Chat"
+            display_name = _("Voice Chat")
         elif tunnel_kind == "bedrock":
             port = self._resolve_tunnel_port(server_dir, protocol, bedrock_port=bedrock_port)
             tunnel_label = "bedrock"
-            display_name = "Bedrock"
+            display_name = _("Bedrock")
         else:
             port = self._resolve_tunnel_port(server_dir, protocol, bedrock_port=bedrock_port)
             tunnel_label = server_id if protocol == "tcp" else f"{server_id}-bedrock"
-            display_name = "Java" if protocol == "tcp" else "Bedrock"
+            display_name = _("Java") if protocol == "tcp" else _("Bedrock")
 
         try:
             tunnel = self.get_tunnel(
@@ -1160,7 +1160,7 @@ class PlayitManager(EventEmitter):
             return False, str(e), ""
 
         if not tunnel:
-            return False, f"failed to allocate a {protocol.upper()} playit tunnel", ""
+            return False, _("failed to allocate a {} playit tunnel").format(protocol.upper()), ""
 
         endpoint = str(tunnel.hostname or "").strip()
         # For bedrock and voicechat tunnels, include the remote port in the endpoint
@@ -1180,8 +1180,8 @@ class PlayitManager(EventEmitter):
                 }
             if tunnel.hostname:
                 self._emit_endpoint_changed(server_id)
-            return True, f"{display_name} tunnel ready: {endpoint}", endpoint
-        return True, f"{display_name} tunnel created on {protocol.upper()} port {port}", ""
+            return True, _("{} tunnel ready: {}").format(display_name, endpoint), endpoint
+        return True, _("{} tunnel created on {} port {}").format(display_name, protocol.upper(), port), ""
 
     def _regenerate_tunnel_for_protocol(
         self,
@@ -1200,10 +1200,10 @@ class PlayitManager(EventEmitter):
 
         if tunnel_kind == "voicechat":
             port = voicechat_port if 1024 <= voicechat_port <= 65535 else 24454
-            display_name = "Voice Chat"
+            display_name = _("Voice Chat")
         else:
             port = self._resolve_tunnel_port(server_dir, protocol, bedrock_port=bedrock_port)
-            display_name = "Java" if protocol == "tcp" else "Bedrock"
+            display_name = _("Java") if protocol == "tcp" else _("Bedrock")
 
         candidates = self._list_tunnels_for_port(port, protocol)
 
@@ -1242,9 +1242,9 @@ class PlayitManager(EventEmitter):
             return False, msg, ""
 
         if deleted_any and endpoint:
-            return True, f"{display_name} tunnel domain regenerated: {endpoint}", endpoint
+            return True, _("{} tunnel domain regenerated: {}").format(display_name, endpoint), endpoint
         if deleted_any:
-            return True, f"{display_name} tunnel domain regenerated", endpoint
+            return True, _("{} tunnel domain regenerated").format(display_name), endpoint
         return True, msg, endpoint
 
     def _delete_tunnel_for_protocol(
@@ -1263,14 +1263,14 @@ class PlayitManager(EventEmitter):
 
         if tunnel_kind == "voicechat":
             port = voicechat_port if 1024 <= voicechat_port <= 65535 else 24454
-            display_name = "Voice Chat"
+            display_name = _("Voice Chat")
         else:
             port = self._resolve_tunnel_port(server_dir, protocol, bedrock_port=bedrock_port)
-            display_name = "Java" if protocol == "tcp" else "Bedrock"
+            display_name = _("Java") if protocol == "tcp" else _("Bedrock")
 
         candidates = self._list_tunnels_for_port(port, protocol)
         if not candidates:
-            return False, f"No {display_name.lower()} tunnel found"
+            return False, _("No {} tunnel found").format(display_name.lower())
 
         deleted_any = False
         deleted_hostnames: list[str] = []
@@ -1284,7 +1284,7 @@ class PlayitManager(EventEmitter):
                     deleted_ids.add(str(tunnel.id))
 
         if not deleted_any:
-            return False, f"Failed to delete {display_name.lower()} tunnel"
+            return False, _("Failed to delete {} tunnel").format(display_name.lower())
 
         # Clear matching tunnel info from any server
         for server_id, info in list(self._active_server_ids.items()):
@@ -1296,12 +1296,12 @@ class PlayitManager(EventEmitter):
                 self._active_server_ids[server_id]["endpoint"] = ""
                 self._emit_endpoint_changed(server_id)
 
-        return True, f"{display_name} tunnel deleted"
+        return True, _("{} tunnel deleted").format(display_name)
 
     def _delete_tunnels_by_port(self, port: int, protocol: str) -> tuple[bool, str]:
         candidates = self._list_tunnels_for_port(port, protocol)
         if not candidates:
-            return True, "no tunnels to delete"
+            return True, _("no tunnels to delete")
 
         deleted_any = False
         deleted_hostnames: list[str] = []
@@ -1324,8 +1324,8 @@ class PlayitManager(EventEmitter):
                 self._emit_endpoint_changed(sid)
 
         if not deleted_any:
-            return False, f"failed to delete tunnels for port {port}"
-        return True, f"deleted {len(deleted_ids)} tunnel(s) for port {port}"
+            return False, _("failed to delete tunnels for port {}").format(port)
+        return True, _("deleted {} tunnel(s) for port {}").format(len(deleted_ids), port)
 
     def add_java_tunnel(
         self,
@@ -1686,7 +1686,7 @@ class PlayitManager(EventEmitter):
         config_dir = Path(server_dir) / "config" / "voicechat"
         config_dir.mkdir(parents=True, exist_ok=True)
 
-        # Remove stale .toml file — modern SVC only reads .properties
+        # Remove stale .toml file -- modern SVC only reads .properties
         old_toml = config_dir / "voicechat-server.toml"
         if old_toml.exists():
             try:
@@ -1737,7 +1737,7 @@ class PlayitManager(EventEmitter):
     ) -> dict[str, str]:
         """Auto-create bedrock/voicechat tunnels if mods are installed and no tunnel exists yet.
 
-        Also validates existing tunnel endpoints — if a configured endpoint no longer has
+        Also validates existing tunnel endpoints -- if a configured endpoint no longer has
         a matching tunnel on playit's side (e.g. deleted via dashboard), the endpoint is
         cleared and a new tunnel is created.
 
@@ -1817,7 +1817,7 @@ class PlayitManager(EventEmitter):
         The tunnel is NOT deleted so the same domain is reused on next start.
         """
         if server_id not in self._active_server_ids:
-            return True, "playit is not running for this server"
+            return True, _("playit is not running for this server")
 
         self._active_server_ids.pop(server_id)
         self._emit_endpoint_changed(server_id)
@@ -1825,7 +1825,7 @@ class PlayitManager(EventEmitter):
         if not self._active_server_ids:
             return self.stop()
 
-        return True, "playit stopped for this server"
+        return True, _("playit stopped for this server")
 
     def stop(self) -> tuple[bool, str]:
         if not self.is_running:
@@ -1834,7 +1834,7 @@ class PlayitManager(EventEmitter):
             self._claim_url = ""
             self._emit_endpoint_changed()
             self._set_status("stopped")
-            return True, "playit is not running"
+            return True, _("playit is not running")
 
         try:
             assert self._process is not None
@@ -1854,7 +1854,7 @@ class PlayitManager(EventEmitter):
             self._emit_endpoint_changed()
             self._set_status("stopped")
 
-        return True, "playit stopped"
+        return True, _("playit stopped")
 
     def _clear_active_tunnel_usage(self):
         active_tunnel_ids = {info["tunnel_id"] for info in self._active_server_ids.values() if info.get("tunnel_id")}

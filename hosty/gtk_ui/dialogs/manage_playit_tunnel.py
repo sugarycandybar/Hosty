@@ -23,7 +23,7 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
     def __init__(self, tunnel_name: str, connection_type: str, local_port: int, domain: str):
         super().__init__()
 
-        self.set_title(f"Manage {tunnel_name} Tunnel")
+        self.set_title(_("Manage {} Tunnel").format(tunnel_name))
         self.set_content_width(400)
 
         # Parse domain if it contains a remote port (format: "domain:port")
@@ -48,14 +48,14 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
 
         page = Adw.PreferencesPage()
 
-        group = Adw.PreferencesGroup(title="Tunnel Details")
+        group = Adw.PreferencesGroup(title=_("Tunnel Details"))
 
         # Connection Type
-        type_row = Adw.ActionRow(title="Connection type", subtitle=connection_type)
+        type_row = Adw.ActionRow(title=_("Connection type"), subtitle=connection_type)
         group.add(type_row)
 
         # Local Port - editable with SpinButton (+/-)
-        local_port_row = Adw.ActionRow(title="Local port")
+        local_port_row = Adw.ActionRow(title=_("Local port"))
         self._port_spin = Gtk.SpinButton.new_with_range(1.0, 65535.0, 1.0)
         self._port_spin.set_value(float(local_port))
         self._port_spin.set_valign(Gtk.Align.CENTER)
@@ -63,11 +63,11 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         group.add(local_port_row)
 
         # Playit port (show remote port for tunnel endpoint)
-        port_row = Adw.ActionRow(title="Playit port", subtitle=str(remote_port))
+        port_row = Adw.ActionRow(title=_("Playit port"), subtitle=str(remote_port))
         group.add(port_row)
 
         # Playit Domain
-        domain_row = Adw.ActionRow(title="Playit Domain", subtitle=display_domain)
+        domain_row = Adw.ActionRow(title=_("Playit Domain"), subtitle=display_domain)
         group.add(domain_row)
 
         page.add(group)
@@ -78,7 +78,7 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         action_box.set_halign(Gtk.Align.CENTER)
 
         # Update Local Port button
-        save_port_btn = Gtk.Button(label="Update Local Port")
+        save_port_btn = Gtk.Button(label=_("Update Local Port"))
         save_port_btn.add_css_class("pill")
         save_port_btn.add_css_class("suggested-action")
         save_port_btn.set_size_request(220, 36)
@@ -86,14 +86,14 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         action_box.append(save_port_btn)
 
         # Regenerate button
-        regen_btn = Gtk.Button(label="Regenerate Domain")
+        regen_btn = Gtk.Button(label=_("Regenerate Domain"))
         regen_btn.add_css_class("pill")
         regen_btn.set_size_request(220, 36)
         regen_btn.connect("clicked", self._on_regenerate)
         action_box.append(regen_btn)
 
         # Delete button
-        delete_btn = Gtk.Button(label="Delete Tunnel")
+        delete_btn = Gtk.Button(label=_("Delete Tunnel"))
         delete_btn.add_css_class("pill")
         delete_btn.add_css_class("destructive-action")
         delete_btn.set_size_request(220, 36)

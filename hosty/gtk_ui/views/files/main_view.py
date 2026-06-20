@@ -1,5 +1,5 @@
 """
-FilesView — folders, worlds, backups, and Modrinth integration (per selected server).
+FilesView -- folders, worlds, backups, and Modrinth integration (per selected server).
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self.append(self._nav)
 
         root_content = self._build_root_content()
-        self._root_page = Adw.NavigationPage(title="Files", child=root_content)
+        self._root_page = Adw.NavigationPage(title=_("Files"), child=root_content)
         try:
             self._root_page.set_tag("hosty-files-root")
         except Exception:
@@ -87,16 +87,16 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         page = Adw.PreferencesPage()
 
-        self._worlds_group = Adw.PreferencesGroup(title="Worlds")
-        open_server_row = Adw.ActionRow(title="Open server folder")
+        self._worlds_group = Adw.PreferencesGroup(title=_("Worlds"))
+        open_server_row = Adw.ActionRow(title=_("Open server folder"))
         open_server_row.add_prefix(Gtk.Image.new_from_icon_name("folder-open-symbolic"))
         open_server_row.set_activatable(True)
         open_server_row.connect("activated", self._on_open_server_folder)
         self._worlds_group.add(open_server_row)
 
         backups_row = Adw.ActionRow(
-            title="Backups",
-            subtitle="0 backups",
+            title=_("Backups"),
+            subtitle=_("0 backups"),
         )
         backups_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         backups_row.set_activatable(True)
@@ -106,15 +106,15 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         page.add(self._worlds_group)
 
-        self._mods_group = Adw.PreferencesGroup(title="Mods")
-        open_mods_row = Adw.ActionRow(title="Open mods folder")
+        self._mods_group = Adw.PreferencesGroup(title=_("Mods"))
+        open_mods_row = Adw.ActionRow(title=_("Open mods folder"))
         open_mods_row.add_prefix(Gtk.Image.new_from_icon_name("application-x-addon-symbolic"))
         open_mods_row.set_activatable(True)
         open_mods_row.connect("activated", self._on_open_mods_folder)
         self._mods_group.add(open_mods_row)
 
         modrinth_row = Adw.ActionRow(
-            title="Modrinth",
+            title=_("Modrinth"),
         )
         modrinth_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         modrinth_row.set_activatable(True)
@@ -122,7 +122,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._mods_group.add(modrinth_row)
 
         check_updates_row = Adw.ActionRow(
-            title="Check for updates",
+            title=_("Check for updates"),
         )
         check_updates_row.add_prefix(Gtk.Image.new_from_icon_name("software-update-available-symbolic"))
         check_updates_row.set_activatable(True)
@@ -131,25 +131,25 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._check_updates_row = check_updates_row
 
         # "Installed Mods" collapsible section (modpacks + standalone mods)
-        mods_expander = Adw.ExpanderRow(title="Installed Mods")
+        mods_expander = Adw.ExpanderRow(title=_("Installed Mods"))
         mods_expander.set_expanded(False)
         self._mods_expander = mods_expander
         self._mods_group.add(mods_expander)
 
         # "Installed Datapacks" collapsible section
-        datapacks_expander = Adw.ExpanderRow(title="Installed Datapacks")
+        datapacks_expander = Adw.ExpanderRow(title=_("Installed Datapacks"))
         datapacks_expander.set_expanded(False)
         self._datapacks_expander = datapacks_expander
         self._mods_group.add(datapacks_expander)
 
-        disabled_expander = Adw.ExpanderRow(title="Disabled by Version Updates")
+        disabled_expander = Adw.ExpanderRow(title=_("Disabled by Version Updates"))
         disabled_expander.set_expanded(False)
         self._disabled_expander = disabled_expander
         self._mods_group.add(disabled_expander)
 
         page.add(self._mods_group)
 
-        self._players_group = Adw.PreferencesGroup(title="Players")
+        self._players_group = Adw.PreferencesGroup(title=_("Players"))
 
         scroll.set_child(page)
         return scroll
@@ -245,15 +245,15 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         root = self._server_dir()
         if not root or not root.is_dir():
-            self._world_rows.append(self._add_info_row(self._worlds_group, "No server folder"))
+            self._world_rows.append(self._add_info_row(self._worlds_group, _("No server folder")))
             if self._mods_expander:
-                info = self._add_info_row_to_expander(self._mods_expander, "No server folder")
+                info = self._add_info_row_to_expander(self._mods_expander, _("No server folder"))
                 self._mod_rows.append(info)
             if self._datapacks_expander:
-                info = self._add_info_row_to_expander(self._datapacks_expander, "No server folder")
+                info = self._add_info_row_to_expander(self._datapacks_expander, _("No server folder"))
                 self._datapack_rows.append(info)
             if self._disabled_expander:
-                info = self._add_info_row_to_expander(self._disabled_expander, "No server folder")
+                info = self._add_info_row_to_expander(self._disabled_expander, _("No server folder"))
                 self._disabled_rows.append(info)
             self._worlds_snapshot = tuple()
             self._disabled_snapshot = tuple()
@@ -261,7 +261,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         worlds = _world_dirs(root)
         if not worlds:
-            self._world_rows.append(self._add_info_row(self._worlds_group, "No worlds yet"))
+            self._world_rows.append(self._add_info_row(self._worlds_group, _("No worlds yet")))
         else:
             for w in worlds:
                 row = self._make_world_row(w)
@@ -292,13 +292,13 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._mod_rows.append(row)
 
             if not self._mod_rows:
-                info = self._add_info_row_to_expander(self._mods_expander, "No mods installed")
+                info = self._add_info_row_to_expander(self._mods_expander, _("No mods installed"))
                 self._mod_rows.append(info)
 
             # Update expander subtitle with count
             total_mods = len(entries) + len([j for j in jars if j.name.lower() not in managed_set])
             self._mods_expander.set_subtitle(
-                f"{total_mods} item{'s' if total_mods != 1 else ''}" if total_mods else "None installed"
+                _("{} item(s)").format(total_mods) if total_mods else _("None installed")
             )
 
         # ---- Installed Datapacks expander ----
@@ -325,10 +325,10 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                     row.set_activatable(False)
                     del_btn = self._icon_button(
                         "user-trash-symbolic",
-                        "Delete datapack file",
+                        _("Delete datapack file"),
                         lambda *_p, p=dp_file: self._soft_delete_with_undo(
                             p,
-                            f'datapack "{p.name}"',
+                            _('datapack "{}"').format(p.name),
                             on_refresh=self._rebuild_lists,
                         ),
                         destructive=True,
@@ -338,7 +338,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                     self._datapack_rows.append(row)
 
             if not self._datapack_rows:
-                info = self._add_info_row_to_expander(self._datapacks_expander, "No datapacks installed")
+                info = self._add_info_row_to_expander(self._datapacks_expander, _("No datapacks installed"))
                 self._datapack_rows.append(info)
 
             # Count real items (tracked + untracked files)
@@ -349,7 +349,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                         untracked_count += 1
             real_count = len(dp_state) + untracked_count
             self._datapacks_expander.set_subtitle(
-                f"{real_count} item{'s' if real_count != 1 else ''}" if real_count else "None installed"
+                _("{} item(s)").format(real_count) if real_count else _("None installed")
             )
 
         # ---- Disabled by Version Updates expander ----
@@ -363,7 +363,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                     disabled_items.append(payload)
 
             for item in disabled_items:
-                title = str(item.get("title") or item.get("filename") or "Unknown")
+                title = str(item.get("title") or item.get("filename") or _("Unknown"))
                 kind = str(item.get("_kind") or "item").replace("modpack", "modpack")
                 filename = str(item.get("filename") or "").strip()
                 project_id = str(item.get("project_id") or "").strip()
@@ -379,13 +379,13 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                     }.get(kind, "mod")
                     open_btn = self._icon_button(
                         "web-browser-symbolic",
-                        "Open Modrinth page",
+                        _("Open Modrinth page"),
                         lambda *_p, pid=project_id, r=route: _open_uri(f"https://modrinth.com/{r}/{pid}"),
                     )
                     row.add_suffix(open_btn)
                 delete_btn = self._icon_button(
                     "user-trash-symbolic",
-                    "Delete disabled file",
+                    _("Delete disabled file"),
                     lambda *_p, k=kind, pid=project_id, fn=filename: self._delete_disabled_component(k, pid, fn),
                     destructive=True,
                 )
@@ -394,12 +394,12 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._disabled_rows.append(row)
 
             if not self._disabled_rows:
-                info = self._add_info_row_to_expander(self._disabled_expander, "No disabled items")
+                info = self._add_info_row_to_expander(self._disabled_expander, _("No disabled items"))
                 self._disabled_rows.append(info)
 
             count = len(disabled_items)
             self._disabled_expander.set_subtitle(
-                f"{count} item{'s' if count != 1 else ''}" if count else "None disabled"
+                _("{} item(s)").format(count) if count else _("None disabled")
             )
 
         self._worlds_snapshot = self._build_worlds_snapshot()
@@ -411,12 +411,11 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         bdir = self._backups_dir()
         if not bdir:
-            self._backups_row.set_subtitle("No server selected")
+            self._backups_row.set_subtitle(_("No server selected"))
             return
 
         count = sum(1 for _ in bdir.glob("*.zip"))
-        suffix = "backup" if count == 1 else "backups"
-        self._backups_row.set_subtitle(f"{count} {suffix}")
+        self._backups_row.set_subtitle(_("{} backup(s)").format(count))
 
     def _build_worlds_snapshot(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
         root = self._server_dir()
@@ -468,7 +467,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             self._toast(msg)
             self._rebuild_lists()
         else:
-            self._alert("Could not delete disabled item", msg)
+            self._alert(_("Could not delete disabled item"), msg)
 
     def _add_info_row(self, group: Adw.PreferencesGroup, title: str) -> Adw.ActionRow:
         row = Adw.ActionRow(title=title)
@@ -511,7 +510,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
     def _open_target(self, path: Path):
         if not _open_path(path):
-            self._alert("Could not open path", str(path))
+            self._alert(_("Could not open path"), str(path))
 
     def _trash_dir(self) -> Path | None:
         root = self._server_dir()
@@ -531,7 +530,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
     ):
         trash_dir = self._trash_dir()
         if not trash_dir:
-            self._alert("No server selected", "Select a server first.")
+            self._alert(_("No server selected"), _("Select a server first."))
             return
 
         trash_name = f"{target.name}.{uuid.uuid4().hex}.trash"
@@ -540,7 +539,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         try:
             shutil.move(str(target), str(trashed))
         except OSError as e:
-            self._alert("Could not delete", str(e))
+            self._alert(_("Could not delete"), str(e))
             return
 
         state = {"undone": False}
@@ -559,9 +558,9 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                     )
                 shutil.move(str(trashed), str(restore_target))
                 on_refresh()
-                self._toast(f"Restored {label}")
+                self._toast(_("Restored {}").format(label))
             except OSError as e:
-                self._alert("Could not undo", str(e))
+                self._alert(_("Could not undo"), str(e))
 
         def finalize_delete():
             if state["undone"]:
@@ -583,14 +582,14 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             return False
 
         on_refresh()
-        self._toast(f"Deleted {label}", button_label="Undo", on_button=undo_delete, timeout=toast_seconds)
+        self._toast(_("Deleted {}").format(label), button_label=_("Undo"), on_button=undo_delete, timeout=toast_seconds)
         GLib.timeout_add_seconds(toast_seconds, finalize_delete)
 
     def _alert(self, title: str, body: str):
         d = Adw.AlertDialog()
         d.set_heading(title)
         d.set_body(body)
-        d.add_response("ok", "OK")
+        d.add_response("ok", _("OK"))
         d.present(self.get_root())
 
     def _toast(

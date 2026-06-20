@@ -1,5 +1,5 @@
 """
-FilesView — folders, worlds, backups, and Modrinth integration (per selected server).
+FilesView -- folders, worlds, backups, and Modrinth integration (per selected server).
 """
 
 from __future__ import annotations

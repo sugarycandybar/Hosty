@@ -30,7 +30,7 @@ class HostyWindow(Adw.ApplicationWindow):
         self._playit_starting_server_ids: set[str] = set()
         self._playit_autostart_paused_ids: set[str] = set()
 
-        self.set_title("Hosty")
+        self.set_title(_("Hosty"))
         try:
             self.set_icon_name(APP_ID)
         except Exception:
@@ -78,12 +78,12 @@ class HostyWindow(Adw.ApplicationWindow):
         # Sidebar toggle buttons for desktop mode
         self._welcome_sidebar_toggle = Gtk.ToggleButton()
         self._welcome_sidebar_toggle.set_icon_name("sidebar-show-symbolic")
-        self._welcome_sidebar_toggle.set_tooltip_text("Toggle Sidebar")
+        self._welcome_sidebar_toggle.set_tooltip_text(_("Toggle Sidebar"))
         self._welcome_view.header.pack_start(self._welcome_sidebar_toggle)
 
         self._detail_sidebar_toggle = Gtk.ToggleButton()
         self._detail_sidebar_toggle.set_icon_name("sidebar-show-symbolic")
-        self._detail_sidebar_toggle.set_tooltip_text("Toggle Sidebar")
+        self._detail_sidebar_toggle.set_tooltip_text(_("Toggle Sidebar"))
         self._detail_view.header.pack_start(self._detail_sidebar_toggle)
 
         # Bind toggles to show-sidebar property
@@ -142,9 +142,9 @@ class HostyWindow(Adw.ApplicationWindow):
             from hosty.shared.utils.portal import set_background_status
 
             if self._server_manager.is_any_server_running():
-                set_background_status("Server running")
+                set_background_status(_("Server running"))
             else:
-                set_background_status("Server not running")
+                set_background_status(_("Server not running"))
 
             if hasattr(self.get_application(), "_is_held_for_background"):
                 app = self.get_application()
@@ -217,9 +217,9 @@ class HostyWindow(Adw.ApplicationWindow):
         from hosty.shared.utils.portal import set_background_status
 
         if current_ids:
-            set_background_status(f"{len(current_ids)} server(s) running")
+            set_background_status(_("{} server(s) running").format(len(current_ids)))
         else:
-            set_background_status("Server not running")
+            set_background_status(_("Server not running"))
 
         # Servers that stopped since last poll
         stopped_ids = previous_ids - current_ids
@@ -312,9 +312,9 @@ class HostyWindow(Adw.ApplicationWindow):
 
             def ui_done():
                 if ok:
-                    self.show_toast(f"Auto backup created: {msg}")
+                    self.show_toast(_("Auto backup created: {}").format(msg))
                 else:
-                    self.show_toast(f"Auto backup skipped: {msg}")
+                    self.show_toast(_("Auto backup skipped: {}").format(msg))
 
             GLib.idle_add(ui_done)
 

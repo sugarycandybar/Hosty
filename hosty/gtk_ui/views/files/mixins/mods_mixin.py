@@ -1,5 +1,5 @@
 """
-FilesView — folders, worlds, backups, and Modrinth integration (per selected server).
+FilesView -- folders, worlds, backups, and Modrinth integration (per selected server).
 """
 
 from __future__ import annotations
@@ -173,20 +173,20 @@ class ModsMixin:
                 if jar.exists():
                     subtitle_bits.append(_format_size(jar.stat().st_size))
         if version_number:
-            subtitle_bits.append(f"version {version_number}")
+            subtitle_bits.append(_("version {}").format(version_number))
         elif version_id:
-            subtitle_bits.append(f"version {version_id[:8]}")
+            subtitle_bits.append(_("version {}").format(version_id[:8]))
         row.set_subtitle(" · ".join(subtitle_bits) if subtitle_bits else "")
         row.set_activatable(False)
 
         open_btn = self._icon_button(
             "web-browser-symbolic",
-            "Open datapack page",
+            _("Open datapack page"),
             lambda *_p, pid=project_id: _open_uri(f"https://modrinth.com/datapack/{pid}"),
         )
         delete_btn = self._icon_button(
             "user-trash-symbolic",
-            "Delete datapack",
+            _("Delete datapack"),
             lambda *_p, pid=project_id, t=title, fn=filename: self._confirm_delete_datapack(pid, t, fn),
             destructive=True,
         )
@@ -196,14 +196,14 @@ class ModsMixin:
 
     def _confirm_delete_datapack(self, project_id: str, title: str, filename: str) -> None:
         if self._is_running():
-            self._alert("Server is running", "Stop the server before deleting a datapack.")
+            self._alert(_("Server is running"), _("Stop the server before deleting a datapack."))
             return
 
         dialog = Adw.AlertDialog()
-        dialog.set_heading("Delete datapack?")
-        dialog.set_body(f'Remove "{title}" from this server?')
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
+        dialog.set_heading(_("Delete datapack?"))
+        dialog.set_body(_('Remove "{}" from this server?').format(title))
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("delete", _("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -231,8 +231,8 @@ class ModsMixin:
             self._write_datapack_state({"datapacks": dps})
 
         self._rebuild_lists()
-        suffix = " (file deleted)" if removed else ""
-        self._toast(f"Deleted {title}{suffix}")
+        suffix = _(" (file deleted)") if removed else ""
+        self._toast(_("Deleted {}{}").format(title, suffix))
 
     def _read_modpack_state(self) -> dict:
         path = self._modpack_state_path()
@@ -732,12 +732,12 @@ class ModsMixin:
 
         dependents = self._dependency_dependents(jar.name)
         if dependents:
-            subtitle_bits.append("Dependency")
+            subtitle_bits.append(_("Dependency"))
 
         if version_number:
-            subtitle_bits.append(f"version {version_number}")
+            subtitle_bits.append(_("version {}").format(version_number))
         elif version_id:
-            subtitle_bits.append(f"version {version_id[:8]}")
+            subtitle_bits.append(_("version {}").format(version_id[:8]))
 
         row.set_subtitle(" · ".join(subtitle_bits))
         row.set_activatable(False)
@@ -745,14 +745,14 @@ class ModsMixin:
         if project_id:
             open_btn = self._icon_button(
                 "web-browser-symbolic",
-                "Open mod page",
+                _("Open mod page"),
                 lambda *_p, pid=project_id: _open_uri(f"https://modrinth.com/mod/{pid}"),
             )
             row.add_suffix(open_btn)
 
         del_btn = self._icon_button(
             "user-trash-symbolic",
-            "Delete mod",
+            _("Delete mod"),
             lambda *_p, p=jar, n=jar.name: self._confirm_delete_mod(p, n),
             destructive=True,
         )
@@ -766,27 +766,27 @@ class ModsMixin:
         version_number = str(entry.get("version_number", "")).strip()
 
         row = Adw.ActionRow(title=title)
-        subtitle_bits = [f"{len(mods)} managed mods"]
+        subtitle_bits = [_("{} managed mods").format(len(mods))]
         if version_number:
-            subtitle_bits.append(f"version {version_number}")
+            subtitle_bits.append(_("version {}").format(version_number))
         elif version_id:
-            subtitle_bits.append(f"version {version_id[:8]}")
+            subtitle_bits.append(_("version {}").format(version_id[:8]))
         row.set_subtitle(" · ".join(subtitle_bits))
         row.set_activatable(False)
 
         view_btn = self._icon_button(
             "view-list-symbolic",
-            "View managed mods",
+            _("View managed mods"),
             lambda *_p, t=title, m=mods: self._show_modpack_mods_dialog(t, m),
         )
         open_btn = self._icon_button(
             "web-browser-symbolic",
-            "Open modpack page",
+            _("Open modpack page"),
             lambda *_p, pid=project_id: _open_uri(f"https://modrinth.com/modpack/{pid}"),
         )
         delete_btn = self._icon_button(
             "user-trash-symbolic",
-            "Delete modpack",
+            _("Delete modpack"),
             lambda *_p, pid=project_id, t=title: self._confirm_delete_modpack(pid, t),
             destructive=True,
         )
@@ -797,14 +797,14 @@ class ModsMixin:
 
     def _confirm_delete_modpack(self, project_id: str, title: str) -> None:
         if self._is_running():
-            self._alert("Server is running", "Stop the server before deleting a modpack.")
+            self._alert(_("Server is running"), _("Stop the server before deleting a modpack."))
             return
 
         dialog = Adw.AlertDialog()
-        dialog.set_heading("Delete modpack?")
-        dialog.set_body(f'Remove "{title}" and delete its managed mod files from this server?')
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
+        dialog.set_heading(_("Delete modpack?"))
+        dialog.set_body(_('Remove "{}" and delete its managed mod files from this server?').format(title))
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("delete", _("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -823,7 +823,7 @@ class ModsMixin:
 
         root = self._server_dir()
         if not root:
-            self._alert("No server selected", "Select a server before deleting a modpack.")
+            self._alert(_("No server selected"), _("Select a server before deleting a modpack."))
             return
 
         mods_dir = root / "mods"
@@ -842,7 +842,7 @@ class ModsMixin:
             self._write_modpack_state({"installed_projects": projects})
 
         self._rebuild_lists()
-        self._toast(f"Deleted {title} ({removed_count} mod files removed)")
+        self._toast(_("Deleted {} ({} mod files removed)").format(title, removed_count))
 
     def _show_modpack_mods_dialog(self, modpack_title: str, mods: list[str]) -> None:
         d = Adw.AlertDialog()
@@ -856,13 +856,13 @@ class ModsMixin:
                 cleaned.append(name)
 
         if not cleaned:
-            d.set_body("No tracked mod files for this modpack yet.")
-            d.add_response("ok", "OK")
+            d.set_body(_("No tracked mod files for this modpack yet."))
+            d.add_response("ok", _("OK"))
             d.present(self.get_root())
             return
 
         cleaned = sorted(set(cleaned), key=str.lower)
-        d.set_body(f"{len(cleaned)} managed mods")
+        d.set_body(_("{} managed mods").format(len(cleaned)))
 
         listbox = Gtk.ListBox()
         listbox.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -879,7 +879,7 @@ class ModsMixin:
         sw.set_child(listbox)
         d.set_extra_child(sw)
 
-        d.add_response("ok", "OK")
+        d.add_response("ok", _("OK"))
         d.present(self.get_root())
 
     def _set_mod_update_row_subtitle(self, subtitle: str) -> None:
@@ -888,17 +888,17 @@ class ModsMixin:
 
     def _on_check_mod_updates(self, *_args) -> None:
         if self._mods_update_busy:
-            self._toast("Mod update check already running")
+            self._toast(_("Mod update check already running"))
             return
         if self._is_running():
-            self._alert("Server is running", "Stop the server before checking for mod updates.")
+            self._alert(_("Server is running"), _("Stop the server before checking for mod updates."))
             return
         if not self._server_info or not self._server_info.mc_version:
-            self._alert("Unknown version", "Could not determine Minecraft version for this server.")
+            self._alert(_("Unknown version"), _("Could not determine Minecraft version for this server."))
             return
 
         self._mods_update_busy = True
-        self._set_mod_update_row_subtitle("Checking for updates...")
+        self._set_mod_update_row_subtitle(_("Checking for updates..."))
 
         def worker():
             from hosty.shared.backend import modrinth_client
@@ -1025,67 +1025,67 @@ class ModsMixin:
                 total_updates = len(modpack_updates) + len(standalone_updates) + len(datapack_updates)
                 if total_updates == 0:
                     self._mods_update_busy = False
-                    self._set_mod_update_row_subtitle("Update check complete")
+                    self._set_mod_update_row_subtitle(_("Update check complete"))
                     if blocked > 0:
-                        self._toast(f"No safe updates found ({blocked} blocked by modpack-managed dependencies)")
+                        self._toast(_("No safe updates found ({} blocked by modpack-managed dependencies)").format(blocked))
                     else:
-                        self._toast("All tracked mods and datapacks are up to date")
+                        self._toast(_("All tracked mods and datapacks are up to date"))
                     return False
 
                 lines: list[str] = []
                 if modpack_updates:
-                    lines.append("Modpacks:")
+                    lines.append(_("Modpacks:"))
                     for pid, entry, newer in modpack_updates[:12]:
                         title = str(entry.get("title", "")).strip() or pid
                         vn = str(newer.version_number or newer.version_id)
-                        lines.append(f"- {title} -> {vn}")
+                        lines.append(_("- {} -> {}").format(title, vn))
                     if len(modpack_updates) > 12:
-                        lines.append(f"- and {len(modpack_updates) - 12} more modpacks")
+                        lines.append(_("- and {} more modpacks").format(len(modpack_updates) - 12))
 
                 if standalone_updates:
                     if lines:
                         lines.append("")
-                    lines.append("Standalone mods:")
+                    lines.append(_("Standalone mods:"))
                     for pid, meta, newer, _deps in standalone_updates[:14]:
                         title = str((meta or {}).get("title", "")).strip() or pid
                         vn = str(newer.version_number or newer.version_id)
-                        lines.append(f"- {title} -> {vn}")
+                        lines.append(_("- {} -> {}").format(title, vn))
                     if len(standalone_updates) > 14:
-                        lines.append(f"- and {len(standalone_updates) - 14} more mods")
+                        lines.append(_("- and {} more mods").format(len(standalone_updates) - 14))
 
                 if datapack_updates:
                     if lines:
                         lines.append("")
-                    lines.append("Datapacks:")
+                    lines.append(_("Datapacks:"))
                     for pid, meta, newer in datapack_updates[:14]:
                         title = str((meta or {}).get("title", "")).strip() or pid
                         vn = str(newer.version_number or newer.version_id)
-                        lines.append(f"- {title} -> {vn}")
+                        lines.append(_("- {} -> {}").format(title, vn))
                     if len(datapack_updates) > 14:
-                        lines.append(f"- and {len(datapack_updates) - 14} more datapacks")
+                        lines.append(_("- and {} more datapacks").format(len(datapack_updates) - 14))
 
                 listing = "\n".join(lines)
 
                 body_parts = []
                 if modpack_updates or standalone_updates:
                     body_parts.append(
-                        f"Found {len(modpack_updates)} modpack update(s) and "
-                        f"{len(standalone_updates)} standalone mod update(s)."
+                        _("Found {} modpack update(s) and {} standalone mod update(s).").format(
+                            len(modpack_updates), len(standalone_updates))
                     )
                 if datapack_updates:
-                    body_parts.append(f"Found {len(datapack_updates)} datapack update(s).")
+                    body_parts.append(_("Found {} datapack update(s).").format(len(datapack_updates)))
                 if blocked > 0:
                     body_parts.append(
-                        f"{blocked} standalone update(s) were skipped because dependencies are managed by a modpack."
+                        _("{} standalone update(s) were skipped because dependencies are managed by a modpack.").format(blocked)
                     )
                 if listing:
                     body_parts.append(listing)
 
                 dialog = Adw.AlertDialog()
-                dialog.set_heading("Install available updates?")
+                dialog.set_heading(_("Install available updates?"))
                 dialog.set_body("\n\n".join(body_parts))
-                dialog.add_response("cancel", "Cancel")
-                dialog.add_response("update", "Update")
+                dialog.add_response("cancel", _("Cancel"))
+                dialog.add_response("update", _("Update"))
                 dialog.set_response_appearance("update", Adw.ResponseAppearance.SUGGESTED)
                 dialog.set_default_response("update")
                 dialog.set_close_response("cancel")
@@ -1093,20 +1093,20 @@ class ModsMixin:
                 def on_response(_d, response):
                     if response != "update":
                         self._mods_update_busy = False
-                        self._set_mod_update_row_subtitle("Update check complete")
+                        self._set_mod_update_row_subtitle(_("Update check complete"))
                         return
 
                     op_token = self._begin_mod_operation()
                     if not op_token:
                         self._mods_update_busy = False
-                        self._set_mod_update_row_subtitle("Update check complete")
-                        self._alert("No server selected", "Select a server before updating mods.")
+                        self._set_mod_update_row_subtitle(_("Update check complete"))
+                        self._alert(_("No server selected"), _("Select a server before updating mods."))
                         return
 
-                    self._set_mod_update_row_subtitle("Updating mods...")
+                    self._set_mod_update_row_subtitle(_("Updating mods..."))
                     self._toast(
-                        f"Updating {len(modpack_updates)} modpack(s), {len(standalone_updates)} mod(s), "
-                        f"and {len(datapack_updates)} datapack(s)"
+                        _("Updating {} modpack(s), {} mod(s), and {} datapack(s)").format(
+                            len(modpack_updates), len(standalone_updates), len(datapack_updates))
                     )
                     threading.Thread(
                         target=self._apply_mod_updates,
@@ -1133,8 +1133,8 @@ class ModsMixin:
 
         root = self._server_dir()
         if not root:
-            GLib.idle_add(lambda: self._alert("No server selected", "Select a server to update mods."))
-            GLib.idle_add(lambda: self._set_mod_update_row_subtitle("Update check complete"))
+            GLib.idle_add(lambda: self._alert(_("No server selected"), _("Select a server to update mods.")))
+            GLib.idle_add(lambda: self._set_mod_update_row_subtitle(_("Update check complete")))
             GLib.idle_add(lambda: setattr(self, "_mods_update_busy", False))
             GLib.idle_add(lambda t=mod_operation_token: self._end_mod_operation(t))
             return
@@ -1150,7 +1150,7 @@ class ModsMixin:
             pack_title = str(entry.get("title", "")).strip() or project_id
             GLib.idle_add(
                 lambda i=index, total=len(modpack_updates), t=pack_title: self._set_mod_update_row_subtitle(
-                    f"Updating modpack {i}/{total}: {t}"
+                    _("Updating modpack {}/{}: {}").format(i, total, t)
                 )
             )
             try:
@@ -1160,7 +1160,7 @@ class ModsMixin:
 
                 def on_progress(done: int, total: int, rel_path: str):
                     GLib.idle_add(
-                        lambda d=done, t=total: self._set_mod_update_row_subtitle(f"Updating {pack_title}: {d}/{t}")
+                        lambda d=done, t=total: self._set_mod_update_row_subtitle(_("Updating {}: {}/{}").format(pack_title, d, t))
                     )
 
                 result = modrinth_client.install_modpack(
@@ -1200,7 +1200,7 @@ class ModsMixin:
             mod_title = str((meta or {}).get("title", "")).strip() or project_id
             GLib.idle_add(
                 lambda i=index, total=len(standalone_updates), t=mod_title: self._set_mod_update_row_subtitle(
-                    f"Updating standalone mod {i}/{total}: {t}"
+                    _("Updating standalone mod {}/{}: {}").format(i, total, t)
                 )
             )
             try:
@@ -1267,7 +1267,7 @@ class ModsMixin:
             dp_title = str((meta or {}).get("title", "")).strip() or project_id
             GLib.idle_add(
                 lambda i=index, total=len(dp_updates), t=dp_title: self._set_mod_update_row_subtitle(
-                    f"Updating datapack {i}/{total}: {t}"
+                    _("Updating datapack {}/{}: {}").format(i, total, t)
                 )
             )
             try:
@@ -1293,20 +1293,20 @@ class ModsMixin:
 
         def finish_ui():
             self._mods_update_busy = False
-            self._set_mod_update_row_subtitle("Update check complete")
+            self._set_mod_update_row_subtitle(_("Update check complete"))
             self._end_mod_operation(mod_operation_token)
             self._rebuild_lists()
             if failed == 0:
-                self._toast(f"Applied {applied} update(s)")
+                self._toast(_("Applied {} update(s)").format(applied))
             else:
-                self._toast(f"Applied {applied} update(s), {failed} failed")
+                self._toast(_("Applied {} update(s), {} failed").format(applied, failed))
             return False
 
         GLib.idle_add(finish_ui)
 
     def _confirm_delete_mod(self, path: Path, name: str):
         if self._is_running():
-            self._alert("Server is running", "Stop the server before removing mods.")
+            self._alert(_("Server is running"), _("Stop the server before removing mods."))
             return
 
         dependents = self._dependency_dependents(name)
@@ -1329,15 +1329,15 @@ class ModsMixin:
             more = ""
             if len(dependents) > 6:
                 more = f"\n- and {len(dependents) - 6} more"
-            dialog.set_heading("Delete dependency mod?")
+            dialog.set_heading(_("Delete dependency mod?"))
             dialog.set_body(
-                f'The following mods depend on "{name}":\n\n{preview}{more}\n\nAre you sure you want to proceed?'
+                _('The following mods depend on "{}":\n\n{}{}\n\nAre you sure you want to proceed?').format(name, preview, more)
             )
         else:
-            dialog.set_heading("Delete mod?")
-            dialog.set_body(f"Remove “{name}”?")
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("delete", "Delete")
+            dialog.set_heading(_("Delete mod?"))
+            dialog.set_body(_("Remove \u201c{}\u201d?").format(name))
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("delete", _("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")

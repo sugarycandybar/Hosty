@@ -5,6 +5,7 @@ project('hosty',
 
 python = import('python').find_installation('python3')
 
+subdir('po')
 subdir('bin')
 subdir('packaging/linux')
 

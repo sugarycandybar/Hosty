@@ -25,14 +25,14 @@ from hosty.shared.utils.constants import (
 from hosty.shared.utils.image_utils import convert_to_png
 
 OPTIMISATION_MODS = [
-    ("lithium", "Lithium"),
-    ("ferrite-core", "FerriteCore"),
-    ("c2me-fabric", "Concurrent Chunk Management Engine"),
-    ("fast-noise", "Fast Noise"),
-    ("vmp-fabric", "Very Many Players"),
-    ("scalablelux", "ScalableLux"),
-    ("krypton", "Krypton"),
-    ("modernfix", "ModernFix"),
+    ("lithium", _("Lithium")),
+    ("ferrite-core", _("FerriteCore")),
+    ("c2me-fabric", _("Concurrent Chunk Management Engine")),
+    ("fast-noise", _("Fast Noise")),
+    ("vmp-fabric", _("Very Many Players")),
+    ("scalablelux", _("ScalableLux")),
+    ("krypton", _("Krypton")),
+    ("modernfix", _("ModernFix")),
 ]
 
 
@@ -54,7 +54,7 @@ class CreateServerDialog(Adw.Dialog):
         self._icon_source_path: str = ""
         self._world_import_source_path: str = ""
 
-        self.set_title("Create Server")
+        self.set_title(_("Create Server"))
         self.set_content_width(500)
         self.set_content_height(600)
 
@@ -65,11 +65,11 @@ class CreateServerDialog(Adw.Dialog):
         header.set_show_start_title_buttons(False)
         header.set_show_end_title_buttons(False)
 
-        self._cancel_btn = Gtk.Button(label="Cancel")
+        self._cancel_btn = Gtk.Button(label=_("Cancel"))
         self._cancel_btn.connect("clicked", self._on_cancel_clicked)
         header.pack_start(self._cancel_btn)
 
-        self._create_btn = Gtk.Button(label="Next")
+        self._create_btn = Gtk.Button(label=_("Next"))
         self._create_btn.add_css_class("suggested-action")
         self._create_btn.set_sensitive(False)
         self._create_btn.connect("clicked", self._on_primary_clicked)
@@ -109,21 +109,21 @@ class CreateServerDialog(Adw.Dialog):
         page = Adw.PreferencesPage()
 
         info_group = Adw.PreferencesGroup(
-            title="Server Info",
+            title=_("Server Info"),
         )
 
-        self._name_entry = Adw.EntryRow(title="Server Name")
-        self._name_entry.set_text("My Server")
+        self._name_entry = Adw.EntryRow(title=_("Server Name"))
+        self._name_entry.set_text(_("My Server"))
         self._name_entry.connect("changed", self._validate)
         info_group.add(self._name_entry)
 
         self._icon_row = Adw.ActionRow(
-            title="Server Icon",
-            subtitle="No icon selected",
+            title=_("Server Icon"),
+            subtitle=_("No icon selected"),
         )
         self._choose_icon_btn = Gtk.Button(valign=Gtk.Align.CENTER)
         self._choose_icon_btn.add_css_class("flat")
-        self._choose_icon_btn.set_tooltip_text("Choose server icon")
+        self._choose_icon_btn.set_tooltip_text(_("Choose server icon"))
         self._choose_icon_btn.set_valign(Gtk.Align.CENTER)
         self._choose_icon_btn.set_child(Gtk.Image.new_from_icon_name("folder-symbolic"))
 
@@ -135,13 +135,13 @@ class CreateServerDialog(Adw.Dialog):
         page.add(info_group)
 
         world_group = Adw.PreferencesGroup(
-            title="World defaults",
+            title=_("World defaults"),
         )
 
         self._difficulty_values = list(DIFFICULTY_MODES)
-        difficulty_labels = ["Hardcore" if value == "hardcore" else value.title() for value in self._difficulty_values]
+        difficulty_labels = [_("Hardcore") if value == "hardcore" else value.title() for value in self._difficulty_values]
         self._difficulty_row = Adw.ComboRow(
-            title="Difficulty",
+            title=_("Difficulty"),
             model=Gtk.StringList.new(difficulty_labels),
         )
         default_is_hardcore = str(DEFAULT_SERVER_PROPERTIES.get("hardcore", "false")).lower() == "true"
@@ -156,7 +156,7 @@ class CreateServerDialog(Adw.Dialog):
         self._gamemode_values = list(GAMEMODES)
         gamemode_labels = [value.replace("-", " ").title() for value in self._gamemode_values]
         self._gamemode_row = Adw.ComboRow(
-            title="Default gamemode",
+            title=_("Default gamemode"),
             model=Gtk.StringList.new(gamemode_labels),
         )
         default_gamemode = str(DEFAULT_SERVER_PROPERTIES.get("gamemode", "survival"))
@@ -167,7 +167,7 @@ class CreateServerDialog(Adw.Dialog):
         self._level_type_values = list(LEVEL_TYPES)
         level_type_labels = [LEVEL_TYPE_NAMES.get(value, value) for value in self._level_type_values]
         self._level_type_row = Adw.ComboRow(
-            title="World type",
+            title=_("World type"),
             model=Gtk.StringList.new(level_type_labels),
         )
         default_level_type = str(DEFAULT_SERVER_PROPERTIES.get("level-type", "minecraft\\:normal"))
@@ -175,18 +175,18 @@ class CreateServerDialog(Adw.Dialog):
             self._level_type_row.set_selected(self._level_type_values.index(default_level_type))
         world_group.add(self._level_type_row)
 
-        self._seed_entry = Adw.EntryRow(title="World Seed")
+        self._seed_entry = Adw.EntryRow(title=_("World Seed"))
         self._seed_entry.set_text("")
         self._seed_entry.set_show_apply_button(False)
         world_group.add(self._seed_entry)
 
         self._world_import_row = Adw.ActionRow(
-            title="Import world folder",
-            subtitle="No world selected.",
+            title=_("Import world folder"),
+            subtitle=_("No world selected."),
         )
         self._choose_world_btn = Gtk.Button(valign=Gtk.Align.CENTER)
         self._choose_world_btn.add_css_class("flat")
-        self._choose_world_btn.set_tooltip_text("Choose world folder")
+        self._choose_world_btn.set_tooltip_text(_("Choose world folder"))
         self._choose_world_btn.set_child(Gtk.Image.new_from_icon_name("folder-symbolic"))
         self._choose_world_btn.connect("clicked", self._on_choose_world_folder)
         self._world_import_row.add_suffix(self._choose_world_btn)
@@ -206,12 +206,12 @@ class CreateServerDialog(Adw.Dialog):
         page = Adw.PreferencesPage()
 
         version_group = Adw.PreferencesGroup(
-            title="Runtime",
+            title=_("Runtime"),
         )
 
-        self._mc_version_list = Gtk.StringList.new(["Loading..."])
+        self._mc_version_list = Gtk.StringList.new([_("Loading...")])
         self._mc_version_row = Adw.ComboRow(
-            title="Minecraft version",
+            title=_("Minecraft version"),
             model=self._mc_version_list,
         )
         self._mc_version_row.set_sensitive(False)
@@ -219,15 +219,15 @@ class CreateServerDialog(Adw.Dialog):
         version_group.add(self._mc_version_row)
 
         self._fabric_version_row = Adw.ActionRow(
-            title="Fabric loader",
-            subtitle="Loading...",
+            title=_("Fabric loader"),
+            subtitle=_("Loading..."),
         )
         self._fabric_version_row.set_activatable(False)
         version_group.add(self._fabric_version_row)
 
         self._java_info_row = Adw.ActionRow(
-            title="Java Runtime",
-            subtitle="Detecting...",
+            title=_("Java Runtime"),
+            subtitle=_("Detecting..."),
         )
         self._java_info_row.set_activatable(False)
         version_group.add(self._java_info_row)
@@ -235,7 +235,7 @@ class CreateServerDialog(Adw.Dialog):
         page.add(version_group)
 
         resources_group = Adw.PreferencesGroup(
-            title="Resources",
+            title=_("Resources"),
         )
 
         ram_adj = Gtk.Adjustment(
@@ -246,8 +246,8 @@ class CreateServerDialog(Adw.Dialog):
             page_increment=1024,
         )
         self._ram_row = Adw.SpinRow(
-            title="RAM (MB)",
-            subtitle="Memory allocated to the server",
+            title=_("RAM (MB)"),
+            subtitle=_("Memory allocated to the server"),
             adjustment=ram_adj,
         )
         resources_group.add(self._ram_row)
@@ -255,11 +255,11 @@ class CreateServerDialog(Adw.Dialog):
         page.add(resources_group)
 
         mods_group = Adw.PreferencesGroup(
-            title="Optional setup",
+            title=_("Optional setup"),
         )
         self._optimise_row = Adw.SwitchRow(
-            title="Install server-optimising mods",
-            subtitle="Installs compatible performance mods",
+            title=_("Install server-optimising mods"),
+            subtitle=_("Installs compatible performance mods"),
         )
         self._optimise_row.set_active(False)
         mods_group.add(self._optimise_row)
@@ -278,8 +278,8 @@ class CreateServerDialog(Adw.Dialog):
 
         self._progress_status = Adw.StatusPage()
         self._progress_status.set_icon_name("folder-download-symbolic")
-        self._progress_status.set_title("Creating Server")
-        self._progress_status.set_description("Preparing...")
+        self._progress_status.set_title(_("Creating Server"))
+        self._progress_status.set_description(_("Preparing..."))
 
         # Progress bar
         self._progress_bar = Gtk.ProgressBar()
@@ -337,11 +337,11 @@ class CreateServerDialog(Adw.Dialog):
             system_ver = java_mgr.system_java_version
 
             if available:
-                self._java_info_row.set_subtitle(f"Java {java_ver} ✓ Available")
+                self._java_info_row.set_subtitle(_("Java {} ✓ Available").format(java_ver))
             elif system_ver and system_ver >= java_ver:
-                self._java_info_row.set_subtitle(f"Java {java_ver} needed — system Java {system_ver} can be used")
+                self._java_info_row.set_subtitle(_("Java {} needed - system Java {} can be used").format(java_ver, system_ver))
             else:
-                self._java_info_row.set_subtitle(f"Java {java_ver} needed — will be downloaded automatically")
+                self._java_info_row.set_subtitle(_("Java {} needed - will be downloaded automatically").format(java_ver))
 
         self._validate()
 
@@ -356,10 +356,10 @@ class CreateServerDialog(Adw.Dialog):
 
     def _on_choose_icon(self, *_args):
         dialog = Gtk.FileDialog()
-        dialog.set_title("Select Server Icon")
+        dialog.set_title(_("Select Server Icon"))
 
         image_filter = Gtk.FileFilter()
-        image_filter.set_name("Images")
+        image_filter.set_name(_("Images"))
         image_filter.add_mime_type("image/png")
         image_filter.add_mime_type("image/jpeg")
         image_filter.add_mime_type("image/webp")
@@ -387,7 +387,7 @@ class CreateServerDialog(Adw.Dialog):
 
     def _on_choose_world_folder(self, *_args):
         dialog = Gtk.FileDialog()
-        dialog.set_title("Import World Folder")
+        dialog.set_title(_("Import World Folder"))
         dialog.select_folder(self.get_root(), None, self._on_world_folder_chosen)
 
     def _on_world_folder_chosen(self, dialog, result):
@@ -408,14 +408,14 @@ class CreateServerDialog(Adw.Dialog):
             msg_parts = [f"{Path(path).name}"]
             if seed:
                 self._seed_entry.set_text(seed)
-                msg_parts.append("Seed imported")
+                msg_parts.append(_("Seed imported"))
             if wtype and wtype in self._level_type_values:
                 self._level_type_row.set_selected(self._level_type_values.index(wtype))
-                msg_parts.append("Type imported")
+                msg_parts.append(_("Type imported"))
 
             if len(msg_parts) == 1:
                 self._world_import_row.set_subtitle(
-                    f"{Path(path).name} — world type must match the selected World type"
+                    _("{} - world type must match the selected World type").format(Path(path).name)
                 )
             else:
                 self._world_import_row.set_subtitle(" · ".join(msg_parts))
@@ -432,22 +432,22 @@ class CreateServerDialog(Adw.Dialog):
         page = self._stack.get_visible_child_name()
 
         if page == "details":
-            self._cancel_btn.set_label("Cancel")
+            self._cancel_btn.set_label(_("Cancel"))
             self._cancel_btn.set_sensitive(True)
-            self._create_btn.set_label("Next")
+            self._create_btn.set_label(_("Next"))
             self._create_btn.set_sensitive(bool(name))
             return
 
         if page == "runtime":
-            self._cancel_btn.set_label("Back")
+            self._cancel_btn.set_label(_("Back"))
             self._cancel_btn.set_sensitive(True)
-            self._create_btn.set_label("Create")
+            self._create_btn.set_label(_("Create"))
             self._create_btn.set_sensitive(bool(name) and has_versions)
             return
 
-        self._cancel_btn.set_label("Cancel")
+        self._cancel_btn.set_label(_("Cancel"))
         self._cancel_btn.set_sensitive(False)
-        self._create_btn.set_label("Create")
+        self._create_btn.set_label(_("Create"))
         self._create_btn.set_sensitive(False)
 
     def _on_primary_clicked(self, button):
@@ -545,20 +545,20 @@ class CreateServerDialog(Adw.Dialog):
 
             # Step 1: Ensure JRE is available
             if not java_mgr.is_java_available(java_ver):
-                self._update_progress(0.05, "Downloading Java Runtime...", f"JRE {java_ver} for MC {mc_version}")
+                self._update_progress(0.05, _("Downloading Java Runtime..."), _("JRE {} for MC {}").format(java_ver, mc_version))
 
                 success, msg = java_mgr.download_jre_sync(
                     java_ver,
                     progress_callback=lambda frac, msg: self._update_progress(
-                        0.05 + frac * 0.20, msg, f"JRE {java_ver}"
+                        0.05 + frac * 0.20, msg, _("JRE {}").format(java_ver)
                     ),
                 )
 
                 if not success:
-                    self._show_error(f"Failed to download JRE: {msg}")
+                    self._show_error(_("Failed to download JRE: {}").format(msg))
                     return
 
-            self._update_progress(0.28, "Downloading Fabric installer...", "")
+            self._update_progress(0.28, _("Downloading Fabric installer..."), "")
 
             # Step 2: Download Fabric installer
             installer_path = dl_mgr.download_installer(
@@ -566,11 +566,11 @@ class CreateServerDialog(Adw.Dialog):
             )
 
             if not installer_path:
-                self._show_error("Failed to download Fabric installer")
+                self._show_error(_("Failed to download Fabric installer"))
                 return
 
             # Step 3: Create server entry
-            self._update_progress(0.44, "Creating server...", "")
+            self._update_progress(0.44, _("Creating server..."), "")
             server_info = self._server_manager.add_server(
                 name=name,
                 mc_version=mc_version,
@@ -579,19 +579,19 @@ class CreateServerDialog(Adw.Dialog):
             )
 
             # Step 3.5: Download vanilla server.jar from Mojang
-            self._update_progress(0.48, "Downloading Minecraft server.jar...", f"MC {mc_version}")
+            self._update_progress(0.48, _("Downloading Minecraft server.jar..."), _("MC {}").format(mc_version))
             success, msg = dl_mgr.download_server_jar(
                 mc_version=mc_version,
                 server_dir=str(server_info.server_dir),
-                progress_callback=lambda frac, msg: self._update_progress(0.48 + frac * 0.12, msg, f"MC {mc_version}"),
+                progress_callback=lambda frac, msg: self._update_progress(0.48 + frac * 0.12, msg, _("MC {}").format(mc_version)),
             )
 
             if not success:
-                self._show_error(f"Failed to download server.jar: {msg}")
+                self._show_error(_("Failed to download server.jar: {}").format(msg))
                 return
 
             # Step 4: Install Fabric
-            self._update_progress(0.62, "Installing Fabric server...", f"MC {mc_version}")
+            self._update_progress(0.62, _("Installing Fabric server..."), _("MC {}").format(mc_version))
 
             java_path = java_mgr.get_java_path(java_ver)
             if not java_path:
@@ -607,11 +607,11 @@ class CreateServerDialog(Adw.Dialog):
             )
 
             if not success:
-                self._show_error(f"Fabric installation failed: {msg}")
+                self._show_error(_("Fabric installation failed: {}").format(msg))
                 return
 
             # Step 5: Apply server settings
-            self._update_progress(0.88, "Applying server settings...", "")
+            self._update_progress(0.88, _("Applying server settings..."), "")
             from hosty.shared.backend.config_manager import ConfigManager
 
             config = ConfigManager(str(server_info.server_dir))
@@ -627,18 +627,18 @@ class CreateServerDialog(Adw.Dialog):
             self._server_manager.set_java_port(server_info.id, 25565)
 
             if world_import_source_path:
-                self._update_progress(0.90, "Importing world folder...")
+                self._update_progress(0.90, _("Importing world folder..."))
                 success, msg = self._server_manager.import_world_folder(
                     server_info.id,
                     world_import_source_path,
                 )
                 if not success:
-                    self._show_error(f"Failed to import world: {msg}")
+                    self._show_error(_("Failed to import world: {}").format(msg))
                     return
 
             # Step 6: Save icon if selected
             if icon_source_path:
-                self._update_progress(0.92, "Applying server icon...", "")
+                self._update_progress(0.92, _("Applying server icon..."), "")
                 try:
                     icon_output = server_info.server_dir / "icon.png"
                     convert_to_png(icon_source_path, str(icon_output), size=128)
@@ -648,14 +648,14 @@ class CreateServerDialog(Adw.Dialog):
 
             # Step 7: Optional performance mods
             if install_optimisations:
-                self._update_progress(0.94, "Installing server-optimising mods...", "0/0")
+                self._update_progress(0.94, _("Installing server-optimising mods..."), "0/0")
                 self._install_optimising_mods(server_info.server_dir, mc_version)
 
             # Done!
             self._show_success(server_info.id)
 
         except Exception as e:
-            self._show_error(f"Unexpected error: {e}")
+            self._show_error(_("Unexpected error: {}").format(e))
 
     def _install_optimising_mods(self, server_dir: Path, mc_version: str) -> None:
         from hosty.shared.backend import modrinth_client
@@ -669,7 +669,7 @@ class CreateServerDialog(Adw.Dialog):
         for slug, title in OPTIMISATION_MODS:
             done += 1
             progress = 0.94 + (done / max(1, total)) * 0.05
-            self._update_progress(progress, "Installing server-optimising mods...", f"{done}/{total} · {title}")
+            self._update_progress(progress, _("Installing server-optimising mods..."), _("{} · {}").format(f"{done}/{total}", title))
             try:
                 version = self._find_supported_optimisation_version(
                     modrinth_client,
@@ -737,10 +737,10 @@ class CreateServerDialog(Adw.Dialog):
 
         def _update():
             self._progress_status.set_icon_name("dialog-error-symbolic")
-            self._progress_status.set_title("Creation Failed")
+            self._progress_status.set_title(_("Creation Failed"))
             self._progress_status.set_description(message)
             self._progress_bar.set_fraction(0)
-            self._progress_label.set_label("Please try again")
+            self._progress_label.set_label(_("Please try again"))
 
         GLib.idle_add(_update)
 
@@ -749,8 +749,8 @@ class CreateServerDialog(Adw.Dialog):
 
         def _update():
             self._progress_status.set_icon_name("object-select-symbolic")
-            self._progress_status.set_title("Server Created!")
-            self._progress_status.set_description("Your Fabric server is ready to start")
+            self._progress_status.set_title(_("Server Created!"))
+            self._progress_status.set_description(_("Your Fabric server is ready to start"))
             self._progress_bar.set_fraction(1.0)
             self._progress_label.set_label("")
 

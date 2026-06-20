@@ -25,13 +25,13 @@ def create_shortcuts_dialog() -> Adw.ShortcutsDialog:
     key_controller.connect("key-pressed", on_key_pressed)
     dialog.add_controller(key_controller)
 
-    general = Adw.ShortcutsSection(title="General")
-    general.add(Adw.ShortcutsItem.new("Create New Server", "<Primary>n"))
-    general.add(Adw.ShortcutsItem.new("Open Preferences", "<Primary>comma"))
-    general.add(Adw.ShortcutsItem.new("Open Menu", "F10"))
-    general.add(Adw.ShortcutsItem.new("Show Keyboard Shortcuts", "<Primary>question"))
-    general.add(Adw.ShortcutsItem.new("Quit App", "<Primary>q"))
-    general.add(Adw.ShortcutsItem.new("Close Window", "<Primary>w"))
+    general = Adw.ShortcutsSection(title=_("General"))
+    general.add(Adw.ShortcutsItem.new(_("Create New Server"), "<Primary>n"))
+    general.add(Adw.ShortcutsItem.new(_("Open Preferences"), "<Primary>comma"))
+    general.add(Adw.ShortcutsItem.new(_("Open Menu"), "F10"))
+    general.add(Adw.ShortcutsItem.new(_("Show Keyboard Shortcuts"), "<Primary>question"))
+    general.add(Adw.ShortcutsItem.new(_("Quit App"), "<Primary>q"))
+    general.add(Adw.ShortcutsItem.new(_("Close Window"), "<Primary>w"))
 
     dialog.add(general)
 

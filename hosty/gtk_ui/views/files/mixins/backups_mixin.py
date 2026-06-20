@@ -1,5 +1,5 @@
 """
-FilesView — folders, worlds, backups, and Modrinth integration (per selected server).
+FilesView -- folders, worlds, backups, and Modrinth integration (per selected server).
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ class BackupsMixin:
 
     def _push_backups_page(self, *_args) -> None:
         show_fullscreen = self._push_fullscreen_page_cb is not None
-        page = Adw.NavigationPage(title="Backups", child=self._build_backups_page(show_controls=show_fullscreen))
+        page = Adw.NavigationPage(title=_("Backups"), child=self._build_backups_page(show_controls=show_fullscreen))
 
         if show_fullscreen:
             self._push_fullscreen_page_cb(page)
@@ -59,9 +59,9 @@ class BackupsMixin:
     def _build_backups_page(self, show_controls: bool = False) -> Gtk.Widget:
         page = Adw.PreferencesPage()
 
-        actions = Adw.PreferencesGroup(title="Actions")
+        actions = Adw.PreferencesGroup(title=_("Actions"))
         create_row = Adw.ActionRow(
-            title="Create world backup",
+            title=_("Create world backup"),
         )
         create_row.add_prefix(Gtk.Image.new_from_icon_name("document-save-symbolic"))
         create_row.set_activatable(True)
@@ -70,8 +70,8 @@ class BackupsMixin:
         self._create_backup_row = create_row
 
         full_row = Adw.ActionRow(
-            title="Create full backup",
-            subtitle="Back up the entire server folder, including mods and executables",
+            title=_("Create full backup"),
+            subtitle=_("Back up the entire server folder, including mods and executables"),
         )
         full_row.add_prefix(Gtk.Image.new_from_icon_name("drive-harddisk-symbolic"))
         self._full_backup_spinner = Gtk.Spinner()
@@ -83,21 +83,21 @@ class BackupsMixin:
         actions.add(full_row)
         self._full_backup_row = full_row
 
-        open_row = Adw.ActionRow(title="Open backups folder")
+        open_row = Adw.ActionRow(title=_("Open backups folder"))
         open_row.add_prefix(Gtk.Image.new_from_icon_name("folder-open-symbolic"))
         open_row.set_activatable(True)
         open_row.connect("activated", self._on_open_backups_folder)
         actions.add(open_row)
         page.add(actions)
 
-        self._backups_group = Adw.PreferencesGroup(title="Available Backups")
+        self._backups_group = Adw.PreferencesGroup(title=_("Available Backups"))
         page.add(self._backups_group)
         self._refresh_backup_list()
 
         sw = Gtk.ScrolledWindow()
         sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         sw.set_child(page)
-        return self._build_subpage_shell("Backups", sw, show_controls=show_controls)
+        return self._build_subpage_shell(_("Backups"), sw, show_controls=show_controls)
 
     def _refresh_backup_list(self) -> None:
         if hasattr(self, "_refresh_backups_row_subtitle"):
@@ -112,12 +112,12 @@ class BackupsMixin:
         self._clear_group_rows(self._backups_group, self._backup_rows)
         bdir = self._backups_dir()
         if not bdir:
-            self._backup_rows.append(self._add_info_row(self._backups_group, "No server selected"))
+            self._backup_rows.append(self._add_info_row(self._backups_group, _("No server selected")))
             return
 
         zips = sorted(bdir.glob("*.zip"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not zips:
-            self._backup_rows.append(self._add_info_row(self._backups_group, "No backups yet"))
+            self._backup_rows.append(self._add_info_row(self._backups_group, _("No backups yet")))
             return
 
         for zp in zips:
@@ -134,19 +134,19 @@ class BackupsMixin:
         if zp.name.startswith("hosty-full-backup-"):
             version = ServerManager.backup_game_version(zp)
             if version:
-                version_str = f" Version {version} ·"
+                version_str = _(" Version {} ·").format(version)
 
         row.set_subtitle(f"{_format_size(st.st_size)} ·{version_str} {_format_mtime(st.st_mtime)}")
         row.set_activatable(False)
 
         restore_btn = self._icon_button(
             "document-revert-symbolic",
-            "Restore backup",
+            _("Restore backup"),
             lambda *_p, p=zp: self._confirm_restore_backup(p),
         )
         delete_btn = self._icon_button(
             "user-trash-symbolic",
-            "Delete backup",
+            _("Delete backup"),
             lambda *_p, p=zp: self._confirm_delete_backup(p),
             destructive=True,
         )
@@ -157,23 +157,23 @@ class BackupsMixin:
 
     def _on_create_backup(self) -> None:
         if self._backup_busy:
-            self._alert("Backup in progress", "Please wait for the current backup task to finish.")
+            self._alert(_("Backup in progress"), _("Please wait for the current backup task to finish."))
             return
         if self._is_running():
-            self._alert("Server is running", "Stop the server before creating a backup.")
+            self._alert(_("Server is running"), _("Stop the server before creating a backup."))
             return
 
         root = self._server_dir()
         bdir = self._backups_dir()
         if not root or not bdir:
-            self._alert("No server selected", "Select a server to manage backups.")
+            self._alert(_("No server selected"), _("Select a server to manage backups."))
             return
 
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         zp = bdir / f"hosty-backup-{stamp}.zip"
         self._backup_busy = True
         if self._create_backup_row:
-            self._create_backup_row.set_subtitle("Creating backup...")
+            self._create_backup_row.set_subtitle(_("Creating backup..."))
 
         def worker():
             try:
@@ -192,9 +192,9 @@ class BackupsMixin:
                 def ui_ok():
                     self._backup_busy = False
                     if self._create_backup_row:
-                        self._create_backup_row.set_subtitle("Back up world folders only")
+                        self._create_backup_row.set_subtitle(_("Back up world folders only"))
                     self._refresh_backup_list()
-                    self._toast(f"Saved {zp.name}")
+                    self._toast(_("Saved {}").format(zp.name))
 
                 GLib.idle_add(ui_ok)
             except Exception as e:
@@ -203,8 +203,8 @@ class BackupsMixin:
                 def ui_err(msg: str = err_msg):
                     self._backup_busy = False
                     if self._create_backup_row:
-                        self._create_backup_row.set_subtitle("Back up world folders only")
-                    self._alert("Backup failed", msg)
+                        self._create_backup_row.set_subtitle(_("Back up world folders only"))
+                    self._alert(_("Backup failed"), msg)
 
                 GLib.idle_add(ui_err)
 
@@ -212,13 +212,13 @@ class BackupsMixin:
 
     def _on_create_full_backup(self) -> None:
         if self._backup_busy:
-            self._alert("Backup in progress", "Please wait for the current backup task to finish.")
+            self._alert(_("Backup in progress"), _("Please wait for the current backup task to finish."))
             return
         if self._is_running():
-            self._alert("Server is running", "Stop the server before creating a full backup.")
+            self._alert(_("Server is running"), _("Stop the server before creating a full backup."))
             return
         if not self._server_info or not self._server_manager:
-            self._alert("No server selected", "Select a server to manage backups.")
+            self._alert(_("No server selected"), _("Select a server to manage backups."))
             return
 
         self._backup_busy = True
@@ -226,7 +226,7 @@ class BackupsMixin:
             self._full_backup_spinner.set_visible(True)
             self._full_backup_spinner.start()
         if self._full_backup_row:
-            self._full_backup_row.set_subtitle("Creating full backup...")
+            self._full_backup_row.set_subtitle(_("Creating full backup..."))
 
         server_id = self._server_info.id
 
@@ -240,13 +240,13 @@ class BackupsMixin:
                     self._full_backup_spinner.set_visible(False)
                 if self._full_backup_row:
                     self._full_backup_row.set_subtitle(
-                        "Back up the entire server folder, including mods and executables"
+                        _("Back up the entire server folder, including mods and executables")
                     )
                 self._refresh_backup_list()
                 if ok:
-                    self._toast(f"Saved {msg}")
+                    self._toast(_("Saved {}").format(msg))
                 else:
-                    self._alert("Full backup failed", msg)
+                    self._alert(_("Full backup failed"), msg)
                 return False
 
             GLib.idle_add(done)
@@ -255,32 +255,32 @@ class BackupsMixin:
 
     def _confirm_restore_backup(self, zp: Path) -> None:
         if self._is_running():
-            self._alert("Server is running", "Stop the server before restoring a backup.")
+            self._alert(_("Server is running"), _("Stop the server before restoring a backup."))
             return
 
         dialog = Adw.AlertDialog()
-        dialog.set_heading("Restore backup?")
+        dialog.set_heading(_("Restore backup?"))
 
         is_full = zp.name.startswith("hosty-full-backup-")
-        body_text = f"Restore “{zp.name}”?\n\n"
+        body_text = _("Restore “{}”?\n\n").format(zp.name)
         if is_full:
-            body_text += (
+            body_text += _(
                 "WARNING: This is a full backup. Restoring it will"
                 " completely replace ALL server configuration, mods, and world files."
             )
             backup_version = ServerManager.backup_game_version(zp)
             current_version = self._server_info.mc_version if self._server_info else ""
             if backup_version and current_version and ServerManager.is_version_older(backup_version, current_version):
-                body_text += (
-                    f"\n\nDowngrade warning: this backup is for Minecraft {backup_version}, "
-                    f"but this server is currently on Minecraft {current_version}."
-                )
+                body_text += _(
+                    "\n\nDowngrade warning: this backup is for Minecraft {backup_version}, "
+                    "but this server is currently on Minecraft {current_version}."
+                ).format(backup_version=backup_version, current_version=current_version)
         else:
-            body_text += "This replaces only world folders contained in the backup."
+            body_text += _("This replaces only world folders contained in the backup.")
 
         dialog.set_body(body_text)
-        dialog.add_response("cancel", "Cancel")
-        dialog.add_response("restore", "Restore")
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("restore", _("Restore"))
         dialog.set_response_appearance("restore", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -294,13 +294,13 @@ class BackupsMixin:
 
     def _restore_backup(self, zp: Path) -> None:
         if self._backup_busy:
-            self._alert("Backup task active", "Wait for the active backup task to finish.")
+            self._alert(_("Backup task active"), _("Wait for the active backup task to finish."))
             return
 
         root = self._server_dir()
         bdir = self._backups_dir()
         if not root or not bdir:
-            self._alert("No server selected", "Select a server before restoring a backup.")
+            self._alert(_("No server selected"), _("Select a server before restoring a backup."))
             return
 
         self._backup_busy = True
@@ -377,7 +377,7 @@ class BackupsMixin:
                     self._backup_busy = False
                     self._rebuild_lists()
                     self._refresh_backup_list()
-                    self._toast("Backup restored")
+                    self._toast(_("Backup restored"))
 
                 GLib.idle_add(ui_ok)
             except Exception as e:
@@ -385,7 +385,7 @@ class BackupsMixin:
 
                 def ui_err(msg: str = err_msg):
                     self._backup_busy = False
-                    self._alert("Restore failed", msg)
+                    self._alert(_("Restore failed"), msg)
 
                 GLib.idle_add(ui_err)
 
@@ -394,13 +394,13 @@ class BackupsMixin:
     def _confirm_delete_backup(self, zp: Path) -> None:
         self._soft_delete_with_undo(
             zp,
-            f'backup "{zp.name}"',
+            _('backup "{}"').format(zp.name),
             on_refresh=self._refresh_backup_list,
         )
 
     def _on_open_backups_folder(self, *_):
         bdir = self._backups_dir()
         if not bdir:
-            self._alert("No server selected", "Select a server to open backups.")
+            self._alert(_("No server selected"), _("Select a server to open backups."))
             return
         self._open_target(bdir)

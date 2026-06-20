@@ -22,15 +22,15 @@ from ..utils import *
 class LocalIpMixin:
     def _make_local_network_group(self) -> Adw.PreferencesGroup:
         group = Adw.PreferencesGroup(
-            title="Local Network",
-            description="Share your LAN address for local multiplayer",
+            title=_("Local Network"),
+            description=_("Share your LAN address for local multiplayer"),
         )
-        row = Adw.ActionRow(title="Local device IP", subtitle="Detecting...")
+        row = Adw.ActionRow(title=_("Local device IP"), subtitle=_("Detecting..."))
         row.set_activatable(True)
         row.connect("activated", self._on_copy_local_ip)
         copy_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
         copy_btn.add_css_class("flat")
-        copy_btn.set_tooltip_text("Copy local IP")
+        copy_btn.set_tooltip_text(_("Copy local IP"))
         copy_btn.connect("clicked", self._on_copy_local_ip)
         row.add_suffix(copy_btn)
         group.add(row)
@@ -61,7 +61,7 @@ class LocalIpMixin:
         except Exception:
             pass
 
-        return "Not available"
+        return _("Not available")
 
     def _refresh_local_ip_row(self):
         ip = self._get_local_ip()
@@ -71,16 +71,17 @@ class LocalIpMixin:
 
     def _on_copy_local_ip(self, *_args):
         ip = self._local_ip_value.strip()
-        if not ip or ip == "Not available":
-            self._toast("Local IP not available")
+        not_available = _("Not available")
+        if not ip or ip == not_available:
+            self._toast(_("Local IP not available"))
             return
         try:
             display = Gdk.Display.get_default()
             if display:
                 clipboard = display.get_clipboard()
                 clipboard.set(ip)
-                self._toast("Local IP copied")
+                self._toast(_("Local IP copied"))
                 return
         except Exception:
             pass
-        self._toast("Could not access clipboard")
+        self._toast(_("Could not access clipboard"))

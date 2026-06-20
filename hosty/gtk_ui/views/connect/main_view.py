@@ -37,7 +37,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._bedrock_in_progress = False
         self._voicechat_in_progress = False
         self._local_ip_rows: list[Adw.ActionRow] = []
-        self._local_ip_value = "Not available"
+        self._local_ip_value = _("Not available")
         self._whitelist_status_rows: list[Adw.ActionRow] = []
         self._whitelist_toggle_rows: list[Adw.SwitchRow] = []
         self._suppress_whitelist_toggle = False
@@ -48,8 +48,8 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._banned_list_rows: list[Adw.ExpanderRow] = []
 
         self._banner = Adw.Banner()
-        self._banner.set_title("Restart the server to apply changes")
-        self._banner.set_button_label("Dismiss")
+        self._banner.set_title(_("Restart the server to apply changes"))
+        self._banner.set_button_label(_("Dismiss"))
         self._banner.set_revealed(False)
         self._banner.connect("button-clicked", lambda b: b.set_revealed(False))
         self.append(self._banner)
@@ -75,15 +75,15 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         page.add(self._make_local_network_group())
 
         setup_group = Adw.PreferencesGroup(
-            title="Playit.gg",
-            description="Set up Playit to expose your server publicly",
+            title=_("Playit.gg"),
+            description=_("Set up Playit to expose your server publicly"),
         )
         setup_row = Adw.ActionRow(
-            title="Playit setup required",
-            subtitle="Install and claim Playit for this server",
+            title=_("Playit setup required"),
+            subtitle=_("Install and claim Playit for this server"),
         )
 
-        self._setup_btn = Gtk.Button(label="Set Up Playit", valign=Gtk.Align.CENTER)
+        self._setup_btn = Gtk.Button(label=_("Set Up Playit"), valign=Gtk.Align.CENTER)
         self._setup_btn.add_css_class("suggested-action")
         self._setup_btn.set_valign(Gtk.Align.CENTER)
         self._setup_btn.connect("clicked", self._on_open_setup_dialog)
@@ -100,32 +100,32 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         page.add(self._make_local_network_group())
 
         group = Adw.PreferencesGroup(
-            title="Playit.gg",
-            description="Share with friends",
+            title=_("Playit.gg"),
+            description=_("Share with friends"),
         )
 
-        self._tunnel_row = Adw.ActionRow(title="Agent", subtitle="Stopped")
+        self._tunnel_row = Adw.ActionRow(title=_("Agent"), subtitle=_("Stopped"))
         self._tunnel_row.set_activatable(False)
-        self._tunnel_btn = Gtk.Button(label="Start Agent", valign=Gtk.Align.CENTER)
+        self._tunnel_btn = Gtk.Button(label=_("Start Agent"), valign=Gtk.Align.CENTER)
         self._tunnel_btn.add_css_class("suggested-action")
         self._tunnel_btn.add_css_class("playit-compact-button")
         self._tunnel_btn.connect("clicked", self._on_tunnel_toggle)
         self._tunnel_row.add_suffix(self._tunnel_btn)
         group.add(self._tunnel_row)
 
-        self._tunnel_domain_row = Adw.ActionRow(title="Java tunnel domain", subtitle="Not available")
+        self._tunnel_domain_row = Adw.ActionRow(title=_("Java tunnel domain"), subtitle=_("Not available"))
         self._tunnel_domain_row.set_activatable(False)
         self._tunnel_domain_row.connect("activated", self._on_java_domain_row_activated)
         self._copy_tunnel_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
         self._copy_tunnel_domain_btn.add_css_class("flat")
-        self._copy_tunnel_domain_btn.set_tooltip_text("Copy Java tunnel domain")
+        self._copy_tunnel_domain_btn.set_tooltip_text(_("Copy Java tunnel domain"))
         self._copy_tunnel_domain_btn.set_sensitive(False)
         self._copy_tunnel_domain_btn.set_visible(False)
         self._copy_tunnel_domain_btn.connect("clicked", self._on_copy_tunnel_domain)
         self._tunnel_domain_row.add_suffix(self._copy_tunnel_domain_btn)
         self._java_tunnel_action_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
         self._java_tunnel_action_btn.add_css_class("flat")
-        self._java_tunnel_action_btn.set_tooltip_text("Add Java tunnel")
+        self._java_tunnel_action_btn.set_tooltip_text(_("Add Java tunnel"))
         self._java_tunnel_action_btn.connect("clicked", self._on_manage_java_tunnel)
         self._java_tunnel_spinner = Gtk.Spinner(valign=Gtk.Align.CENTER)
         self._java_tunnel_spinner.set_visible(False)
@@ -135,19 +135,19 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._tunnel_domain_row.add_suffix(self._java_tunnel_action_btn)
         group.add(self._tunnel_domain_row)
 
-        self._bedrock_domain_row = Adw.ActionRow(title="Bedrock tunnel domain", subtitle="Not available")
+        self._bedrock_domain_row = Adw.ActionRow(title=_("Bedrock tunnel domain"), subtitle=_("Not available"))
         self._bedrock_domain_row.set_activatable(False)
         self._bedrock_domain_row.connect("activated", self._on_bedrock_domain_row_activated)
         self._copy_bedrock_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
         self._copy_bedrock_domain_btn.add_css_class("flat")
-        self._copy_bedrock_domain_btn.set_tooltip_text("Copy bedrock tunnel domain")
+        self._copy_bedrock_domain_btn.set_tooltip_text(_("Copy bedrock tunnel domain"))
         self._copy_bedrock_domain_btn.set_sensitive(False)
         self._copy_bedrock_domain_btn.set_visible(False)
         self._copy_bedrock_domain_btn.connect("clicked", self._on_copy_bedrock_domain)
         self._bedrock_domain_row.add_suffix(self._copy_bedrock_domain_btn)
         self._bedrock_tunnel_action_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
         self._bedrock_tunnel_action_btn.add_css_class("flat")
-        self._bedrock_tunnel_action_btn.set_tooltip_text("Add Bedrock tunnel")
+        self._bedrock_tunnel_action_btn.set_tooltip_text(_("Add Bedrock tunnel"))
         self._bedrock_tunnel_action_btn.connect("clicked", self._on_manage_bedrock_tunnel)
         self._bedrock_tunnel_spinner = Gtk.Spinner(valign=Gtk.Align.CENTER)
         self._bedrock_tunnel_spinner.set_visible(False)
@@ -157,19 +157,19 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._bedrock_domain_row.add_suffix(self._bedrock_tunnel_action_btn)
         group.add(self._bedrock_domain_row)
 
-        self._voicechat_domain_row = Adw.ActionRow(title="Voice Chat tunnel domain", subtitle="Not available")
+        self._voicechat_domain_row = Adw.ActionRow(title=_("Voice Chat tunnel domain"), subtitle=_("Not available"))
         self._voicechat_domain_row.set_activatable(False)
         self._voicechat_domain_row.connect("activated", self._on_voicechat_domain_row_activated)
         self._copy_voicechat_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
         self._copy_voicechat_domain_btn.add_css_class("flat")
-        self._copy_voicechat_domain_btn.set_tooltip_text("Copy voice chat tunnel domain")
+        self._copy_voicechat_domain_btn.set_tooltip_text(_("Copy voice chat tunnel domain"))
         self._copy_voicechat_domain_btn.set_sensitive(False)
         self._copy_voicechat_domain_btn.set_visible(False)
         self._copy_voicechat_domain_btn.connect("clicked", self._on_copy_voicechat_domain)
         self._voicechat_domain_row.add_suffix(self._copy_voicechat_domain_btn)
         self._voicechat_tunnel_action_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
         self._voicechat_tunnel_action_btn.add_css_class("flat")
-        self._voicechat_tunnel_action_btn.set_tooltip_text("Add Voice Chat tunnel")
+        self._voicechat_tunnel_action_btn.set_tooltip_text(_("Add Voice Chat tunnel"))
         self._voicechat_tunnel_action_btn.connect("clicked", self._on_manage_voicechat_tunnel)
         self._voicechat_tunnel_spinner = Gtk.Spinner(valign=Gtk.Align.CENTER)
         self._voicechat_tunnel_spinner.set_visible(False)
@@ -180,23 +180,23 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         group.add(self._voicechat_domain_row)
 
         settings_row = Adw.ExpanderRow(
-            title="Playit settings",
+            title=_("Playit settings"),
         )
 
         self._auto_start_row = Adw.SwitchRow(
-            title="Start with server",
-            subtitle="Automatically start and stop with this server",
+            title=_("Start with server"),
+            subtitle=_("Automatically start and stop with this server"),
         )
         self._auto_start_row.connect("notify::active", self._on_auto_start_toggled)
         settings_row.add_row(self._auto_start_row)
 
-        dashboard_row = Adw.ActionRow(title="Open playit dashboard")
+        dashboard_row = Adw.ActionRow(title=_("Open playit dashboard"))
         dashboard_row.add_prefix(Gtk.Image.new_from_icon_name("video-display-symbolic"))
         dashboard_row.set_activatable(True)
         dashboard_row.connect("activated", self._on_open_dashboard)
         settings_row.add_row(dashboard_row)
 
-        reset_row = Adw.ActionRow(title="Set Up Playit Again")
+        reset_row = Adw.ActionRow(title=_("Set Up Playit Again"))
         reset_row.add_prefix(Gtk.Image.new_from_icon_name("view-refresh-symbolic"))
         reset_row.set_activatable(True)
         reset_row.connect("activated", self._on_open_setup_dialog)
@@ -295,7 +295,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         d = Adw.AlertDialog()
         d.set_heading(title)
         d.set_body(body)
-        d.add_response("ok", "OK")
+        d.add_response("ok", _("OK"))
         import re
 
         urls = re.findall(r"https?://[^\s]+", body)

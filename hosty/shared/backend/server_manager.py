@@ -32,7 +32,7 @@ class ServerInfo:
 
     def __init__(self, data: dict):
         self.id: str = data.get("id", str(uuid.uuid4()))
-        self.name: str = data.get("name", "Unnamed Server")
+        self.name: str = data.get("name", _("Unnamed Server"))
         self.mc_version: str = data.get("mc_version", "")
         self.loader_version: str = data.get("loader_version", "")
         self.ram_mb: int = data.get("ram_mb", DEFAULT_RAM_MB)
@@ -116,7 +116,7 @@ class ServerManager(EventEmitter):
     ) -> ServerInfo:
         """
         Create and register a new server.
-        Does NOT install Fabric — call install_server() separately.
+        Does NOT install Fabric -- call install_server() separately.
         """
         server_id = str(uuid.uuid4())
         java_ver = get_required_java_version(mc_version)
@@ -173,7 +173,7 @@ class ServerManager(EventEmitter):
         """Enable or disable autostart for a server. Returns (success, error_msg)."""
         info = self._servers.get(server_id)
         if not info:
-            return False, "Server not found."
+            return False, _("Server not found.")
 
         info.autostart = autostart
         self._save()
@@ -208,16 +208,16 @@ class ServerManager(EventEmitter):
 
         info = self._servers.get(server_id)
         if not info:
-            return False, "Server not found"
+            return False, _("Server not found")
 
         process = self._processes.get(server_id)
         if process and process.is_running:
-            return False, "Cannot update version while server is running"
+            return False, _("Cannot update version while server is running")
 
         mc_version = str(mc_version or "").strip()
         loader_version = str(loader_version or "").strip() if loader_version is not None else info.loader_version
         if not mc_version:
-            return False, "Minecraft version is required"
+            return False, _("Minecraft version is required")
 
         try:
             java_req = get_required_java_version(mc_version)
@@ -231,10 +231,10 @@ class ServerManager(EventEmitter):
             if progress_callback:
                 progress_callback(frac, msg)
 
-        progress(0.02, "Creating full backup")
+        progress(0.02, _("Creating full backup"))
         backup_ok, backup_msg = self.create_full_backup(server_id)
         if not backup_ok:
-            return False, f"Could not create full backup before updating: {backup_msg}"
+            return False, _("Could not create full backup before updating: {}").format(backup_msg)
 
         if not self.java_manager.is_java_available(java_req):
             ok, msg = self.java_manager.download_jre_sync(
@@ -242,14 +242,14 @@ class ServerManager(EventEmitter):
                 progress_callback=lambda f, text: progress(0.05 + f * 0.20, text),
             )
             if not ok:
-                return False, f"Failed to download Java {java_req}: {msg}"
+                return False, _("Failed to download Java {}: {}").format(java_req, msg)
 
-        progress(0.28, "Downloading Fabric installer")
+        progress(0.28, _("Downloading Fabric installer"))
         installer_path = self.download_manager.download_installer(
             progress_callback=lambda f, text: progress(0.28 + f * 0.12, text),
         )
         if not installer_path:
-            return False, "Failed to download Fabric installer"
+            return False, _("Failed to download Fabric installer")
 
         for filename in ("server.jar", "fabric-server-launch.jar"):
             try:
@@ -257,7 +257,7 @@ class ServerManager(EventEmitter):
             except Exception:
                 pass
 
-        progress(0.42, f"Downloading Minecraft {mc_version} server")
+        progress(0.42, _("Downloading Minecraft {} server").format(mc_version))
         ok, msg = self.download_manager.download_server_jar(
             mc_version,
             str(root),
@@ -267,7 +267,7 @@ class ServerManager(EventEmitter):
             return False, msg
 
         java_path = self.java_manager.get_java_path(java_req) or self.java_manager.get_java_for_mc(mc_version) or "java"
-        progress(0.66, "Installing Fabric server")
+        progress(0.66, _("Installing Fabric server"))
         ok, msg = self.download_manager.install_fabric_server(
             java_path=java_path,
             installer_jar=installer_path,
@@ -279,13 +279,13 @@ class ServerManager(EventEmitter):
         if not ok:
             return False, msg
 
-        progress(0.90, "Checking installed content compatibility")
+        progress(0.90, _("Checking installed content compatibility"))
         plan = compatibility_plan or self.scan_update_compatibility(server_id, mc_version)
 
-        progress(0.93, "Updating compatible mods and datapacks")
+        progress(0.93, _("Updating compatible mods and datapacks"))
         applied, failed = self.apply_compatible_component_updates(server_id, mc_version, plan)
 
-        progress(0.97, "Moving incompatible files aside")
+        progress(0.97, _("Moving incompatible files aside"))
         disabled = self.isolate_incompatible_components(server_id, mc_version, plan)
 
         info.mc_version = mc_version
@@ -298,14 +298,14 @@ class ServerManager(EventEmitter):
                 self.java_manager.get_java_path(java_req) or self.java_manager.get_java_for_mc(mc_version) or "java"
             )
         self.emit_on_main_thread("server-changed", server_id)
-        progress(1.0, "Server runtime updated")
+        progress(1.0, _("Server runtime updated"))
 
         disabled_count = sum(len(v) for v in disabled.values())
-        detail = f"Updated to Minecraft {mc_version}. Updated {applied} compatible file(s)."
+        detail = _("Updated to Minecraft {}.").format(mc_version) + _(" Updated {} compatible file(s).").format(applied)
         if disabled_count:
-            detail += f" Disabled {disabled_count} incompatible file(s)."
+            detail += _(" Disabled {} incompatible file(s).").format(disabled_count)
         if failed:
-            detail += f" {failed} compatible update(s) failed."
+            detail += _(" {} compatible update(s) failed.").format(failed)
         return True, detail
 
     def _json_file(self, path: Path) -> dict:
@@ -488,7 +488,7 @@ class ServerManager(EventEmitter):
             "title": str((meta or {}).get("title") or project_id),
             "filename": str((meta or {}).get("filename", "")),
             "project_id": str(project_id),
-            "reason": f"No Modrinth {kind_label} release for Minecraft {target_mc_version}",
+            "reason": _("No Modrinth {} release for Minecraft {}").format(kind_label, target_mc_version),
         }
 
     def scan_update_compatibility(self, server_id: str, target_mc_version: str) -> dict:
@@ -860,7 +860,7 @@ class ServerManager(EventEmitter):
         """Delete a file moved aside during version update and remove its disabled record."""
         info = self._servers.get(server_id)
         if not info:
-            return False, "Server not found"
+            return False, _("Server not found")
 
         key = str(kind or "").strip().lower()
         aliases = {
@@ -873,7 +873,7 @@ class ServerManager(EventEmitter):
         }
         key = aliases.get(key, key)
         if key not in {"mods", "modpacks", "datapacks"}:
-            return False, "Unknown disabled item type"
+            return False, _("Unknown disabled item type")
 
         root = info.server_dir
         disabled_dir = root / ("datapacks_incompatible" if key == "datapacks" else "mods_incompatible")
@@ -896,7 +896,7 @@ class ServerManager(EventEmitter):
                 kept.append(record)
 
         if not removed_records:
-            return False, "Disabled item not found"
+            return False, _("Disabled item not found")
 
         deleted_files = 0
         for record in removed_records:
@@ -914,8 +914,8 @@ class ServerManager(EventEmitter):
         self._write_json_file(data_path, data)
         self.emit_on_main_thread("server-changed", server_id)
         if deleted_files:
-            return True, f"Deleted {deleted_files} disabled file(s)."
-        return True, "Removed disabled item record."
+            return True, _("Deleted {} disabled file(s).").format(deleted_files)
+        return True, _("Removed disabled item record.")
 
     @staticmethod
     def backup_game_version(zip_path: Path) -> str:
@@ -1375,11 +1375,11 @@ class ServerManager(EventEmitter):
         """Create/select a new world folder and configure the server to generate it."""
         info = self.get_server(server_id)
         if not info:
-            return False, "Server not found"
+            return False, _("Server not found")
 
         process = self._processes.get(server_id)
         if process and process.is_running:
-            return False, "Server is running"
+            return False, _("Server is running")
 
         root = info.server_dir
         world_dir = root / "world"
@@ -1415,17 +1415,17 @@ class ServerManager(EventEmitter):
         """Copy an existing world folder into a server and select it as level-name."""
         info = self.get_server(server_id)
         if not info:
-            return False, "Server not found"
+            return False, _("Server not found")
 
         process = self._processes.get(server_id)
         if process and process.is_running:
-            return False, "Server is running"
+            return False, _("Server is running")
 
         src = Path(source).expanduser()
         if not src.is_dir():
-            return False, "Selected world folder does not exist"
+            return False, _("Selected world folder does not exist")
         if not self._is_importable_world_dir(src):
-            return False, "Selected folder does not look like a Minecraft world"
+            return False, _("Selected folder does not look like a Minecraft world")
 
         root = info.server_dir
         dst = root / "world"
@@ -1469,18 +1469,18 @@ class ServerManager(EventEmitter):
         """Export one world folder to a zip archive."""
         info = self.get_server(server_id)
         if not info:
-            return False, "Server not found"
+            return False, _("Server not found")
 
         world_path = Path(world)
         if not world_path.is_absolute():
             world_path = info.server_dir / world_path
         if not world_path.is_dir():
-            return False, "World folder does not exist"
+            return False, _("World folder does not exist")
 
         try:
             world_path.resolve().relative_to(info.server_dir.resolve())
         except ValueError:
-            return False, "World folder is outside this server"
+            return False, _("World folder is outside this server")
 
         dest = Path(destination).expanduser()
         if dest.suffix.lower() != ".zip":
@@ -1503,19 +1503,19 @@ class ServerManager(EventEmitter):
         """Create a zip backup containing world folders only."""
         info = self.get_server(server_id)
         if not info:
-            return False, "Server not found"
+            return False, _("Server not found")
 
         process = self._processes.get(server_id)
         if process and process.is_running:
-            return False, "Server is running"
+            return False, _("Server is running")
 
         root = info.server_dir
         if not root.exists():
-            return False, "Server directory does not exist"
+            return False, _("Server directory does not exist")
 
         worlds = self._iter_world_dirs(root)
         if not worlds:
-            return False, "No world folder found"
+            return False, _("No world folder found")
 
         backups_dir = root / "hosty-backups"
         backups_dir.mkdir(parents=True, exist_ok=True)
@@ -1542,15 +1542,15 @@ class ServerManager(EventEmitter):
         specifically tailored for version updates."""
         info = self.get_server(server_id)
         if not info:
-            return False, "Server not found"
+            return False, _("Server not found")
 
         process = self._processes.get(server_id)
         if process and process.is_running:
-            return False, "Server is running"
+            return False, _("Server is running")
 
         root = info.server_dir
         if not root.exists():
-            return False, "Server directory does not exist"
+            return False, _("Server directory does not exist")
 
         backups_dir = root / "hosty-backups"
         backups_dir.mkdir(parents=True, exist_ok=True)
@@ -1587,18 +1587,18 @@ class ServerManager(EventEmitter):
 
         info = self.get_server(server_id)
         if not info:
-            return False, "Server not found"
+            return False, _("Server not found")
 
         process = self._processes.get(server_id)
         if process and process.is_running:
-            return False, "Server is running"
+            return False, _("Server is running")
 
         root = info.server_dir
         if not root.exists():
-            return False, "Server directory does not exist"
+            return False, _("Server directory does not exist")
 
         if not zip_path.exists():
-            return False, "Backup file not found"
+            return False, _("Backup file not found")
 
         is_full = zip_path.name.startswith("hosty-full-backup-")
 
@@ -1609,9 +1609,9 @@ class ServerManager(EventEmitter):
                     for zi in zf.infolist():
                         candidate = (tmp_root / zi.filename).resolve()
                         if hasattr(candidate, "is_relative_to") and not candidate.is_relative_to(tmp_root):
-                            return False, "Backup archive contains invalid paths."
+                            return False, _("Backup archive contains invalid paths.")
                         elif not str(candidate).startswith(str(tmp_root)):
-                            return False, "Backup archive contains invalid paths."
+                            return False, _("Backup archive contains invalid paths.")
                     zf.extractall(tmp_root)
 
                 if is_full:
@@ -1634,7 +1634,7 @@ class ServerManager(EventEmitter):
                     # Just restore worlds
                     extracted_worlds = self._iter_world_dirs(tmp_root)
                     if not extracted_worlds:
-                        return False, "This backup does not contain any world data."
+                        return False, _("This backup does not contain any world data.")
 
                     level_name = "world"
                     for item in root.iterdir():
@@ -1669,6 +1669,6 @@ class ServerManager(EventEmitter):
                             shutil.rmtree(dst, ignore_errors=True)
                         shutil.copytree(item, dst, dirs_exist_ok=True)
 
-            return True, "Restored."
+            return True, _("Restored.")
         except Exception as e:
             return False, str(e)
