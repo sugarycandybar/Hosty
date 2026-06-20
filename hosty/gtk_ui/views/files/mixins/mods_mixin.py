@@ -1072,14 +1072,16 @@ class ModsMixin:
                 if modpack_updates or standalone_updates:
                     body_parts.append(
                         _("Found {} modpack update(s) and {} standalone mod update(s).").format(
-                            len(modpack_updates), len(standalone_updates))
+                            len(modpack_updates), len(standalone_updates)
+                        )
                     )
                 if datapack_updates:
                     body_parts.append(_("Found {} datapack update(s).").format(len(datapack_updates)))
                 if blocked > 0:
                     body_parts.append(
-                        _("{} standalone update(s) were skipped because "
-                          "dependencies are managed by a modpack.").format(blocked)
+                        _("{} standalone update(s) were skipped because dependencies are managed by a modpack.").format(
+                            blocked
+                        )
                     )
                 if listing:
                     body_parts.append(listing)
@@ -1109,7 +1111,8 @@ class ModsMixin:
                     self._set_mod_update_row_subtitle(_("Updating mods..."))
                     self._toast(
                         _("Updating {} modpack(s), {} mod(s), and {} datapack(s)").format(
-                            len(modpack_updates), len(standalone_updates), len(datapack_updates))
+                            len(modpack_updates), len(standalone_updates), len(datapack_updates)
+                        )
                     )
                     threading.Thread(
                         target=self._apply_mod_updates,

@@ -140,8 +140,7 @@ class CreateServerDialog(Adw.Dialog):
 
         self._difficulty_values = list(DIFFICULTY_MODES)
         difficulty_labels = [
-            _("Hardcore") if value == "hardcore" else value.title()
-            for value in self._difficulty_values
+            _("Hardcore") if value == "hardcore" else value.title() for value in self._difficulty_values
         ]
         self._difficulty_row = Adw.ComboRow(
             title=_("Difficulty"),

@@ -97,10 +97,12 @@ class PlayitSetupDialog(Adw.Dialog):
         status.set_icon_name("system-software-install-symbolic")
         status.set_title(_("Playit Installation Steps"))
         status.set_description(
-            _("1. Download Playit agent\n"
-            "2. Open the Hosty setup URL\n"
-            "3. Paste your setup code\n"
-            "4. Link account and start tunnel")
+            _(
+                "1. Download Playit agent\n"
+                "2. Open the Hosty setup URL\n"
+                "3. Paste your setup code\n"
+                "4. Link account and start tunnel"
+            )
         )
         return status
 

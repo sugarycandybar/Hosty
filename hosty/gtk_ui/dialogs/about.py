@@ -25,7 +25,8 @@ def show_about_dialog(parent):
     about.set_website(APP_WEBSITE)
     about.set_issue_url(APP_WEBSITE + "/issues")
     about.add_acknowledgement_section(
-        _("Acknowledgements"), ["Fabric https://fabricmc.net", "Modrinth https://modrinth.com", "Playit https://playit.gg"]
+        _("Acknowledgements"),
+        ["Fabric https://fabricmc.net", "Modrinth https://modrinth.com", "Playit https://playit.gg"],
     )
     about.add_other_app("io.github.sugarycandybar.Crucible", "Crucible", _("View specs and stress test hardware"))
     about.add_other_app("io.github.sugarycandybar.Carabiner", "Carabiner", _("Create and manage network tunnels"))

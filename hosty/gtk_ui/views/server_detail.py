@@ -373,9 +373,11 @@ class ServerDetailView(Gtk.Box):
         conflict_name = self._find_conflicting_server_name_for_port(port_type, port)
         dialog = Adw.AlertDialog.new(
             _("{} Port In Use").format(port_type),
-            _("{} port {} is already in use by {}. A server is already running on this port.\n\n"
-              "To change the port, open the {} tunnel management dialog "
-              "in Connect view and edit the local port.").format(port_type, port, conflict_name, port_type),
+            _(
+                "{} port {} is already in use by {}. A server is already running on this port.\n\n"
+                "To change the port, open the {} tunnel management dialog "
+                "in Connect view and edit the local port."
+            ).format(port_type, port, conflict_name, port_type),
         )
         dialog.add_response("ok", _("OK"))
         dialog.set_default_response("ok")

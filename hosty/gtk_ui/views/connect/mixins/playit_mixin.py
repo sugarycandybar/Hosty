@@ -514,8 +514,10 @@ class PlayitMixin:
         dialog = Adw.AlertDialog()
         dialog.set_heading(_("Regenerate {} tunnel?").format(tunnel_name))
         dialog.set_body(
-            _("This will replace the current tunnel domain with a new one. "
-              "Players using the old domain will no longer be able to connect.")
+            _(
+                "This will replace the current tunnel domain with a new one. "
+                "Players using the old domain will no longer be able to connect."
+            )
         )
         dialog.add_response("cancel", _("Cancel"))
         dialog.add_response("regenerate", _("Regenerate"))
@@ -868,8 +870,10 @@ class PlayitMixin:
                 threading.Thread(target=run, daemon=True).start()
 
             dialog = ManagePlayitTunnelDialog(
-                "Voice Chat", _("Simple Voice Chat (UDP)"), vc_port,
-                str(self._cfg.get("voicechat_endpoint", "")).strip()
+                "Voice Chat",
+                _("Simple Voice Chat (UDP)"),
+                vc_port,
+                str(self._cfg.get("voicechat_endpoint", "")).strip(),
             )
             dialog.connect("regenerate", lambda *_: self._confirm_regenerate_tunnel("Voice Chat", start_operation))
             dialog.connect("delete", lambda *_: self._on_delete_voicechat_tunnel())
@@ -1232,7 +1236,7 @@ class PlayitMixin:
                         self._voicechat_in_progress = False
                     self._refresh_status_row()
                     if installed:
-                        self._toast(_("Installed {}").format(', '.join(installed)))
+                        self._toast(_("Installed {}").format(", ".join(installed)))
                     if warnings:
                         warn = Adw.AlertDialog()
                         warn.set_heading(_("Some mods were not installed"))

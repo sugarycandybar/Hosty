@@ -793,8 +793,9 @@ class PlayitManager(EventEmitter):
 
         if not self._check_tunnel_limit():
             raise self.TunnelException(
-                _("This account cannot create more than {} tunnel(s). "
-                  "You can increase your limit here: {}").format(self.max_tunnels, "https://playit.gg/account/upgrade")
+                _("This account cannot create more than {} tunnel(s). You can increase your limit here: {}").format(
+                    self.max_tunnels, "https://playit.gg/account/upgrade"
+                )
             )
 
         if tunnel_type is None:

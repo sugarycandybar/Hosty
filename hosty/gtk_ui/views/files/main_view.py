@@ -297,9 +297,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
             # Update expander subtitle with count
             total_mods = len(entries) + len([j for j in jars if j.name.lower() not in managed_set])
-            self._mods_expander.set_subtitle(
-                _("{} item(s)").format(total_mods) if total_mods else _("None installed")
-            )
+            self._mods_expander.set_subtitle(_("{} item(s)").format(total_mods) if total_mods else _("None installed"))
 
         # ---- Installed Datapacks expander ----
         if self._datapacks_expander:
@@ -398,9 +396,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._disabled_rows.append(info)
 
             count = len(disabled_items)
-            self._disabled_expander.set_subtitle(
-                _("{} item(s)").format(count) if count else _("None disabled")
-            )
+            self._disabled_expander.set_subtitle(_("{} item(s)").format(count) if count else _("None disabled"))
 
         self._worlds_snapshot = self._build_worlds_snapshot()
         self._disabled_snapshot = self._build_disabled_snapshot()
