@@ -164,7 +164,9 @@ class JavaManager:
                         frac = downloaded / total_size * 0.7  # 70% for download
                         size_mb = downloaded / (1024 * 1024)
                         total_mb = total_size / (1024 * 1024)
-                        progress_callback(frac, _("Downloading JRE {}... {:.1f}/{:.1f} MB").format(java_version, size_mb, total_mb))
+                        progress_callback(
+                            frac, _("Downloading JRE {}... {:.1f}/{:.1f} MB").format(java_version, size_mb, total_mb)
+                        )
 
             if progress_callback:
                 progress_callback(0.75, _("Extracting JRE {}...").format(java_version))

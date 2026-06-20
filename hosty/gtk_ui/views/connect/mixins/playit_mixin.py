@@ -868,7 +868,8 @@ class PlayitMixin:
                 threading.Thread(target=run, daemon=True).start()
 
             dialog = ManagePlayitTunnelDialog(
-                "Voice Chat", _("Simple Voice Chat (UDP)"), vc_port, str(self._cfg.get("voicechat_endpoint", "")).strip()
+                "Voice Chat", _("Simple Voice Chat (UDP)"), vc_port,
+                str(self._cfg.get("voicechat_endpoint", "")).strip()
             )
             dialog.connect("regenerate", lambda *_: self._confirm_regenerate_tunnel("Voice Chat", start_operation))
             dialog.connect("delete", lambda *_: self._on_delete_voicechat_tunnel())
@@ -1187,7 +1188,9 @@ class PlayitMixin:
         dialog = Adw.AlertDialog()
         dialog.set_heading(_("Add {} tunnel?").format(tunnel_name))
         names = ", ".join(title for _project_id, title in mods)
-        dialog.set_body(_("This tunnel needs {}. Hosty can install compatible Fabric versions automatically.").format(names))
+        dialog.set_body(
+            _("This tunnel needs {}. Hosty can install compatible Fabric versions automatically.").format(names)
+        )
 
         dialog.add_response("cancel", _("Cancel"))
         dialog.add_response("install", _("Install Mods"))

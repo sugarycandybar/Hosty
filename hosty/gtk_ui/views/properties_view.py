@@ -86,7 +86,9 @@ class PropertiesView(Gtk.Box):
         self._widgets["difficulty"] = self._add_combo_row(
             general, _("Difficulty"), "difficulty", DIFFICULTY_MODES, default_difficulty_mode
         )
-        self._widgets["gamemode"] = self._add_combo_row(general, _("Default Gamemode"), "gamemode", GAMEMODES, "survival")
+        self._widgets["gamemode"] = self._add_combo_row(
+            general, _("Default Gamemode"), "gamemode", GAMEMODES, "survival"
+        )
 
         page.add(general)
 
@@ -136,7 +138,9 @@ class PropertiesView(Gtk.Box):
 
         self._widgets["pvp"] = self._add_switch_row(players, _("PvP"), "pvp", True, "")
         self._widgets["allow-flight"] = self._add_switch_row(players, _("Allow Flight"), "allow-flight", False, "")
-        self._widgets["keep-inventory"] = self._add_switch_row(players, _("Keep Inventory"), "keep-inventory", False, "")
+        self._widgets["keep-inventory"] = self._add_switch_row(
+            players, _("Keep Inventory"), "keep-inventory", False, ""
+        )
 
         page.add(players)
 
@@ -384,7 +388,9 @@ class PropertiesView(Gtk.Box):
             else:
                 system_ver = java_mgr.system_java_version
                 if system_ver and system_ver >= java_ver:
-                    java_info_row.set_subtitle(_("Java {} needed - system Java {} can be used").format(java_ver, system_ver))
+                    java_info_row.set_subtitle(
+                        _("Java {} needed - system Java {} can be used").format(java_ver, system_ver)
+                    )
                 else:
                     java_info_row.set_subtitle(_("Java {} needed - will be downloaded automatically").format(java_ver))
 

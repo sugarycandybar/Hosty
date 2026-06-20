@@ -791,7 +791,9 @@ class ModrinthMixin:
                 dialog = Adw.AlertDialog()
                 dialog.set_heading(_("Install required dependencies?"))
                 dialog.set_body(
-                    _("This datapack requires additional dependencies:\n\n{}{}\n\nInstall them as well?").format(preview, more)
+                    _("This datapack requires additional dependencies:\n\n{}{}\n\nInstall them as well?").format(
+                        preview, more
+                    )
                 )
                 dialog.add_response("cancel", _("Cancel"))
                 dialog.add_response("install", _("Install"))
@@ -973,7 +975,9 @@ class ModrinthMixin:
 
             dialog = Adw.AlertDialog()
             dialog.set_heading(_("Install required dependencies?"))
-            dialog.set_body(_("This mod requires additional dependencies:\n\n{}{}\n\nInstall them as well?").format(preview, more))
+            dialog.set_body(
+                _("This mod requires additional dependencies:\n\n{}{}\n\nInstall them as well?").format(preview, more)
+            )
             dialog.add_response("cancel", _("Cancel"))
             dialog.add_response("install", _("Install"))
             dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)

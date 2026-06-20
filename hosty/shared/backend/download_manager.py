@@ -225,7 +225,9 @@ class DownloadManager:
                         frac = 0.15 + (downloaded / total) * 0.85
                         size_mb = downloaded / (1024 * 1024)
                         total_mb = total / (1024 * 1024)
-                        progress_callback(frac, _("Downloading server.jar... {:.1f}/{:.1f} MB").format(size_mb, total_mb))
+                        progress_callback(
+                            frac, _("Downloading server.jar... {:.1f}/{:.1f} MB").format(size_mb, total_mb)
+                        )
 
             if progress_callback:
                 progress_callback(1.0, _("server.jar downloaded"))

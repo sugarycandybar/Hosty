@@ -1027,7 +1027,9 @@ class ModsMixin:
                     self._mods_update_busy = False
                     self._set_mod_update_row_subtitle(_("Update check complete"))
                     if blocked > 0:
-                        self._toast(_("No safe updates found ({} blocked by modpack-managed dependencies)").format(blocked))
+                        self._toast(
+                            _("No safe updates found ({} blocked by modpack-managed dependencies)").format(blocked)
+                        )
                     else:
                         self._toast(_("All tracked mods and datapacks are up to date"))
                     return False
@@ -1076,7 +1078,8 @@ class ModsMixin:
                     body_parts.append(_("Found {} datapack update(s).").format(len(datapack_updates)))
                 if blocked > 0:
                     body_parts.append(
-                        _("{} standalone update(s) were skipped because dependencies are managed by a modpack.").format(blocked)
+                        _("{} standalone update(s) were skipped because "
+                          "dependencies are managed by a modpack.").format(blocked)
                     )
                 if listing:
                     body_parts.append(listing)
@@ -1160,7 +1163,9 @@ class ModsMixin:
 
                 def on_progress(done: int, total: int, rel_path: str):
                     GLib.idle_add(
-                        lambda d=done, t=total: self._set_mod_update_row_subtitle(_("Updating {}: {}/{}").format(pack_title, d, t))
+                        lambda d=done, t=total: self._set_mod_update_row_subtitle(
+                            _("Updating {}: {}/{}").format(pack_title, d, t)
+                        )
                     )
 
                 result = modrinth_client.install_modpack(
@@ -1331,7 +1336,9 @@ class ModsMixin:
                 more = f"\n- and {len(dependents) - 6} more"
             dialog.set_heading(_("Delete dependency mod?"))
             dialog.set_body(
-                _('The following mods depend on "{}":\n\n{}{}\n\nAre you sure you want to proceed?').format(name, preview, more)
+                _('The following mods depend on "{}":\n\n{}{}\n\n{}').format(
+                    name, preview, more, _("Are you sure you want to proceed?")
+                )
             )
         else:
             dialog.set_heading(_("Delete mod?"))

@@ -14,8 +14,8 @@ from pathlib import Path
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
-from hosty.i18n import setup_gettext
 from hosty.gtk_ui.window import HostyWindow
+from hosty.i18n import setup_gettext
 from hosty.shared.backend.server_manager import ServerManager
 from hosty.shared.core.events import set_main_thread_dispatcher
 from hosty.shared.utils.constants import APP_ID
@@ -362,7 +362,9 @@ class HostyApplication(Adw.Application):
         dialog = Adw.AlertDialog()
         dialog.set_heading(_("Delete Server?"))
         dialog.set_body(
-            _('Are you sure you want to delete "{}"?\n\nAll server files will be permanently deleted.').format(server_info.name)
+            _('Are you sure you want to delete "{}"?\n\n{}').format(
+                server_info.name, _("All server files will be permanently deleted.")
+            )
         )
         dialog.add_response("cancel", _("Cancel"))
         dialog.add_response("delete", _("Delete"))

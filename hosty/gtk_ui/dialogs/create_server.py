@@ -139,7 +139,10 @@ class CreateServerDialog(Adw.Dialog):
         )
 
         self._difficulty_values = list(DIFFICULTY_MODES)
-        difficulty_labels = [_("Hardcore") if value == "hardcore" else value.title() for value in self._difficulty_values]
+        difficulty_labels = [
+            _("Hardcore") if value == "hardcore" else value.title()
+            for value in self._difficulty_values
+        ]
         self._difficulty_row = Adw.ComboRow(
             title=_("Difficulty"),
             model=Gtk.StringList.new(difficulty_labels),
@@ -339,9 +342,13 @@ class CreateServerDialog(Adw.Dialog):
             if available:
                 self._java_info_row.set_subtitle(_("Java {} ✓ Available").format(java_ver))
             elif system_ver and system_ver >= java_ver:
-                self._java_info_row.set_subtitle(_("Java {} needed - system Java {} can be used").format(java_ver, system_ver))
+                self._java_info_row.set_subtitle(
+                    _("Java {} needed - system Java {} can be used").format(java_ver, system_ver)
+                )
             else:
-                self._java_info_row.set_subtitle(_("Java {} needed - will be downloaded automatically").format(java_ver))
+                self._java_info_row.set_subtitle(
+                    _("Java {} needed - will be downloaded automatically").format(java_ver)
+                )
 
         self._validate()
 
@@ -545,7 +552,9 @@ class CreateServerDialog(Adw.Dialog):
 
             # Step 1: Ensure JRE is available
             if not java_mgr.is_java_available(java_ver):
-                self._update_progress(0.05, _("Downloading Java Runtime..."), _("JRE {} for MC {}").format(java_ver, mc_version))
+                self._update_progress(
+                    0.05, _("Downloading Java Runtime..."), _("JRE {} for MC {}").format(java_ver, mc_version)
+                )
 
                 success, msg = java_mgr.download_jre_sync(
                     java_ver,
@@ -583,7 +592,9 @@ class CreateServerDialog(Adw.Dialog):
             success, msg = dl_mgr.download_server_jar(
                 mc_version=mc_version,
                 server_dir=str(server_info.server_dir),
-                progress_callback=lambda frac, msg: self._update_progress(0.48 + frac * 0.12, msg, _("MC {}").format(mc_version)),
+                progress_callback=lambda frac, msg: self._update_progress(
+                    0.48 + frac * 0.12, msg, _("MC {}").format(mc_version)
+                ),
             )
 
             if not success:
@@ -669,7 +680,9 @@ class CreateServerDialog(Adw.Dialog):
         for slug, title in OPTIMISATION_MODS:
             done += 1
             progress = 0.94 + (done / max(1, total)) * 0.05
-            self._update_progress(progress, _("Installing server-optimising mods..."), _("{} · {}").format(f"{done}/{total}", title))
+            self._update_progress(
+                progress, _("Installing server-optimising mods..."), _("{} · {}").format(f"{done}/{total}", title)
+            )
             try:
                 version = self._find_supported_optimisation_version(
                     modrinth_client,
