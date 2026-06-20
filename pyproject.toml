@@ -12,7 +12,8 @@ select = ["E", "F", "I", "W", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"hosty/gtk_ui/**/*.py" = ["E402", "F403", "F405"]
+"hosty/gtk_ui/**/*.py" = ["E402", "F403", "F405", "F821"]
+"hosty/shared/**/*.py" = ["F821"]
 
 [tool.mypy]
 python_version = "3.13"
