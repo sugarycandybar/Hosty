@@ -11,6 +11,7 @@ from __future__ import annotations
 import ctypes
 import ctypes.wintypes
 import io
+import logging
 import sys
 import threading
 from pathlib import Path
@@ -84,6 +85,8 @@ MF_STRING = 0x00000000
 
 ID_SHOW = 1001
 ID_QUIT = 1002
+
+logger = logging.getLogger(__name__)
 
 
 class NOTIFYICONDATAW(ctypes.Structure):
@@ -340,7 +343,7 @@ class WindowsTrayManager:
                 if hicon:
                     return hicon
         except Exception as e:
-            print(f"PIL icon creation failed: {e}", file=sys.stderr)
+            logger.warning("PIL icon creation failed: %s", e)
 
         return self._hicon_fallback()
 
@@ -360,7 +363,7 @@ class WindowsTrayManager:
 
                         return Image.open(io.BytesIO(buffer))
         except Exception as e:
-            print(f"SVG icon load failed: {e}", file=sys.stderr)
+            logger.warning("SVG icon load failed: %s", e)
 
         from PIL import Image
 
@@ -432,7 +435,7 @@ class WindowsTrayManager:
             )
             return hicon or 0
         except Exception as e:
-            print(f"Temp ICO load failed: {e}", file=sys.stderr)
+            logger.warning("Temp ICO load failed: %s", e)
             return 0
         finally:
             try:

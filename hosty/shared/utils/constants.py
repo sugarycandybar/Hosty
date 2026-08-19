@@ -7,6 +7,7 @@ import re
 import sys
 from pathlib import Path
 
+import hosty.i18n  # noqa: F401 — installs _() into builtins
 from hosty.version import __version__
 
 # Application identity
@@ -37,10 +38,6 @@ SERVERS_DIR = DATA_DIR / "servers"
 JRES_DIR = DATA_DIR / "jres"
 CACHE_DIR = DATA_DIR / "cache"
 CONFIG_FILE = DATA_DIR / "servers.json"
-
-# Ensure directories exist
-for d in [DATA_DIR, SERVERS_DIR, JRES_DIR, CACHE_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
 
 # Fabric Meta API
 FABRIC_META_BASE = "https://meta.fabricmc.net/v2/versions"
@@ -193,6 +190,11 @@ class ServerStatus:
 
 # Default RAM allocation in MB
 MIN_RAM_MB = 512
+
+
+def ensure_data_dirs() -> None:
+    for d in [DATA_DIR, SERVERS_DIR, JRES_DIR, CACHE_DIR]:
+        d.mkdir(parents=True, exist_ok=True)
 
 
 def get_system_ram_mb() -> int:

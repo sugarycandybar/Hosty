@@ -5,14 +5,16 @@ Application preferences window
 from __future__ import annotations
 
 import os
+import secrets
 import sys
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
+from hosty.daemon.host import load_daemon_config, save_daemon_config
 from hosty.i18n import LANGUAGES
 from hosty.i18n import set_language as set_app_language
 from hosty.shared.backend.preferences_manager import PreferencesManager
@@ -31,13 +33,16 @@ def _open_data_folder() -> None:
 
 
 def show_preferences_window(
-    parent: Gtk.Window, preferences: PreferencesManager, server_manager: ServerManager | None = None
+    parent: Gtk.Window,
+    preferences: PreferencesManager,
+    server_manager: ServerManager | None = None,
+    application=None,
 ):
     win = Adw.PreferencesDialog()
     # Properties like default_size or modal are handled differently in Adw.Dialog
     # if at all, but we can set them if supported or skip them.
 
-    page = Adw.PreferencesPage(title=_("General"))
+    page = Adw.PreferencesPage(title=_("General"), icon_name="preferences-system-symbolic")
     group = Adw.PreferencesGroup(
         title=_("Application"),
     )
@@ -155,6 +160,160 @@ def show_preferences_window(
 
     page.add(group)
 
+    # ---------- Remote management ----------
+    remote_page = Adw.PreferencesPage(title=_("Remote"), icon_name="network-server-symbolic")
+    remote_group = Adw.PreferencesGroup(
+        title=_("Remote management"),
+        description=_(
+            "Serve a management web UI over HTTP so servers can be controlled "
+            "from another device (LAN, Tailscale, or behind a reverse proxy)."
+        ),
+    )
+
+    remote_switch = Adw.SwitchRow(title=_("Remote management"))
+    remote_switch.set_active(preferences.remote_management_enabled)
+    remote_switch.set_subtitle(_("Disabled"))
+    remote_group.add(remote_switch)
+
+    daemon_config = load_daemon_config()
+
+    host_row = Adw.EntryRow(title=_("Host"), show_apply_button=True)
+    host_row.set_text(daemon_config.get("host", "127.0.0.1"))
+    remote_group.add(host_row)
+
+    port_row = Adw.EntryRow(title=_("Port"), show_apply_button=True)
+    port_row.set_text(daemon_config.get("port", "25570"))
+    remote_group.add(port_row)
+
+    token_row = Adw.PasswordEntryRow(title=_("Access token"))
+    token_row.set_text(daemon_config.get("token", ""))
+    regenerate_button = Gtk.Button.new_from_icon_name("view-refresh-symbolic")
+    regenerate_button.add_css_class("flat")
+    regenerate_button.set_size_request(28, 28)
+    regenerate_button.set_valign(Gtk.Align.CENTER)
+    regenerate_button.set_tooltip_text(_("Regenerate token"))
+    regenerate_button.connect("clicked", lambda _b: _confirm_regenerate())
+    token_row.add_suffix(regenerate_button)
+    copy_button = Gtk.Button.new_from_icon_name("edit-copy-symbolic")
+    copy_button.add_css_class("flat")
+    copy_button.set_size_request(28, 28)
+    copy_button.set_valign(Gtk.Align.CENTER)
+    copy_button.set_tooltip_text(_("Copy token"))
+    copy_button.connect("clicked", lambda _b: _copy_token())
+    token_row.add_suffix(copy_button)
+    remote_group.add(token_row)
+
+    def show_alert(title: str, body: str):
+        dialog = Adw.AlertDialog.new(title, body)
+        dialog.add_response("ok", _("OK"))
+        dialog.present(parent)
+
+    def _copy_token():
+        text = token_row.get_text()
+        if text:
+            clipboard = Gdk.Display.get_default().get_clipboard()
+            clipboard.set(GObject.Value(GObject.TYPE_STRING, text))
+            parent.show_toast(_("Token copied to clipboard"))
+
+    def _confirm_regenerate():
+        dialog = Adw.AlertDialog.new(
+            _("Regenerate access token?"),
+            _("A new random token will be generated. The current token will no longer work."),
+        )
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("regenerate", _("Regenerate"))
+        dialog.set_response_appearance("regenerate", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.connect(
+            "response",
+            lambda _d, resp: _do_regenerate() if resp == "regenerate" else None,
+        )
+        dialog.present(parent)
+
+    def _do_regenerate():
+        token_row.set_text(secrets.token_urlsafe(24))
+        error = restart_daemon()
+        if error:
+            show_alert(_("Remote Management Error"), error)
+            return
+        if remote_switch.get_active():
+            remote_switch.set_subtitle(remote_status_text())
+        parent.show_toast(_("New token generated"))
+
+    def current_remote_error() -> str | None:
+        """Validate the current fields. Returns an error message or None."""
+        host = host_row.get_text().strip()
+        port_text = port_row.get_text().strip()
+        token = token_row.get_text().strip()
+        if not host:
+            return _("Host cannot be empty.")
+        try:
+            port = int(port_text)
+        except ValueError:
+            return _("Port must be a number between 1024 and 65535.")
+        if not 1024 <= port <= 65535:
+            return _("Port must be a number between 1024 and 65535.")
+        if not token:
+            return _("An access token is required.")
+        return None
+
+    def restart_daemon() -> str | None:
+        """Save current fields and (re)start the management server. Returns an error or None."""
+        error = current_remote_error()
+        if error:
+            return error
+        host = host_row.get_text().strip()
+        port = int(port_row.get_text().strip())
+        token = token_row.get_text().strip()
+        save_daemon_config(host, port, token)
+        if application is None:
+            return None
+        application._stop_remote_management()
+        ok, start_error = application._start_remote_management()
+        return None if ok else (start_error or _("Could not start the management server."))
+
+    def remote_status_text() -> str:
+        host = host_row.get_text().strip() or "127.0.0.1"
+        port = port_row.get_text().strip() or "25570"
+        return _("Running at http://{}:{}").format(host, port)
+
+    def on_remote_toggled(row, _pspec):
+        if row.get_active():
+            error = restart_daemon()
+            if error:
+                GLib.idle_add(row.set_active, False)
+                show_alert(_("Remote Management Error"), error)
+                return
+            preferences.remote_management_enabled = True
+            row.set_subtitle(remote_status_text())
+        else:
+            preferences.remote_management_enabled = False
+            if application is not None:
+                application._stop_remote_management()
+            row.set_subtitle(_("Disabled"))
+
+    remote_switch.connect("notify::active", on_remote_toggled)
+
+    def on_remote_field_applied(_row):
+        """Field changed: persist and restart if the server is running or being enabled."""
+        if not remote_switch.get_active():
+            return
+        error = restart_daemon()
+        if error:
+            show_alert(_("Remote Management Error"), error)
+        else:
+            remote_switch.set_subtitle(remote_status_text())
+
+    host_row.connect("apply", on_remote_field_applied)
+    port_row.connect("apply", on_remote_field_applied)
+    token_row.connect("apply", on_remote_field_applied)
+
+    if preferences.remote_management_enabled and application is not None and application._daemon_host:
+        remote_switch.set_subtitle(remote_status_text())
+
+    remote_page.add(remote_group)
+
     win.add(page)
+    win.add(remote_page)
 
     win.present(parent)

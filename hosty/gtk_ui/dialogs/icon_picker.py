@@ -2,6 +2,8 @@
 IconPickerDialog - Image selector with crop-to-square and PNG conversion.
 """
 
+import logging
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -11,6 +13,8 @@ from pathlib import Path
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk
 
 from hosty.shared.utils.image_utils import convert_to_png, load_pixbuf
+
+logger = logging.getLogger(__name__)
 
 
 class IconPickerDialog(Adw.Dialog):
@@ -154,7 +158,7 @@ class IconPickerDialog(Adw.Dialog):
             self._apply_btn.set_sensitive(True)
 
         except Exception as e:
-            print(f"Failed to load image: {e}")
+            logger.warning("Failed to load image: %s", e)
 
     def _generate_cropped_preview(self):
         """Generate a small cropped preview avatar."""
@@ -175,7 +179,7 @@ class IconPickerDialog(Adw.Dialog):
                 self._result_avatar.set_custom_image(texture)
 
         except Exception as e:
-            print(f"Failed to generate preview: {e}")
+            logger.warning("Failed to generate preview: %s", e)
 
     def _on_apply(self, button):
         """Apply the selected icon."""
@@ -200,4 +204,4 @@ class IconPickerDialog(Adw.Dialog):
             self.close()
 
         except Exception as e:
-            print(f"Failed to save icon: {e}")
+            logger.warning("Failed to save icon: %s", e)

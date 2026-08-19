@@ -29,10 +29,16 @@ if os.path.exists(pkgdatadir):
 from hosty.factory import create_application
 
 def main():
-    """Launch the Hosty application."""
+    """Launch Hosty as the desktop app, or as the headless daemon with --headless."""
     try:
+        from hosty.daemon.entry import parse_daemon_args, run_headless
+
+        headless, _, argv = parse_daemon_args(sys.argv)
+        if headless:
+            return run_headless(sys.argv)
+
         app = create_application()
-        return app.run(sys.argv)
+        return app.run(argv)
     except KeyboardInterrupt:
         return 130
     except NotImplementedError as exc:
