@@ -4,6 +4,7 @@ Handles persistence, creation workflow, and server lifecycle.
 """
 
 import json
+import logging
 import re
 import shutil
 import uuid
@@ -23,8 +24,11 @@ from hosty.shared.utils.constants import (
     CONFIG_FILE,
     DEFAULT_RAM_MB,
     SERVERS_DIR,
+    ServerStatus,
     get_required_java_version,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ServerInfo:
@@ -92,7 +96,7 @@ class ServerManager(EventEmitter):
                     info = ServerInfo(entry)
                     self._servers[info.id] = info
             except Exception as e:
-                print(f"Failed to load servers: {e}")
+                logger.warning("Failed to load servers: %s", e)
 
     def _save(self):
         """Persist servers to JSON."""
@@ -102,7 +106,7 @@ class ServerManager(EventEmitter):
             with open(CONFIG_FILE, "w") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
-            print(f"Failed to save servers: {e}")
+            logger.warning("Failed to save servers: %s", e)
 
     @property
     def servers(self) -> list[ServerInfo]:
@@ -1012,6 +1016,96 @@ class ServerManager(EventEmitter):
     def get_existing_process(self, server_id: str) -> ServerProcess | None:
         """Get an existing ServerProcess without creating a new one."""
         return self._processes.get(server_id)
+
+    def server_status(self, server_id: str) -> dict | None:
+        """Return a JSON-ready snapshot of a server's metadata plus live process state."""
+        info = self._servers.get(server_id)
+        if not info:
+            return None
+        data = info.to_dict()
+        process = self._processes.get(server_id)
+        if process:
+            data["status"] = process.status
+            data["pid"] = process.pid
+            data["player_count"] = process.player_count
+            data["max_players"] = process.max_players
+        else:
+            data["status"] = ServerStatus.STOPPED
+            data["pid"] = None
+            data["player_count"] = 0
+            data["max_players"] = None
+        return data
+
+    def servers_status(self) -> list[dict]:
+        """Return status snapshots for all servers in creation order."""
+        return [self.server_status(s.id) for s in self.servers if self.server_status(s.id) is not None]
+
+    def start_server(self, server_id: str) -> tuple[bool, dict | None]:
+        """Start a server with the same guard checks the desktop UI performs.
+
+        Returns ``(True, None)`` on success or ``(False, error_dict)`` where
+        ``error_dict`` has a ``"kind"`` key describing the failure.
+        """
+        info = self._servers.get(server_id)
+        if not info:
+            return False, {"kind": "not-found"}
+
+        process = self.get_process(server_id)
+        if not process:
+            return False, {"kind": "process"}
+        if process.is_running:
+            return True, None
+
+        if self.is_mod_operation_active(server_id):
+            return False, {"kind": "mod-operation"}
+
+        conflict_port = self.check_port_conflict(server_id)
+        if conflict_port is not None:
+            return False, {"kind": "port-conflict", "port_type": "Java", "port": conflict_port}
+
+        bedrock_conflict = self.check_bedrock_port_conflict(server_id)
+        if bedrock_conflict is not None:
+            return False, {"kind": "port-conflict", "port_type": "Bedrock", "port": bedrock_conflict}
+
+        voicechat_conflict = self.check_voicechat_port_conflict(server_id)
+        if voicechat_conflict is not None:
+            return False, {"kind": "port-conflict", "port_type": "Voice Chat", "port": voicechat_conflict}
+
+        self.playit_manager.configure_voicechat_mod(
+            str(info.server_dir),
+            server_id,
+            voicechat_port=self.get_voicechat_port(server_id),
+        )
+
+        if not process.start():
+            return False, {"kind": "start-failed"}
+
+        return True, None
+
+    def stop_server(self, server_id: str) -> bool:
+        """Gracefully stop a server (with kill fallback). Returns True if requested."""
+        process = self._processes.get(server_id)
+        if not process or not process.is_running:
+            return False
+        process.stop()
+        return True
+
+    def kill_server(self, server_id: str) -> bool:
+        """Force stop a server. Returns True if the process was running."""
+        process = self._processes.get(server_id)
+        if not process or not process.is_running:
+            return False
+        process.kill()
+        return True
+
+    def autostart_servers(self) -> list[str]:
+        """Start every server marked for autostart. Returns the ids actually started."""
+        started = []
+        for info in self.get_autostart_servers():
+            ok, _ = self.start_server(info.id)
+            if ok:
+                started.append(info.id)
+        return started
 
     def get_config(self, server_id: str) -> ConfigManager | None:
         """Get a ConfigManager for a server's server.properties."""

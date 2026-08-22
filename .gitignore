@@ -15,6 +15,7 @@ dist/
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
+po/mo/
 
 # Tool caches and coverage
 .pytest_cache/

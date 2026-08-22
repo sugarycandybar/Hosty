@@ -2,6 +2,7 @@
 HostyWindow - Main application window with NavigationSplitView.
 """
 
+import sys
 import threading
 
 import gi
@@ -29,6 +30,7 @@ class HostyWindow(Adw.ApplicationWindow):
         self._running_server_ids: set[str] = set(self._server_manager.get_running_server_ids())
         self._playit_starting_server_ids: set[str] = set()
         self._playit_autostart_paused_ids: set[str] = set()
+        self._sleep_inhibit_cookie: int | None = None
 
         self.set_title(_("Hosty"))
         try:
@@ -112,6 +114,7 @@ class HostyWindow(Adw.ApplicationWindow):
         server_manager.connect("server-removed", self._on_server_removed)
 
         self._status_poll_id = GLib.timeout_add(1000, self._poll_runtime_state)
+        GLib.idle_add(self._update_sleep_inhibit)
 
         self._quit_requested = False
         self.connect("close-request", self._on_close_request)
@@ -206,6 +209,50 @@ class HostyWindow(Adw.ApplicationWindow):
         if self._status_poll_id:
             GLib.source_remove(self._status_poll_id)
             self._status_poll_id = None
+        self._update_sleep_inhibit(force_uninhibit=True)
+
+    def _update_sleep_inhibit(self, force_uninhibit: bool = False) -> None:
+        prefs = self._server_manager.preferences
+        should_inhibit = not force_uninhibit and prefs.prevent_sleep_while_running and bool(self._running_server_ids)
+        if should_inhibit and not self._sleep_inhibit_cookie:
+            try:
+                app = self.get_application()
+                if app is not None:
+                    flags = Gtk.ApplicationInhibitFlags.SUSPEND | Gtk.ApplicationInhibitFlags.IDLE
+                    cookie = app.inhibit(self, flags, _("Minecraft server is running"))
+                    # 0 means inhibit failed
+                    self._sleep_inhibit_cookie = cookie if cookie else None
+            except Exception:
+                self._sleep_inhibit_cookie = None
+            if not self._sleep_inhibit_cookie and sys.platform == "win32":
+                try:
+                    import ctypes
+
+                    ES_CONTINUOUS = 0x80000000
+                    ES_SYSTEM_REQUIRED = 0x00000001
+                    ES_AWAYMODE_REQUIRED = 0x00000040
+                    ctypes.windll.kernel32.SetThreadExecutionState(
+                        ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED
+                    )
+                    self._sleep_inhibit_cookie = 0xFFFFFFFF
+                except Exception:
+                    pass
+        elif not should_inhibit and self._sleep_inhibit_cookie is not None:
+            try:
+                app = self.get_application()
+                if app is not None and self._sleep_inhibit_cookie not in (None, 0xFFFFFFFF):
+                    app.uninhibit(self._sleep_inhibit_cookie)
+            except Exception:
+                pass
+            if sys.platform == "win32" and self._sleep_inhibit_cookie == 0xFFFFFFFF:
+                try:
+                    import ctypes
+
+                    ES_CONTINUOUS = 0x80000000
+                    ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+                except Exception:
+                    pass
+            self._sleep_inhibit_cookie = None
 
     def _poll_runtime_state(self):
         self._detail_view.poll_runtime_state()
@@ -213,6 +260,7 @@ class HostyWindow(Adw.ApplicationWindow):
         current_ids = set(self._server_manager.get_running_server_ids())
         previous_ids = self._running_server_ids
         self._running_server_ids = current_ids
+        self._update_sleep_inhibit()
 
         from hosty.shared.utils.portal import set_background_status
 

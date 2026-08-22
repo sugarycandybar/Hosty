@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hosty</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="login" class="screen hidden">
+    <form id="login-form" class="login-card">
+      <div class="login-title">Hosty</div>
+      <p class="login-sub">Manage your Minecraft servers</p>
+      <label class="label" for="token">Access token</label>
+      <input id="token" class="input" type="password" autocomplete="current-password"
+             placeholder="token" required autofocus>
+      <button class="btn primary" type="submit">Connect</button>
+      <div id="login-error" class="error hidden"></div>
+    </form>
+  </div>
+
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span class="brand">Hosty</span>
+        <button id="logout-btn" class="btn ghost" type="button">Log out</button>
+      </div>
+      <div id="server-list" class="server-list"></div>
+    </aside>
+
+    <main class="main">
+      <div id="empty-state" class="empty-state">
+        <p>Select a server to manage its console.</p>
+      </div>
+
+      <section id="server-panel" class="server-panel hidden">
+        <header class="panel-head">
+          <div>
+            <h2 id="server-name" class="server-name"></h2>
+            <div class="meta">
+              <span id="status-badge" class="badge stopped">stopped</span>
+              <span id="server-meta"></span>
+            </div>
+          </div>
+          <div class="actions">
+            <button id="cmd-start" class="btn primary" type="button">Start</button>
+            <button id="cmd-stop" class="btn" type="button">Stop</button>
+          </div>
+        </header>
+
+        <div id="console" class="console" tabindex="0"></div>
+
+        <form id="command-form" class="command-bar">
+          <input id="command-input" class="input" type="text"
+                 placeholder="Send a command to the server..." autocomplete="off">
+          <button class="btn primary" type="submit">Send</button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+  <script src="app.js"></script>
+</body>
+</html>

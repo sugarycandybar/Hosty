@@ -15,6 +15,7 @@ DEFAULT_SETTINGS = {
     "default_ram_mb": DEFAULT_RAM_MB,
     "run_in_background_on_close": False,
     "open_on_startup": False,
+    "remote_management_enabled": False,
     "prevent_sleep_while_running": False,
     "auto_backup_on_stop": True,
     "auto_delete_old_backups": True,
@@ -76,6 +77,15 @@ class PreferencesManager:
     @open_on_startup.setter
     def open_on_startup(self, value: bool) -> None:
         self._settings["open_on_startup"] = bool(value)
+        self._save()
+
+    @property
+    def remote_management_enabled(self) -> bool:
+        return bool(self._settings.get("remote_management_enabled", False))
+
+    @remote_management_enabled.setter
+    def remote_management_enabled(self, value: bool) -> None:
+        self._settings["remote_management_enabled"] = bool(value)
         self._save()
 
     @property

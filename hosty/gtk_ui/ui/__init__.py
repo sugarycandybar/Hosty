@@ -1,1 +1,0 @@
-"""UI frontend composition modules."""

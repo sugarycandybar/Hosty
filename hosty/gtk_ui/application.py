@@ -14,6 +14,7 @@ from pathlib import Path
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
+from hosty.daemon.host import DaemonHost, load_daemon_config
 from hosty.gtk_ui.window import HostyWindow
 from hosty.i18n import set_language, setup_gettext
 from hosty.shared.backend.server_manager import ServerManager
@@ -35,6 +36,7 @@ class HostyApplication(Adw.Application):
         self._is_held_for_background = False
         self._tray_manager = None
         self._shortcuts_dialog = None
+        self._daemon_host: DaemonHost | None = None
 
     def do_command_line(self, command_line):
         """Handle command line arguments."""
@@ -60,6 +62,25 @@ class HostyApplication(Adw.Application):
 
         # Apply saved language preference
         set_language(self._server_manager.preferences.language)
+
+        # Apply saved theme preference
+        try:
+            style_manager = Adw.StyleManager.get_default()
+            theme = self._server_manager.preferences.theme
+            if theme == "light":
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+            elif theme == "dark":
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+            else:
+                style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+        except Exception:
+            pass
+
+        # Serve the management web UI if enabled in preferences
+        if self._server_manager.preferences.remote_management_enabled:
+            ok, error = self._start_remote_management()
+            if not ok:
+                print(f"Hosty: remote management could not be started: {error}")
 
         # Setup actions
         self._setup_actions()
@@ -115,10 +136,7 @@ class HostyApplication(Adw.Application):
 
         if not hasattr(self, "_autostarted_once"):
             self._autostarted_once = True
-            for autostart_server in self._server_manager.get_autostart_servers():
-                proc = self._server_manager.get_process(autostart_server.id)
-                if proc and not proc.is_running:
-                    proc.start()
+            self._server_manager.autostart_servers()
 
         if self._activate_in_background:
             self._activate_in_background = False
@@ -158,6 +176,9 @@ class HostyApplication(Adw.Application):
         if self._window:
             self._window.shutdown_background()
         if self._server_manager:
+            if self._daemon_host:
+                self._daemon_host.stop()
+                self._daemon_host = None
             self._server_manager.stop_all()
         set_main_thread_dispatcher(None)
         Adw.Application.do_shutdown(self)
@@ -270,6 +291,37 @@ class HostyApplication(Adw.Application):
 
         show_about_dialog(self._window)
 
+    def _start_remote_management(self) -> tuple[bool, str | None]:
+        """Start the in-process management HTTP server. Returns (ok, error)."""
+        if self._daemon_host is None:
+            self._daemon_host = DaemonHost()
+        if self._daemon_host.is_running:
+            return True, None
+        if self._server_manager is None:
+            return False, "server manager not ready"
+        config = load_daemon_config()
+        try:
+            port = int(config.get("port", 25570))
+        except ValueError:
+            port = 25570
+        ok, error = self._daemon_host.start(
+            self._server_manager,
+            config.get("host", "127.0.0.1"),
+            port,
+            config.get("token", ""),
+        )
+        if ok:
+            print(
+                "Hosty: remote management available at "
+                f"http://{config.get('host', '127.0.0.1')}:{self._daemon_host.port}"
+            )
+        return ok, error
+
+    def _stop_remote_management(self) -> None:
+        """Stop the in-process management HTTP server."""
+        if self._daemon_host:
+            self._daemon_host.stop()
+
     def _on_quit(self, action, param):
         """Quit the application."""
         if self._window:
@@ -283,7 +335,12 @@ class HostyApplication(Adw.Application):
         from hosty.gtk_ui.dialogs.preferences import show_preferences_window
 
         if self._window:
-            show_preferences_window(self._window, self._server_manager.preferences, self._server_manager)
+            show_preferences_window(
+                self._window,
+                self._server_manager.preferences,
+                self._server_manager,
+                self,
+            )
 
     def _on_shortcuts(self, action, param):
         """Show keyboard shortcuts."""

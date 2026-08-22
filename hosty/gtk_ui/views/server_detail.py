@@ -392,40 +392,29 @@ class ServerDetailView(Gtk.Box):
         if self._selected_process.status == ServerStatus.STARTING:
             return
 
+        server_id = self._current_server.id if self._current_server else None
+        if not server_id:
+            return
+
         if self._selected_process.is_running:
-            self._selected_process.stop()
+            self._server_manager.stop_server(server_id)
         else:
-            if self._current_server and self._server_manager.is_mod_operation_active(self._current_server.id):
-                dialog = Adw.AlertDialog.new(
-                    _("Cannot Start Server"),
-                    _("Mods are currently being installed or updated. Please wait for the operation to finish."),
-                )
-                dialog.add_response("ok", _("OK"))
-                dialog.present(self.get_root())
-                return
+            ok, error = self._server_manager.start_server(server_id)
+            if not ok and error:
+                self._handle_start_error(error)
 
-            if self._current_server:
-                conflict_port = self._server_manager.check_port_conflict(self._current_server.id)
-                if conflict_port is not None:
-                    self._show_port_conflict_dialog("Java", conflict_port)
-                    return
-
-                br_conflict = self._server_manager.check_bedrock_port_conflict(self._current_server.id)
-                if br_conflict is not None:
-                    self._show_port_conflict_dialog("Bedrock", br_conflict)
-                    return
-
-                vc_conflict = self._server_manager.check_voicechat_port_conflict(self._current_server.id)
-                if vc_conflict is not None:
-                    self._show_port_conflict_dialog("Voice Chat", vc_conflict)
-                    return
-
-                self._server_manager.playit_manager.configure_voicechat_mod(
-                    str(self._current_server.server_dir),
-                    self._current_server.id,
-                    voicechat_port=self._server_manager.get_voicechat_port(self._current_server.id),
-                )
-            self._selected_process.start()
+    def _handle_start_error(self, error: dict):
+        """Show a dialog describing why a server could not start."""
+        kind = error.get("kind")
+        if kind == "mod-operation":
+            dialog = Adw.AlertDialog.new(
+                _("Cannot Start Server"),
+                _("Mods are currently being installed or updated. Please wait for the operation to finish."),
+            )
+            dialog.add_response("ok", _("OK"))
+            dialog.present(self.get_root())
+        elif kind == "port-conflict":
+            self._show_port_conflict_dialog(error.get("port_type", "Java"), int(error.get("port", 0)))
 
     def get_console_view(self, server_id: str | None = None) -> ConsoleView | None:
         if server_id and server_id in self._console_views:

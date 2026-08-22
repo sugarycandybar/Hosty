@@ -4,6 +4,7 @@ Uses the Fabric Meta API for versions and installer, and the Mojang version
 manifest API for the vanilla server.jar.
 """
 
+import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -19,6 +20,8 @@ from hosty.shared.utils.constants import (
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
 
 MOJANG_VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadManager:
@@ -48,7 +51,7 @@ class DownloadManager:
 
             return versions
         except Exception as e:
-            print(f"Failed to fetch game versions: {e}")
+            logger.warning("Failed to fetch game versions: %s", e)
             return []
 
     def fetch_loader_versions(self) -> list[str]:
@@ -59,7 +62,7 @@ class DownloadManager:
             self._loader_versions = resp.json()
             return [v["version"] for v in self._loader_versions]
         except Exception as e:
-            print(f"Failed to fetch loader versions: {e}")
+            logger.warning("Failed to fetch loader versions: %s", e)
             return []
 
     def fetch_installer_info(self) -> tuple[str | None, str | None]:
@@ -78,7 +81,7 @@ class DownloadManager:
                 self._installer_version = latest.get("version")
                 return self._installer_url, self._installer_version
         except Exception as e:
-            print(f"Failed to fetch installer info: {e}")
+            logger.warning("Failed to fetch installer info: %s", e)
 
         return None, None
 
@@ -122,7 +125,7 @@ class DownloadManager:
             return str(cached_jar)
 
         except Exception as e:
-            print(f"Failed to download installer: {e}")
+            logger.warning("Failed to download installer: %s", e)
             cached_jar.unlink(missing_ok=True)
             return None
 
@@ -138,7 +141,7 @@ class DownloadManager:
             self._mojang_manifest = resp.json()
             return self._mojang_manifest
         except Exception as e:
-            print(f"Failed to fetch Mojang manifest: {e}")
+            logger.warning("Failed to fetch Mojang manifest: %s", e)
             return None
 
     def _get_version_json_url(self, mc_version: str) -> str | None:

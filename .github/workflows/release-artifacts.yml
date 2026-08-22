@@ -94,6 +94,7 @@ jobs:
           PIXBUF_LOADERS="$(cygpath -w /ucrt64/lib/gdk-pixbuf-2.0)"
           APP_ICONS="$(cygpath -w packaging/linux)"
           HOSTY_CSS="$(cygpath -w hosty/gtk_ui/style.css)"
+          HOSTY_DAEMON_STATIC="$(cygpath -w hosty/daemon/static)"
 
           mkdir -p build
           rsvg-convert -w 256 -h 256 packaging/linux/io.github.sugarycandybar.Hosty.svg -o build/Hosty.png
@@ -118,6 +119,7 @@ jobs:
             --add-data "$PIXBUF_LOADERS;lib/gdk-pixbuf-2.0" \
             --add-data "$APP_ICONS;icons" \
             --add-data "$HOSTY_CSS;hosty/gtk_ui" \
+            --add-data "$HOSTY_DAEMON_STATIC;hosty/daemon/static" \
             hosty.py
 
           BUNDLE_PIXBUF_DIR="$(find dist/Hosty -type d -path '*/gdk-pixbuf-2.0/2.10.0' | head -n 1)"
