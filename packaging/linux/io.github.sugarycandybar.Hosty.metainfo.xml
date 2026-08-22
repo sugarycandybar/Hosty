@@ -45,6 +45,15 @@
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
   <url type="vcs-browser">https://github.com/sugarycandybar/Hosty</url>
   <releases>
+    <release version="1.7.9" date="2026-08-22">
+      <description>
+        <p>Features and improvements:</p>
+        <ul>
+          <li>Option for remote server management</li>
+          <li>UI improvements</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.8" date="2026-07-25">
       <description>
         <p>Minor bug fixes and improvements:</p>
