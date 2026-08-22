@@ -39,11 +39,14 @@ def show_preferences_window(
     application=None,
 ):
     win = Adw.PreferencesDialog()
-    # Properties like default_size or modal are handled differently in Adw.Dialog
-    # if at all, but we can set them if supported or skip them.
+
+    def show_pref_toast(message: str) -> None:
+        win.add_toast(Adw.Toast(title=message))
 
     page = Adw.PreferencesPage(title=_("General"), icon_name="preferences-system-symbolic")
-    group = Adw.PreferencesGroup(
+
+    # ---------- Application ----------
+    app_group = Adw.PreferencesGroup(
         title=_("Application"),
     )
     data_row = Adw.ActionRow(title=_("Data folder"), subtitle=str(DATA_DIR))
@@ -52,7 +55,7 @@ def show_preferences_window(
     data_button.set_child(data_image)
     data_button.connect("clicked", lambda _: _open_data_folder())
     data_row.add_suffix(data_button)
-    group.add(data_row)
+    app_group.add(data_row)
 
     bg_row = Adw.SwitchRow(
         title=_("Run in background"),
@@ -101,8 +104,88 @@ def show_preferences_window(
 
     startup_row.connect("notify::active", on_startup_toggled)
 
-    group.add(bg_row)
-    group.add(startup_row)
+    app_group.add(bg_row)
+    app_group.add(startup_row)
+
+    prevent_sleep_row = Adw.SwitchRow(
+        title=_("Prevent sleep while server is running"),
+    )
+    prevent_sleep_row.set_active(preferences.prevent_sleep_while_running)
+
+    def on_prevent_sleep_toggled(row, _pspec):
+        preferences.prevent_sleep_while_running = row.get_active()
+        try:
+            if hasattr(parent, "_update_sleep_inhibit"):
+                parent._update_sleep_inhibit()
+        except Exception:
+            pass
+
+    prevent_sleep_row.connect("notify::active", on_prevent_sleep_toggled)
+    app_group.add(prevent_sleep_row)
+
+    page.add(app_group)
+
+    # ---------- Appearance ----------
+    appearance_group = Adw.PreferencesGroup(
+        title=_("Appearance"),
+    )
+
+    theme_keys = ["system", "light", "dark"]
+    theme_names = [_("System"), _("Light"), _("Dark")]
+    theme_model = Gtk.StringList.new(theme_names)
+    theme_row = Adw.ComboRow(
+        title=_("Theme"),
+        model=theme_model,
+    )
+    current_theme = preferences.theme
+    theme_row.set_selected(theme_keys.index(current_theme) if current_theme in theme_keys else 0)
+
+    def on_theme_changed(row, _pspec):
+        key = theme_keys[row.get_selected()]
+        preferences.theme = key
+        try:
+            style_manager = Adw.StyleManager.get_default()
+            if key == "light":
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+            elif key == "dark":
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+            else:
+                style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+        except Exception:
+            pass
+
+    theme_row.connect("notify::selected", on_theme_changed)
+    appearance_group.add(theme_row)
+
+    lang_keys = list(LANGUAGES.keys())
+    lang_names = list(LANGUAGES.values())
+    language_model = Gtk.StringList.new(lang_names)
+
+    lang_row = Adw.ComboRow(
+        title=_("Language"),
+        model=language_model,
+    )
+    current_lang = preferences.language
+    lang_row.set_selected(lang_keys.index(current_lang) if current_lang in lang_keys else 0)
+
+    def on_language_changed(row, _pspec):
+        selected = row.get_selected()
+        lang_code = lang_keys[selected]
+        if lang_code == preferences.language:
+            return
+        preferences.language = lang_code
+        set_app_language(lang_code)
+        show_pref_toast(_("Restart required to apply language change"))
+
+    lang_row.connect("notify::selected", on_language_changed)
+    appearance_group.add(lang_row)
+
+    page.add(appearance_group)
+
+    # ---------- Backups ----------
+    backups_group = Adw.PreferencesGroup(
+        title=_("Backups"),
+    )
 
     autobackup_row = Adw.SwitchRow(
         title=_("Auto backup world on stop"),
@@ -113,7 +196,7 @@ def show_preferences_window(
         preferences.auto_backup_on_stop = row.get_active()
 
     autobackup_row.connect("notify::active", on_autobackup_toggled)
-    group.add(autobackup_row)
+    backups_group.add(autobackup_row)
 
     autodelete_row = Adw.SwitchRow(
         title=_("Auto-delete backups older than 30 days"),
@@ -124,7 +207,14 @@ def show_preferences_window(
         preferences.auto_delete_old_backups = row.get_active()
 
     autodelete_row.connect("notify::active", on_autodelete_toggled)
-    group.add(autodelete_row)
+    backups_group.add(autodelete_row)
+
+    page.add(backups_group)
+
+    # ---------- Mods ----------
+    mods_group = Adw.PreferencesGroup(
+        title=_("Mods"),
+    )
 
     dep_row = Adw.SwitchRow(
         title=_("Auto resolve mod dependencies"),
@@ -135,30 +225,9 @@ def show_preferences_window(
         preferences.auto_resolve_mod_dependencies = row.get_active()
 
     dep_row.connect("notify::active", on_dep_toggled)
-    group.add(dep_row)
+    mods_group.add(dep_row)
 
-    lang_keys = list(LANGUAGES.keys())
-    lang_names = list(LANGUAGES.values())
-    language_model = Gtk.StringList.new(lang_names)
-
-    lang_row = Adw.ComboRow(
-        title=_("Language"),
-        subtitle=_("Requires restart for changes to take effect"),
-        model=language_model,
-    )
-    current_lang = preferences.language
-    lang_row.set_selected(lang_keys.index(current_lang) if current_lang in lang_keys else 0)
-
-    def on_language_changed(row, _pspec):
-        selected = row.get_selected()
-        lang_code = lang_keys[selected]
-        preferences.language = lang_code
-        set_app_language(lang_code)
-
-    lang_row.connect("notify::selected", on_language_changed)
-    group.add(lang_row)
-
-    page.add(group)
+    page.add(mods_group)
 
     # ---------- Remote management ----------
     remote_page = Adw.PreferencesPage(title=_("Remote"), icon_name="network-server-symbolic")
@@ -213,7 +282,7 @@ def show_preferences_window(
         if text:
             clipboard = Gdk.Display.get_default().get_clipboard()
             clipboard.set(GObject.Value(GObject.TYPE_STRING, text))
-            parent.show_toast(_("Token copied to clipboard"))
+            show_pref_toast(_("Token copied to clipboard"))
 
     def _confirm_regenerate():
         dialog = Adw.AlertDialog.new(
@@ -238,7 +307,7 @@ def show_preferences_window(
             return
         if remote_switch.get_active():
             remote_switch.set_subtitle(remote_status_text())
-        parent.show_toast(_("New token generated"))
+        show_pref_toast(_("New token generated"))
 
     def current_remote_error() -> str | None:
         """Validate the current fields. Returns an error message or None."""

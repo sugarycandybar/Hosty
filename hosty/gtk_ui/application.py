@@ -63,6 +63,19 @@ class HostyApplication(Adw.Application):
         # Apply saved language preference
         set_language(self._server_manager.preferences.language)
 
+        # Apply saved theme preference
+        try:
+            style_manager = Adw.StyleManager.get_default()
+            theme = self._server_manager.preferences.theme
+            if theme == "light":
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
+            elif theme == "dark":
+                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+            else:
+                style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
+        except Exception:
+            pass
+
         # Serve the management web UI if enabled in preferences
         if self._server_manager.preferences.remote_management_enabled:
             ok, error = self._start_remote_management()
