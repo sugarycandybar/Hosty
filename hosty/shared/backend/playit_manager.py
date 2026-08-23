@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import os
 import platform
 import re
@@ -24,6 +25,8 @@ from hosty.shared.core.events import EventEmitter
 from hosty.shared.utils.constants import DATA_DIR
 from hosty.shared.utils.net import make_ssl_context
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
+
+logger = logging.getLogger(__name__)
 
 _SSL_CONTEXT = make_ssl_context()
 
@@ -944,6 +947,27 @@ class PlayitManager(EventEmitter):
 
         return self._create_tunnel(port, protocol, label=label, tunnel_type=tunnel_type)
 
+    def _get_tunnel_with_session_refresh(
+        self,
+        port: int,
+        protocol: str = "tcp",
+        label: str = "",
+        tunnel_type: str | None = None,
+    ) -> Tunnel | None:
+        tunnel = self.get_tunnel(port, protocol=protocol, ensure=True, label=label, tunnel_type=tunnel_type)
+        if tunnel:
+            return tunnel
+
+        if not self.initialized:
+            return None
+
+        logger.warning("playit tunnel create failed for %s/%s; refreshing API session and retrying", protocol, port)
+        self.initialized = False
+        if not self._initialize_with_retry(max_attempts=3, delay_seconds=1.0):
+            logger.warning("playit API session refresh failed: %s", self._last_error)
+            return None
+        return self.get_tunnel(port, protocol=protocol, ensure=True, label=label, tunnel_type=tunnel_type)
+
     def _start_agent_service(self, binary: str) -> bool:
         if self.is_running:
             return True
@@ -1077,7 +1101,7 @@ class PlayitManager(EventEmitter):
 
             # Create new tunnel
             try:
-                tunnel = self.get_tunnel(port, protocol=protocol, ensure=True, label=server_id)
+                tunnel = self._get_tunnel_with_session_refresh(port, protocol=protocol, label=server_id)
             except Exception as e:
                 return False, str(e)
 
@@ -1184,10 +1208,9 @@ class PlayitManager(EventEmitter):
             display_name = _("Java") if protocol == "tcp" else _("Bedrock")
 
         try:
-            tunnel = self.get_tunnel(
+            tunnel = self._get_tunnel_with_session_refresh(
                 port,
                 protocol=protocol,
-                ensure=True,
                 label=tunnel_label,
                 tunnel_type=tunnel_type_override,
             )

@@ -45,7 +45,7 @@ class PlayersMixin:
         banned_group.set_header_suffix(ban_add_btn)
 
         wl_toggle = Adw.SwitchRow(
-            title=_("Whitelist enabled"),
+            title=_("Enable whitelist"),
             subtitle=_("Only whitelisted players can join"),
         )
         wl_toggle.connect("notify::active", self._on_whitelist_toggled)
