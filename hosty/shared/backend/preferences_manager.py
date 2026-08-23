@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from hosty.shared.utils.constants import DATA_DIR, DEFAULT_RAM_MB, MAX_RAM_MB, MIN_RAM_MB
+from hosty.shared.utils.file_utils import atomic_write_json
 
 SETTINGS_FILE = DATA_DIR / "settings.json"
 
@@ -46,9 +47,10 @@ class PreferencesManager:
             self._settings = dict(DEFAULT_SETTINGS)
 
     def _save(self) -> None:
-        self._settings_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._settings_path, "w", encoding="utf-8") as f:
-            json.dump(self._settings, f, indent=2)
+        try:
+            atomic_write_json(self._settings_path, self._settings)
+        except Exception:
+            pass
 
     @property
     def default_ram_mb(self) -> int:

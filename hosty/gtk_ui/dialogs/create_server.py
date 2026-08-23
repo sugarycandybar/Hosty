@@ -741,7 +741,9 @@ class CreateServerDialog(Adw.Dialog):
                     continue
                 if version.filename.lower() in installed:
                     continue
-                modrinth_client.download_to(version.download_url, mods_dir / version.filename)
+                modrinth_client.download_to(
+                    version.download_url, mods_dir / version.filename, expected_hashes=version.hashes
+                )
                 installed.add(version.filename.lower())
                 self._record_optimisation_mod_install(server_dir, version, title)
             except Exception:

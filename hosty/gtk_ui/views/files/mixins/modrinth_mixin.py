@@ -761,7 +761,7 @@ class ModrinthMixin:
                     installed_dep_count = 0
                     for dep in deps_to_install:
                         dep_dest = dp_dir / dep.filename
-                        modrinth_client.download_to(dep.download_url, dep_dest)
+                        modrinth_client.download_to(dep.download_url, dep_dest, expected_hashes=dep.hashes)
                         self._record_datapack_install(
                             dep.project_id,
                             dep.name or dep.filename,
@@ -772,7 +772,7 @@ class ModrinthMixin:
                         installed_dep_count += 1
 
                     dest = dp_dir / chosen.filename
-                    modrinth_client.download_to(chosen.download_url, dest)
+                    modrinth_client.download_to(chosen.download_url, dest, expected_hashes=chosen.hashes)
                     GLib.idle_add(lambda f=chosen.filename, c=installed_dep_count: ui_ok_dp(f, c))
                 except Exception as e:
                     GLib.idle_add(lambda m=str(e): ui_err_dp(m))
@@ -950,12 +950,12 @@ class ModrinthMixin:
                     if dep_name == chosen.filename.lower():
                         continue
                     dep_dest = mods_dir / dep.filename
-                    modrinth_client.download_to(dep.download_url, dep_dest)
+                    modrinth_client.download_to(dep.download_url, dep_dest, expected_hashes=dep.hashes)
                     installed_names_local.add(dep_name)
                     installed_dep_count += 1
 
                 dest = mods_dir / chosen.filename
-                modrinth_client.download_to(chosen.download_url, dest)
+                modrinth_client.download_to(chosen.download_url, dest, expected_hashes=chosen.hashes)
                 self._record_dependency_installs(chosen.filename, all_required_deps)
                 self._configure_known_mod_after_download(hit)
                 GLib.idle_add(lambda f=chosen.filename, c=installed_dep_count: ui_ok(f, c))

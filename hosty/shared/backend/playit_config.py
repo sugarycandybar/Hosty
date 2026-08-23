@@ -4,8 +4,9 @@ Per-server playit configuration helpers.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from hosty.shared.utils.file_utils import atomic_write_json
 
 DEFAULT_PLAYIT_CONFIG = {
     "secret": "",
@@ -83,9 +84,7 @@ def save_playit_config(server_dir: str | Path, config: dict) -> bool:
         payload["voicechat_port"] = 24454
 
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
+        atomic_write_json(path, payload)
         return True
     except Exception:
         return False

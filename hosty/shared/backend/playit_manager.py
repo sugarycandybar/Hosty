@@ -464,18 +464,26 @@ class PlayitManager(EventEmitter):
             if not download_url:
                 return False, _("Download URL missing")
 
-            target = self.binary_path
-            target.parent.mkdir(parents=True, exist_ok=True)
-
             req_bin = urllib.request.Request(download_url, headers={"User-Agent": "Hosty/1.0"})
             with urllib.request.urlopen(req_bin, timeout=120.0, context=_SSL_CONTEXT) as resp:
                 payload = resp.read()
 
-            with open(target, "wb") as f:
-                f.write(payload)
+            if not self._is_valid_playit_payload(payload):
+                return False, _("Downloaded playit agent is invalid or corrupted; please retry")
 
-            if sys.platform != "win32":
-                target.chmod(0o755)
+            target = self.binary_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+
+            tmp_target = target.with_name(target.name + ".part")
+            try:
+                with open(tmp_target, "wb") as f:
+                    f.write(payload)
+                if sys.platform != "win32":
+                    tmp_target.chmod(0o755)
+                os.replace(tmp_target, target)
+            except Exception:
+                tmp_target.unlink(missing_ok=True)
+                raise
 
             marker = target.parent / ".playit-version"
             marker.write_text(version_tag, encoding="utf-8")
@@ -483,6 +491,29 @@ class PlayitManager(EventEmitter):
             return True, str(target)
         except Exception as e:
             return False, str(e)
+
+    def _is_valid_playit_payload(self, payload: bytes) -> bool:
+        """Validate the downloaded agent: minimum size and executable magic bytes."""
+        min_size = 1024 * 1024
+        if len(payload) < min_size:
+            return False
+
+        sys_name = platform.system().lower()
+        if "windows" in sys_name:
+            return payload[:2] == b"MZ"
+
+        mac_magics = (
+            b"\xfe\xed\xfa\xcf",
+            b"\xcf\xfa\xed\xfe",
+            b"\xfe\xed\xfa\xce",
+            b"\xce\xfa\xed\xfe",
+            b"\xca\xfe\xba\xbe",
+            b"\xbe\xba\xfe\xca",
+        )
+        if "darwin" in sys_name or "mac" in sys_name:
+            return payload[:4] in mac_magics
+
+        return payload[:4] == b"\x7fELF"
 
     def install_latest_binary(self) -> tuple[bool, str]:
         """Download and install playit binary (pinned to v0.17.1 for compatibility)."""

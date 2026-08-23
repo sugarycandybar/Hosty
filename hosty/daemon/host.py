@@ -13,6 +13,7 @@ import threading
 from hosty.daemon.server import HostyDaemonServer
 from hosty.shared.backend.server_manager import ServerManager
 from hosty.shared.utils.constants import DATA_DIR
+from hosty.shared.utils.file_utils import atomic_write_json
 
 DAEMON_CONFIG_FILE = DATA_DIR / "daemon.json"
 DEFAULT_HOST = "127.0.0.1"
@@ -38,9 +39,10 @@ def load_daemon_config() -> dict[str, str]:
 def save_daemon_config(host: str, port: int, token: str) -> None:
     """Persist daemon settings so a bare `--headless` run uses the same config."""
     try:
-        DAEMON_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(DAEMON_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump({"host": host, "port": int(port), "token": token}, f, indent=2)
+        atomic_write_json(
+            DAEMON_CONFIG_FILE,
+            {"host": host, "port": int(port), "token": token},
+        )
     except OSError:
         pass
 

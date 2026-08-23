@@ -1160,11 +1160,13 @@ class PlayitMixin:
                 continue
             if dep_name.lower() == str(version.filename).lower():
                 continue
-            modrinth_client.download_to(dep.download_url, mods_dir / dep_name)
+            modrinth_client.download_to(dep.download_url, mods_dir / dep_name, expected_hashes=dep.hashes)
             installed_names.add(dep_name.lower())
 
         if str(version.filename).lower() not in installed_names:
-            modrinth_client.download_to(version.download_url, mods_dir / version.filename)
+            modrinth_client.download_to(
+                version.download_url, mods_dir / version.filename, expected_hashes=version.hashes
+            )
 
         self._record_tunnel_installed_mod(version.project_id or project_id, title, version)
         self._record_tunnel_dependency_installs(version.filename, deps)

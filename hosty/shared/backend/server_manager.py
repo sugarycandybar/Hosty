@@ -27,6 +27,7 @@ from hosty.shared.utils.constants import (
     ServerStatus,
     get_required_java_version,
 )
+from hosty.shared.utils.file_utils import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -102,9 +103,7 @@ class ServerManager(EventEmitter):
         """Persist servers to JSON."""
         data = {"servers": [s.to_dict() for s in self._servers.values()]}
         try:
-            CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(CONFIG_FILE, "w") as f:
-                json.dump(data, f, indent=2)
+            atomic_write_json(CONFIG_FILE, data)
         except Exception as e:
             logger.warning("Failed to save servers: %s", e)
 
@@ -304,7 +303,7 @@ class ServerManager(EventEmitter):
         self._save()
         existing_process = self._processes.get(server_id)
         if existing_process:
-            existing_process.java_path = self.java_manager.get_java_path(info.java_version) or "java"
+            self._refresh_process_runtime(existing_process, info)
         self.emit_on_main_thread("server-changed", server_id)
         progress(1.0, _("Server runtime updated"))
 
@@ -325,9 +324,7 @@ class ServerManager(EventEmitter):
             return {}
 
     def _write_json_file(self, path: Path, data: dict) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        atomic_write_json(path, data)
 
     def _server_datapacks_dir(self, root: Path) -> Path:
         world_name = self._configured_level_name(root)
@@ -704,7 +701,7 @@ class ServerManager(EventEmitter):
                     dep_name = Path(str(dep.filename)).name
                     if dep_name.casefold() in managed_mods or dep_name.casefold() == filename.casefold():
                         continue
-                    modrinth_client.download_to(dep.download_url, mods_dir / dep_name)
+                    modrinth_client.download_to(dep.download_url, mods_dir / dep_name, expected_hashes=dep.hashes)
                     dep_project_id = str(getattr(dep, "project_id", "") or "").strip()
                     if dep_project_id:
                         mod_state[dep_project_id] = {
@@ -986,6 +983,22 @@ class ServerManager(EventEmitter):
         self._save()
         self.emit_on_main_thread("server-removed", server_id)
 
+    def _refresh_process_runtime(self, process: ServerProcess, info: ServerInfo) -> None:
+        """Re-resolve launch settings on a cached ServerProcess.
+
+        The ServerProcess object is cached per server; changes made in
+        Properties (Java version, RAM, JVM args) must apply on the next
+        start even though the object already exists."""
+        if process.is_running:
+            return
+        java_path = self.java_manager.get_java_path(info.java_version)
+        if not java_path:
+            java_path = shutil.which("java")
+        if java_path:
+            process.java_path = java_path
+        process.ram_mb = info.ram_mb
+        process.jvm_args = info.jvm_args
+
     def get_process(self, server_id: str) -> ServerProcess | None:
         """Get or create a ServerProcess for a server."""
         info = self._servers.get(server_id)
@@ -1010,6 +1023,8 @@ class ServerManager(EventEmitter):
                 max_players=max_players,
                 jvm_args=info.jvm_args,
             )
+        else:
+            self._refresh_process_runtime(self._processes[server_id], info)
 
         return self._processes[server_id]
 
@@ -1049,6 +1064,16 @@ class ServerManager(EventEmitter):
         info = self._servers.get(server_id)
         if not info:
             return False, {"kind": "not-found"}
+
+        # Ensure the selected Java runtime exists before launching; the
+        # properties dialog only promises auto-install — this is where it
+        # actually happens.
+        if not self.java_manager.is_java_available(info.java_version):
+            sys_ver = self.java_manager.system_java_version
+            if not (sys_ver and sys_ver >= info.java_version):
+                ok, msg = self.java_manager.download_jre_sync(info.java_version)
+                if not ok or not self.java_manager.is_java_available(info.java_version):
+                    return False, {"kind": "java-download", "message": msg}
 
         process = self.get_process(server_id)
         if not process:
@@ -1527,24 +1552,35 @@ class ServerManager(EventEmitter):
 
         root = info.server_dir
         dst = root / "world"
+        staged = root / ".hosty-world-import.part"
         try:
-            level_name = self._configured_level_name(root)
-            for item in root.iterdir():
-                if not self._is_world_dir(item, level_name):
-                    continue
-                if item.resolve() == dst.resolve():
-                    continue
-                if item.exists():
-                    shutil.rmtree(item, ignore_errors=True)
-
-            if dst.exists():
-                shutil.rmtree(dst, ignore_errors=True)
-
             from hosty.shared.utils.nbt_utils import get_world_info
 
             seed, wtype = get_world_info(src)
 
-            shutil.copytree(src, dst)
+            # Stage the copy first so a failed copy never destroys the old world
+            shutil.rmtree(staged, ignore_errors=True)
+            try:
+                shutil.copytree(src, staged)
+                if not (staged / "level.dat").is_file():
+                    raise RuntimeError(_("Copied world is missing level.dat"))
+            except Exception:
+                shutil.rmtree(staged, ignore_errors=True)
+                raise
+
+            # Staged copy verified — only now remove existing worlds and swap in
+            level_name = self._configured_level_name(root)
+            for item in root.iterdir():
+                if item == staged:
+                    continue
+                if not self._is_world_dir(item, level_name):
+                    continue
+                shutil.rmtree(item, ignore_errors=True)
+
+            if dst.exists():
+                shutil.rmtree(dst, ignore_errors=True)
+            staged.replace(dst)
+
             cfg = ConfigManager(root)
             cfg.load()
             cfg.set_value("level-name", "world")
@@ -1556,8 +1592,7 @@ class ServerManager(EventEmitter):
                 cfg.set_value("level-type", wtype)
             cfg.save()
         except Exception as e:
-            if dst.exists():
-                shutil.rmtree(dst, ignore_errors=True)
+            shutil.rmtree(staged, ignore_errors=True)
             return False, str(e)
 
         self.emit_on_main_thread("server-changed", server_id)
@@ -1585,14 +1620,17 @@ class ServerManager(EventEmitter):
             dest = dest.with_suffix(".zip")
         dest.parent.mkdir(parents=True, exist_ok=True)
 
+        tmp_dest = dest.with_name(dest.name + ".part")
         try:
-            with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(tmp_dest, "w", zipfile.ZIP_DEFLATED) as zf:
                 for item in world_path.rglob("*"):
                     if not item.is_file():
                         continue
                     arc = Path(world_path.name) / item.relative_to(world_path)
                     zf.write(item, arcname=str(arc).replace("\\", "/"))
+            tmp_dest.replace(dest)
         except Exception as e:
+            tmp_dest.unlink(missing_ok=True)
             return False, str(e)
 
         return True, str(dest)
@@ -1617,20 +1655,25 @@ class ServerManager(EventEmitter):
 
         backups_dir = root / "hosty-backups"
         backups_dir.mkdir(parents=True, exist_ok=True)
+        for stale in backups_dir.glob("*.part"):
+            stale.unlink(missing_ok=True)
 
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         prefix = "hosty-auto-backup" if auto else "hosty-backup"
         backup_path = backups_dir / f"{prefix}-{stamp}.zip"
+        tmp_path = backup_path.with_name(backup_path.name + ".part")
 
         try:
-            with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 world_dir = worlds[0]
                 for item in world_dir.rglob("*"):
                     if not item.is_file():
                         continue
                     arc = item.relative_to(root)
                     zf.write(item, arcname=str(arc).replace("\\", "/"))
+            tmp_path.replace(backup_path)
         except Exception as e:
+            tmp_path.unlink(missing_ok=True)
             return False, str(e)
 
         self._cleanup_old_backups(server_id)
@@ -1653,15 +1696,18 @@ class ServerManager(EventEmitter):
 
         backups_dir = root / "hosty-backups"
         backups_dir.mkdir(parents=True, exist_ok=True)
+        for stale in backups_dir.glob("*.part"):
+            stale.unlink(missing_ok=True)
 
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
         # Tag the backup with the current server version
         version = info.mc_version if info.mc_version else "unknown"
         backup_path = backups_dir / f"hosty-full-backup-{version}-{stamp}.zip"
+        tmp_path = backup_path.with_name(backup_path.name + ".part")
 
         try:
-            with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 for item in root.rglob("*"):
                     if not item.is_file():
                         continue
@@ -1673,7 +1719,9 @@ class ServerManager(EventEmitter):
 
                     arc = item.relative_to(root)
                     zf.write(item, arcname=str(arc).replace("\\", "/"))
+            tmp_path.replace(backup_path)
         except Exception as e:
+            tmp_path.unlink(missing_ok=True)
             return False, str(e)
 
         self._cleanup_old_backups(server_id)

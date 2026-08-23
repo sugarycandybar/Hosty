@@ -191,6 +191,52 @@ class PropertiesView(Gtk.Box):
         self._server_manager._save()
         self._server_manager.emit_on_main_thread("server-changed", self._server_info.id)
         self._check_restart_banner()
+        self._maybe_offer_java_download(java_ver)
+
+    def _maybe_offer_java_download(self, java_ver: int) -> None:
+        """When an unavailable runtime is selected, offer to install it now."""
+        if not self._server_manager:
+            return
+        java_mgr = self._server_manager.java_manager
+        if java_mgr.is_java_available(java_ver):
+            return
+
+        dialog = Adw.AlertDialog.new(
+            _("Install Java {}?").format(java_ver),
+            _("Java {} is not installed yet. It will be downloaded automatically when the server starts.").format(
+                java_ver
+            ),
+        )
+        dialog.add_response("on-start", _("Install on Start"))
+        dialog.add_response("install", _("Install Now"))
+        dialog.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response("on-start")
+        dialog.set_close_response("on-start")
+
+        def on_response(_d, response):
+            if response == "install":
+                self._download_java_now(java_ver)
+
+        dialog.connect("response", on_response)
+        dialog.present(self.get_root())
+
+    def _download_java_now(self, java_ver: int) -> None:
+        """Download the selected Java runtime in the background."""
+        java_mgr = self._server_manager.java_manager
+
+        def finish():
+            # Re-check availability instead of trusting the thread message alone
+            if java_mgr.is_java_available(java_ver):
+                self._show_toast(_("Java {} installed").format(java_ver), timeout=3)
+            else:
+                self._show_toast(_("Failed to download Java {}").format(java_ver), timeout=4)
+            return False
+
+        def done(_success: bool, _msg: str):
+            GLib.idle_add(finish)
+
+        self._show_toast(_("Downloading Java {}...").format(java_ver), timeout=3)
+        java_mgr.download_jre(java_ver, progress_callback=None, done_callback=done)
 
     def _check_restart_banner(self) -> None:
         if not self._server_manager or not self._server_info:

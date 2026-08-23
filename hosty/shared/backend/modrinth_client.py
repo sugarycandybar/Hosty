@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +50,7 @@ class ModrinthVersion:
     published: str
     download_url: str
     filename: str
+    hashes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -75,6 +76,7 @@ def _version_to_model(ver: dict[str, Any]) -> ModrinthVersion | None:
         published=ver.get("date_published", ""),
         download_url=chosen.get("url", ""),
         filename=chosen.get("filename", "mod.jar"),
+        hashes={str(k): str(v) for k, v in (chosen.get("hashes") or {}).items() if v},
     )
 
 
@@ -423,9 +425,22 @@ def find_compatible_version_file(project_id: str, game_version: str, loader: str
     return (chosen.download_url, chosen.filename)
 
 
-def download_to(url: str, dest: Path, timeout: float = 120.0) -> None:
+def download_to(
+    url: str,
+    dest: Path,
+    timeout: float = 120.0,
+    expected_hashes: dict[str, str] | None = None,
+) -> None:
+    """Download url to dest, verifying checksums (when provided) and jar magic."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     data = _download_bytes(url, timeout=timeout)
+
+    if expected_hashes and not _verify_hash(data, expected_hashes):
+        raise RuntimeError(f"Checksum mismatch for {Path(dest).name}")
+
+    if str(dest).lower().endswith(".jar") and not data.startswith(b"PK"):
+        raise RuntimeError(f"Downloaded file is not a valid jar: {Path(dest).name}")
+
     dest.write_bytes(data)
 
 

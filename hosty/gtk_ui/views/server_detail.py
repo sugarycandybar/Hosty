@@ -3,6 +3,8 @@ ServerDetailView - Main detail container with ViewStack for Console, Performance
 Uses Adw.ToolbarView for proper Adwaita header bar integration.
 """
 
+import threading
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -35,6 +37,7 @@ class ServerDetailView(Gtk.Box):
         self._selected_status_handler_id = None
         self._mods_operation_handler_id = None
         self._general_status_connected: set[int] = set()
+        self._start_in_progress = False
 
         self._tab_hosts: dict[str, Gtk.Box] = {}
         self._console_views: dict[str, ConsoleView] = {}
@@ -398,10 +401,26 @@ class ServerDetailView(Gtk.Box):
 
         if self._selected_process.is_running:
             self._server_manager.stop_server(server_id)
-        else:
-            ok, error = self._server_manager.start_server(server_id)
-            if not ok and error:
-                self._handle_start_error(error)
+        elif not self._start_in_progress:
+            # Start can block on a Java download; keep the UI responsive.
+            self._start_in_progress = True
+            self._toggle_btn.set_sensitive(False)
+            self._toggle_btn.set_label(_("Starting"))
+
+            def worker():
+                ok, error = self._server_manager.start_server(server_id)
+
+                def done():
+                    self._start_in_progress = False
+                    if not ok and error:
+                        self._handle_start_error(error)
+                    status = self._selected_process.status if self._selected_process else ServerStatus.STOPPED
+                    self._update_toggle_for_selected(status)
+                    return False
+
+                GLib.idle_add(done)
+
+            threading.Thread(target=worker, daemon=True).start()
 
     def _handle_start_error(self, error: dict):
         """Show a dialog describing why a server could not start."""
@@ -410,6 +429,13 @@ class ServerDetailView(Gtk.Box):
             dialog = Adw.AlertDialog.new(
                 _("Cannot Start Server"),
                 _("Mods are currently being installed or updated. Please wait for the operation to finish."),
+            )
+            dialog.add_response("ok", _("OK"))
+            dialog.present(self.get_root())
+        elif kind == "java-download":
+            dialog = Adw.AlertDialog.new(
+                _("Java Download Failed"),
+                error.get("message") or _("The required Java runtime could not be downloaded."),
             )
             dialog.add_response("ok", _("OK"))
             dialog.present(self.get_root())

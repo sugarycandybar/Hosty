@@ -1225,7 +1225,7 @@ class ModsMixin:
                 # Download new dependencies
                 new_dep_names = {str(dep.filename).strip().lower() for dep in deps_to_install}
                 for dep in deps_to_install:
-                    modrinth_client.download_to(dep.download_url, mods_dir / dep.filename)
+                    modrinth_client.download_to(dep.download_url, mods_dir / dep.filename, expected_hashes=dep.hashes)
 
                 # Remove old dependencies that are no longer needed
                 removed_deps = old_dep_names - new_dep_names
@@ -1244,7 +1244,9 @@ class ModsMixin:
                     except Exception:
                         pass
 
-                modrinth_client.download_to(latest.download_url, mods_dir / latest.filename)
+                modrinth_client.download_to(
+                    latest.download_url, mods_dir / latest.filename, expected_hashes=latest.hashes
+                )
                 if old_name and old_name.lower() != latest.filename.lower():
                     old_path = self._find_mod_jar_path(mods_dir, old_name)
                     if old_path and old_path.exists():
@@ -1283,7 +1285,7 @@ class ModsMixin:
                     raise RuntimeError("No datapacks folder available.")
                 old_filename = str((meta or {}).get("filename", "")).strip()
                 dest = dp_dir / latest.filename
-                modrinth_client.download_to(latest.download_url, dest)
+                modrinth_client.download_to(latest.download_url, dest, expected_hashes=latest.hashes)
                 if old_filename and old_filename.lower() != latest.filename.lower():
                     old_path = dp_dir / old_filename
                     if old_path.exists():

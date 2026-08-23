@@ -24,6 +24,18 @@ MOJANG_VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manif
 logger = logging.getLogger(__name__)
 
 
+def _is_valid_jar(path: Path, min_size: int = 50 * 1024) -> bool:
+    try:
+        if not path.is_file():
+            return False
+        if path.stat().st_size < min_size:
+            return False
+        with open(path, "rb") as f:
+            return f.read(2) == b"PK"
+    except OSError:
+        return False
+
+
 class DownloadManager:
     """Manages downloads of Fabric components and vanilla server JARs."""
 
@@ -94,16 +106,20 @@ class DownloadManager:
         if not url:
             return None
 
-        # Check cache
+        # Check cache (validate: stale/HTML cache must not be reused)
         cached_jar = CACHE_DIR / f"fabric-installer-{version}.jar"
-        if cached_jar.exists():
+        if _is_valid_jar(cached_jar):
             if progress_callback:
                 progress_callback(1.0, _("Using cached installer"))
             return str(cached_jar)
+        if cached_jar.exists():
+            cached_jar.unlink(missing_ok=True)
 
         try:
             if progress_callback:
                 progress_callback(0.0, _("Downloading Fabric installer..."))
+
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
             resp = requests.get(url, stream=True, timeout=60)
             resp.raise_for_status()
@@ -113,11 +129,18 @@ class DownloadManager:
 
             with open(cached_jar, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
                     f.write(chunk)
                     downloaded += len(chunk)
                     if total > 0 and progress_callback:
                         frac = downloaded / total
                         progress_callback(frac, _("Downloading installer... {:.0f} KB").format(downloaded / 1024))
+
+            if not _is_valid_jar(cached_jar):
+                logger.warning("Downloaded Fabric installer failed validation: %s", cached_jar)
+                cached_jar.unlink(missing_ok=True)
+                return None
 
             if progress_callback:
                 progress_callback(1.0, _("Installer downloaded"))
@@ -173,11 +196,13 @@ class DownloadManager:
         """
         dest = Path(server_dir) / "server.jar"
 
-        # Skip if already present
-        if dest.exists() and dest.stat().st_size > 1000:
+        # Skip if already present and valid
+        if _is_valid_jar(dest, min_size=1000):
             if progress_callback:
                 progress_callback(1.0, _("server.jar already present"))
             return True, _("server.jar already present")
+        if dest.exists():
+            dest.unlink(missing_ok=True)
 
         try:
             # Step 1: Get version JSON URL from manifest
@@ -222,6 +247,8 @@ class DownloadManager:
 
             with open(dest, "wb") as f:
                 for chunk in resp.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
                     f.write(chunk)
                     downloaded += len(chunk)
                     if total > 0 and progress_callback:
@@ -231,6 +258,10 @@ class DownloadManager:
                         progress_callback(
                             frac, _("Downloading server.jar... {:.1f}/{:.1f} MB").format(size_mb, total_mb)
                         )
+
+            if not _is_valid_jar(dest, min_size=1000):
+                dest.unlink(missing_ok=True)
+                return False, _("Downloaded server.jar is invalid or corrupted; please retry")
 
             if progress_callback:
                 progress_callback(1.0, _("server.jar downloaded"))
@@ -268,6 +299,17 @@ class DownloadManager:
             (success, message) tuple.
         """
         import subprocess
+
+        # Validate installer file before invoking java
+        installer_path = Path(installer_jar)
+        if not installer_path.is_file():
+            return False, _("Installer file not found at {} — please retry creation").format(installer_jar)
+        if not _is_valid_jar(installer_path):
+            try:
+                installer_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return False, _("Installer file is invalid or corrupted (not a JAR); please retry creation")
 
         Path(server_dir).mkdir(parents=True, exist_ok=True)
 
