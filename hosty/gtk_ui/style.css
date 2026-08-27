@@ -295,3 +295,8 @@ headerbar .navigation-controls-bar {
 .server-sidebar row.context-open {
     background-color: alpha(currentColor, 0.06);
 }
+
+/* Java versions below the recommended requirement for the selected MC version */
+.java-insufficient {
+    color: #e5a50a;
+}

@@ -200,9 +200,12 @@ function selectServer(id) {
   const s = servers.find((x) => x.id === id);
   if (s) {
     $("server-name").textContent = s.name;
+    const loaderLabels = { fabric: "Fabric", neoforge: "NeoForge", forge: "Forge", paper: "Paper" };
+    const loaderLabel = loaderLabels[s.loader_type || "fabric"] || s.loader_type;
     $("server-meta").textContent =
-      s.mc_version + " \u00b7 " + s.ram_mb + " MB RAM" +
-      (s.loader_version ? " \u00b7 loader " + s.loader_version : "");
+      s.mc_version + " \u00b7 " + loaderLabel +
+      (s.loader_version ? " " + s.loader_version : "") +
+      " \u00b7 " + s.ram_mb + " MB RAM";
     applyStatus(s);
   } else {
     $("server-name").textContent = "";

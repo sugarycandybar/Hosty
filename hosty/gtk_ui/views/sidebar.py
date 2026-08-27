@@ -10,7 +10,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Adw, Gdk, Gio, GObject, Gtk
 
 from hosty.shared.backend.server_manager import ServerInfo, ServerManager
-from hosty.shared.utils.constants import ServerStatus
+from hosty.shared.utils.constants import ServerStatus, mod_loader_name
 from hosty.shared.utils.image_utils import load_pixbuf
 
 
@@ -27,7 +27,7 @@ class ServerRow(Adw.ActionRow):
 
         self.set_title(server_info.name)
         self.set_subtitle(self._subtitle_text())
-        self.set_tooltip_text(server_info.mc_version)
+        self.set_tooltip_text(self._tooltip_text())
         self.set_activatable(True)
 
         # Server icon
@@ -47,10 +47,20 @@ class ServerRow(Adw.ActionRow):
         # Keep startup fast by attaching to a process only when needed.
         self.attach_existing_process()
 
+    def _version_label(self) -> str:
+        """MC version plus loader name, e.g. "1.21.4 · Fabric"."""
+        base = self.server_info.mc_version
+        if not base:
+            return _("Unknown")
+        return f"{base} · {mod_loader_name(self.server_info.loader_type)}"
+
     def _subtitle_text(self) -> str:
         if self._process and self._process.is_running:
-            return f"{self.server_info.mc_version} · {self._process.player_count}/{self._process.max_players}"
-        return self.server_info.mc_version
+            return f"{self._version_label()} · {self._process.player_count}/{self._process.max_players}"
+        return self._version_label()
+
+    def _tooltip_text(self) -> str:
+        return self._version_label()
 
     def _update_icon(self):
         """Update the avatar icon from the server's icon path."""
@@ -132,7 +142,7 @@ class ServerRow(Adw.ActionRow):
         self.server_info = server_info
         self.set_title(server_info.name)
         self.set_subtitle(self._subtitle_text())
-        self.set_tooltip_text(server_info.mc_version)
+        self.set_tooltip_text(self._tooltip_text())
         self._update_icon()
 
 

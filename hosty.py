@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Hosty - Fabric Minecraft Server Manager
+Hosty - Minecraft Server Manager
 A modern libadwaita application for creating, running,
-and managing Fabric Minecraft servers.
+and managing modded Minecraft servers.
 """
 
 import os

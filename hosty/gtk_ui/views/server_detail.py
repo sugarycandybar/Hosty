@@ -19,7 +19,7 @@ from hosty.gtk_ui.views.performance_view import PerformanceView
 from hosty.gtk_ui.views.properties_view import PropertiesView
 from hosty.shared.backend.server_manager import ServerInfo, ServerManager
 from hosty.shared.backend.server_process import ServerProcess
-from hosty.shared.utils.constants import ServerStatus
+from hosty.shared.utils.constants import ServerStatus, mod_loader_name
 
 
 class ServerDetailView(Gtk.Box):
@@ -145,7 +145,9 @@ class ServerDetailView(Gtk.Box):
             self._perf_view = PerformanceView()
             self._tab_hosts["performance"].append(self._perf_view)
             if self._selected_process:
-                self._perf_view.set_process(self._selected_process)
+                loader = self._current_server.loader_type if self._current_server else ""
+                server_id = self._current_server.id if self._current_server else ""
+                self._perf_view.set_process(self._selected_process, loader_type=loader, server_id=server_id)
                 self._sync_perf_with_io_process()
         return self._perf_view
 
@@ -194,7 +196,9 @@ class ServerDetailView(Gtk.Box):
             return
 
         # Update title
-        self._view_switcher_title.set_title(f"{server_info.name} · {server_info.mc_version}")
+        self._view_switcher_title.set_title(
+            f"{server_info.name} · {server_info.mc_version} · {mod_loader_name(server_info.loader_type)}"
+        )
         self._view_switcher_title.set_subtitle("")
 
         # Get/create the server process for the selected server (start/stop, status row)
@@ -210,7 +214,11 @@ class ServerDetailView(Gtk.Box):
 
         # Perf follows the selected server
         if self._perf_view:
-            self._perf_view.set_process(selected)
+            self._perf_view.set_process(
+                selected,
+                loader_type=server_info.loader_type,
+                server_id=server_info.id,
+            )
             self._sync_perf_with_io_process()
 
         self._ensure_connect_view().set_server(server_info, self._server_manager)

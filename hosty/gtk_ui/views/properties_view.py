@@ -18,13 +18,29 @@ from hosty.shared.utils.constants import (
     DEFAULT_SERVER_PROPERTIES,
     DIFFICULTIES,
     GAMEMODES,
+    LOADER_FABRIC,
+    LOADER_PAPER,
     MAX_RAM_MB,
     MIN_RAM_MB,
     get_required_java_version,
+    mod_loader_name,
+    normalize_loader_type,
 )
 
 DIFFICULTY_MODES = [*DIFFICULTIES, "hardcore"]
 COMMON_JAVA_VERSIONS = [8, 11, 16, 17, 21, 25]
+
+# Aikar's recommended flags for Paper servers (Xmx/Xms are handled via RAM row)
+AIKAR_FLAGS = (
+    "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 "
+    "-XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch "
+    "-XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M "
+    "-XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 "
+    "-XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 "
+    "-XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 "
+    "-XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 "
+    "-Dusing.aikars.flags=mcflags.emc.gs -Daikars.new.flags=true"
+)
 
 
 class PropertiesView(Gtk.Box):
@@ -41,6 +57,7 @@ class PropertiesView(Gtk.Box):
         self._ram_row: Adw.SpinRow | None = None
         self._suppress_changes = False
         self._app_toast_overlay = toast_overlay
+        self._java_item_rows: list[dict] = []
 
         # Restart banner
         self._banner = Adw.Banner()
@@ -119,6 +136,7 @@ class PropertiesView(Gtk.Box):
             model=Gtk.StringList.new(java_labels),
         )
         self._java_version_row.connect("notify::selected", self._on_java_version_changed)
+        self._apply_java_item_factories()
         java_group.add(self._java_version_row)
 
         self._jvm_args_row = Adw.EntryRow(title=_("JVM Arguments"))
@@ -126,6 +144,16 @@ class PropertiesView(Gtk.Box):
         self._jvm_args_row.set_tooltip_text(_("Additional arguments passed to the JVM (e.g. -XX:+UseG1GC)"))
         self._jvm_args_row.connect("apply", self._on_jvm_args_applied)
         java_group.add(self._jvm_args_row)
+
+        self._paper_flags_row = Adw.ActionRow(
+            title=_("Apply recommended Paper flags"),
+            subtitle=_("Aikar's optimized flags for better performance"),
+        )
+        paper_flags_btn = Gtk.Button(label=_("Apply"), valign=Gtk.Align.CENTER)
+        paper_flags_btn.add_css_class("suggested-action")
+        paper_flags_btn.connect("clicked", self._on_apply_paper_flags)
+        self._paper_flags_row.add_suffix(paper_flags_btn)
+        java_group.add(self._paper_flags_row)
 
         page.add(java_group)
 
@@ -183,12 +211,15 @@ class PropertiesView(Gtk.Box):
 
     def _on_java_version_changed(self, *_args) -> None:
         """Save Java version selection to server info."""
+        self._refresh_java_item_state()
         if self._suppress_changes or not self._server_manager or not self._server_info:
             return
         idx = self._java_version_row.get_selected()
         java_ver = COMMON_JAVA_VERSIONS[idx] if idx < len(COMMON_JAVA_VERSIONS) else 21
         self._server_info.java_version = java_ver
         self._server_manager._save()
+        # Sync the cached process so the next start uses the new Java
+        self._server_manager.refresh_process_runtime(self._server_info.id)
         self._server_manager.emit_on_main_thread("server-changed", self._server_info.id)
         self._check_restart_banner()
         self._maybe_offer_java_download(java_ver)
@@ -227,6 +258,9 @@ class PropertiesView(Gtk.Box):
         def finish():
             # Re-check availability instead of trusting the thread message alone
             if java_mgr.is_java_available(java_ver):
+                if self._server_info:
+                    # Make the cached process pick up the new runtime immediately
+                    self._server_manager.refresh_process_runtime(self._server_info.id)
                 self._show_toast(_("Java {} installed").format(java_ver), timeout=3)
             else:
                 self._show_toast(_("Failed to download Java {}").format(java_ver), timeout=4)
@@ -237,6 +271,25 @@ class PropertiesView(Gtk.Box):
 
         self._show_toast(_("Downloading Java {}...").format(java_ver), timeout=3)
         java_mgr.download_jre(java_ver, progress_callback=None, done_callback=done)
+
+    def _update_paper_flags_visibility(self) -> None:
+        if not hasattr(self, "_paper_flags_row") or not self._paper_flags_row:
+            return
+        is_paper = bool(self._server_info and normalize_loader_type(self._server_info.loader_type) == LOADER_PAPER)
+        self._paper_flags_row.set_visible(is_paper)
+
+    def _on_apply_paper_flags(self, *_args) -> None:
+        if not self._server_info:
+            return
+        current = self._jvm_args_row.get_text().strip()
+        if "aikars.flags" in current:
+            self._show_toast(_("Recommended flags already applied"), timeout=3)
+            return
+        new_args = f"{current} {AIKAR_FLAGS}".strip() if current else AIKAR_FLAGS
+        self._jvm_args_row.set_text(new_args)
+        # set_text triggers changed -> _save_jvm_args via signal, but force save
+        # in case suppress is active
+        self._save_jvm_args()
 
     def _check_restart_banner(self) -> None:
         if not self._server_manager or not self._server_info:
@@ -254,6 +307,8 @@ class PropertiesView(Gtk.Box):
             return
         self._server_info.jvm_args = self._jvm_args_row.get_text().strip()
         self._server_manager._save()
+        # Sync the cached process so the next start uses the new args
+        self._server_manager.refresh_process_runtime(self._server_info.id)
         self._server_manager.emit_on_main_thread("server-changed", self._server_info.id)
         self._check_restart_banner()
 
@@ -367,14 +422,20 @@ class PropertiesView(Gtk.Box):
 
         if self._server_info and hasattr(self, "_version_row"):
             version_text = self._server_info.mc_version or _("Unknown")
-            if self._server_info.loader_version:
-                version_text += f" ({self._server_info.loader_version})"
+            if self._server_info.loader_type != LOADER_FABRIC or self._server_info.loader_version:
+                version_text += f" ({mod_loader_name(self._server_info.loader_type)}"
+                if self._server_info.loader_version:
+                    version_text += f" {self._server_info.loader_version}"
+                version_text += ")"
             self._version_row.set_subtitle(version_text)
 
         if config:
             config.load()
             self._populate()
         self._populate_java_settings()
+        # Requirement depends on this server's MC version; re-tint stale items
+        self._refresh_java_item_state()
+        self._update_paper_flags_visibility()
         self._refresh_upgrade_button()
 
     def _refresh_upgrade_button(self):
@@ -430,16 +491,24 @@ class PropertiesView(Gtk.Box):
             title=_("Runtime"),
         )
         mc_values: list[str] = []
-        loader_values: list[str] = []
         mc_row = Adw.ComboRow(title=_("Minecraft version"), model=Gtk.StringList.new([_("Loading...")]))
         runtime_group.add(mc_row)
 
-        fabric_version_row = Adw.ActionRow(
-            title=_("Fabric loader"),
+        loader_type_row = Adw.ActionRow(
+            title=_("Mod loader"),
+            subtitle=mod_loader_name(self._server_info.loader_type),
+        )
+        loader_type_row.set_activatable(False)
+        loader_type_row.add_suffix(Gtk.Image.new_from_icon_name("lock-symbolic"))
+        loader_type_row.set_tooltip_text(_("The mod loader can't be changed after creation"))
+        runtime_group.add(loader_type_row)
+
+        loader_version_row = Adw.ActionRow(
+            title=_("Loader version"),
             subtitle=_("Loading..."),
         )
-        fabric_version_row.set_activatable(False)
-        runtime_group.add(fabric_version_row)
+        loader_version_row.set_activatable(False)
+        runtime_group.add(loader_version_row)
 
         java_info_row = Adw.ActionRow(
             title=_("Java Runtime"),
@@ -474,6 +543,7 @@ class PropertiesView(Gtk.Box):
         review_rows: list[Gtk.Widget] = []
         selected_mc = {"value": ""}
         selected_loader = {"value": ""}
+        loader_fetch_token = {"count": 0}
         compatibility_plan: dict = {}
 
         toolbar.set_content(stack)
@@ -505,11 +575,48 @@ class PropertiesView(Gtk.Box):
                 return ""
             return mc_values[idx]
 
+        def refresh_loader_build() -> None:
+            """Resolve the newest/recommended build of the server's own loader."""
+            if not self._server_info:
+                return
+            loader_fetch_token["count"] += 1
+            token = loader_fetch_token["count"]
+            loader_type = normalize_loader_type(self._server_info.loader_type)
+            mc_version = selected_mc_version()
+
+            selected_loader["value"] = ""
+            loader_version_row.set_subtitle(_("Loading..."))
+
+            def worker():
+                build = self._server_manager.download_manager.resolve_loader_build(loader_type, mc_version)
+                GLib.idle_add(lambda: on_loader_build_resolved(token, build))
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        def on_loader_build_resolved(token: int, build: str) -> bool:
+            if not self._server_info or token != loader_fetch_token["count"]:
+                return False
+            selected_loader["value"] = build
+            if build:
+                loader_version_row.set_subtitle(build)
+            else:
+                loader_version_row.set_subtitle(
+                    _("No {} builds available for Minecraft {}").format(
+                        mod_loader_name(self._server_info.loader_type), selected_mc_version()
+                    )
+                )
+            validate()
+            return False
+
         def validate(*_args):
             update_java_info(selected_mc_version())
-            primary_btn.set_sensitive(bool(mc_values) and bool(loader_values))
+            primary_btn.set_sensitive(bool(mc_values) and bool(selected_loader["value"]))
 
-        mc_row.connect("notify::selected", validate)
+        def on_mc_changed(*_args):
+            refresh_loader_build()
+            validate()
+
+        mc_row.connect("notify::selected", on_mc_changed)
 
         def on_cancel(*_args):
             visible = stack.get_visible_child_name()
@@ -517,7 +624,7 @@ class PropertiesView(Gtk.Box):
                 stack.set_visible_child_name("runtime")
                 cancel_btn.set_label(_("Cancel"))
                 primary_btn.set_label(_("Next"))
-                primary_btn.set_sensitive(bool(mc_values) and bool(loader_values))
+                primary_btn.set_sensitive(bool(mc_values) and bool(selected_loader["value"]))
                 return
             if visible == "progress":
                 return
@@ -549,39 +656,29 @@ class PropertiesView(Gtk.Box):
 
         def versions_worker():
             games = self._server_manager.download_manager.fetch_game_versions()
-            loaders = self._server_manager.download_manager.fetch_loader_versions()
 
             def loaded():
                 current_mc = self._server_info.mc_version
-                current_loader = self._server_info.loader_version
                 next_games = [v for v in games if ServerManager.is_version_after(v, current_mc)]
-                next_loaders = [
-                    v for v in loaders if not current_loader or ServerManager.is_version_at_least(v, current_loader)
-                ]
                 mc_values.clear()
                 mc_values.extend(next_games)
-                loader_values.clear()
-                loader_values.extend(next_loaders)
                 mc_row.set_model(Gtk.StringList.new(mc_values or [_("No versions found")]))
                 if mc_values:
                     mc_row.set_selected(0)
-                # Automatically use the newest loader (first in list)
-                if loader_values:
-                    selected_loader["value"] = loader_values[0]
-                    fabric_version_row.set_subtitle(loader_values[0])
-                validate()
+                    # set_selected triggers the refresh of the loader build
+                else:
+                    loader_version_row.set_subtitle(_("No newer Minecraft versions available"))
+                    validate()
                 return False
 
             GLib.idle_add(loaded)
 
         def show_mod_review(*_args):
-            if not mc_values or not loader_values:
+            if not mc_values or not selected_loader["value"]:
                 return
             selected_mc["value"] = selected_mc_version()
             if not selected_mc["value"]:
                 return
-            # Use the automatically selected newest loader
-            selected_loader["value"] = loader_values[0]
             primary_btn.set_sensitive(False)
             primary_btn.set_label(_("Update"))
             cancel_btn.set_label(_("Back"))
@@ -675,7 +772,10 @@ class PropertiesView(Gtk.Box):
                     if ok:
                         self._server_info.mc_version = mc_version
                         self._server_info.loader_version = loader_version
-                        self._version_row.set_subtitle(f"{mc_version} ({loader_version})")
+                        loader_name = mod_loader_name(self._server_info.loader_type)
+                        version_suffix = f" ({loader_name} {loader_version})" if loader_version else f" ({loader_name})"
+                        self._version_row.set_subtitle(f"{mc_version}{version_suffix}")
+                        self._refresh_java_item_state()
                         self._refresh_upgrade_button()
                         self._show_toast(msg, timeout=4)
                         dialog.close()
@@ -722,6 +822,71 @@ class PropertiesView(Gtk.Box):
         self._jvm_args_row.set_text(self._server_info.jvm_args)
 
         self._suppress_changes = False
+
+    def _required_java_version(self) -> int:
+        """Java version recommended for this server's MC version."""
+        try:
+            return get_required_java_version(self._server_info.mc_version if self._server_info else "")
+        except Exception:
+            return 21
+
+    def _apply_java_item_factories(self) -> None:
+        """Tint insufficient Java versions and mark the selected one (see style.css)."""
+        self._java_version_row.set_factory(self._make_java_item_factory(with_check=False))
+        self._java_version_row.set_list_factory(self._make_java_item_factory(with_check=True))
+
+    def _refresh_java_item_state(self) -> None:
+        """Re-tint labels and move the selected checkmark on bound combo items.
+
+        Popover rows only re-bind when recycled, so requirement/selection
+        changes need an explicit refresh.
+        """
+        selected_item = self._java_version_row.get_selected_item()
+        selected_text = selected_item.get_string() if selected_item else ""
+        for row in self._java_item_rows:
+            label = row["label"]
+            try:
+                version = int(label.get_text().split()[-1])
+            except ValueError:
+                continue
+            label.set_css_classes(["java-insufficient"] if version < self._required_java_version() else [])
+            check = row.get("check")
+            if check is not None:
+                check.set_visible(label.get_text() == selected_text)
+
+    def _make_java_item_factory(self, with_check: bool = False) -> Gtk.SignalListItemFactory:
+        """Build a combo item factory; the popup variant shows a selected checkmark."""
+
+        def on_setup(_factory, item):
+            label = Gtk.Label(xalign=0)
+            label.set_hexpand(True)
+            check = None
+            if with_check:
+                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                check = Gtk.Image.new_from_icon_name("object-select-symbolic")
+                check.set_visible(False)
+                box.append(label)
+                box.append(check)
+                item.set_child(box)
+            else:
+                item.set_child(label)
+            self._java_item_rows.append({"label": label, "check": check})
+
+        def on_bind(_factory, item):
+            child = item.get_child()
+            entry = item.get_item()  # GtkStringObject; position is unreliable here
+            if child is None or entry is None:
+                return
+            label = child.get_first_child() if with_check else child
+            if not isinstance(label, Gtk.Label):
+                return
+            label.set_text(entry.get_string())
+            self._refresh_java_item_state()
+
+        factory = Gtk.SignalListItemFactory()
+        factory.connect("setup", on_setup)
+        factory.connect("bind", on_bind)
+        return factory
 
     def _populate(self):
         """Populate widgets from config."""

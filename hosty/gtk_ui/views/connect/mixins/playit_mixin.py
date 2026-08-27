@@ -836,6 +836,7 @@ class PlayitMixin:
                     server_dir,
                     server_id,
                     voicechat_port=new_port,
+                    loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
                 )
                 self._toast(_("Voice Chat port changed to {}").format(new_port))
                 self._voicechat_in_progress = True
@@ -1047,7 +1048,11 @@ class PlayitMixin:
         Returns:
             True if any mod matching the patterns is found, False otherwise
         """
-        mods_dir = Path(server_dir) / "mods"
+        from hosty.shared.utils.constants import content_dir_name
+
+        mods_dir = Path(server_dir) / content_dir_name(
+            getattr(self._server_info, "loader_type", None) if self._server_info else None
+        )
         if not mods_dir.exists():
             return False
 
@@ -1075,14 +1080,16 @@ class PlayitMixin:
         if not self._server_info:
             return None
         from hosty.shared.backend import modrinth_client
+        from hosty.shared.utils.constants import normalize_loader_type
 
         mc_version = str(self._server_info.mc_version or "").strip()
         if not mc_version:
             return None
+        loader = normalize_loader_type(getattr(self._server_info, "loader_type", None))
         versions = modrinth_client.get_project_versions(project_id)
         for version in versions:
-            loaders = [str(loader).lower() for loader in (version.loaders or [])]
-            if mc_version in (version.game_versions or []) and "fabric" in loaders:
+            loaders = [str(loader_name).lower() for loader_name in (version.loaders or [])]
+            if mc_version in (version.game_versions or []) and loader in loaders:
                 return version
         return None
 
@@ -1140,19 +1147,22 @@ class PlayitMixin:
         if not self._server_info:
             return False, _("No server selected")
         from hosty.shared.backend import modrinth_client
+        from hosty.shared.utils.constants import content_dir_name, normalize_loader_type
+
+        loader = normalize_loader_type(getattr(self._server_info, "loader_type", None))
 
         version = self._exact_compatible_modrinth_version(project_id)
         if not version:
             return False, _("{} is not available for Minecraft {}").format(title, self._server_info.mc_version)
 
-        mods_dir = self._server_info.server_dir / "mods"
+        mods_dir = self._server_info.server_dir / content_dir_name(loader)
         mods_dir.mkdir(parents=True, exist_ok=True)
         installed_names = {path.name.lower() for path in mods_dir.glob("*.jar")}
 
         deps = modrinth_client.resolve_required_dependencies(
             version.version_id,
             self._server_info.mc_version,
-            "fabric",
+            loader,
         )
         for dep in deps:
             dep_name = str(dep.filename).strip()
@@ -1173,9 +1183,9 @@ class PlayitMixin:
 
         playit = self._server_manager.playit_manager
         if project_id == "geyser":
-            playit.configure_geyser_mod(str(self._server_info.server_dir))
+            playit.configure_geyser_mod(str(self._server_info.server_dir), loader=loader)
         elif project_id == "floodgate":
-            playit.configure_floodgate_mod(str(self._server_info.server_dir))
+            playit.configure_floodgate_mod(str(self._server_info.server_dir), loader=loader)
         elif project_id == "simple-voice-chat":
             from hosty.shared.backend.playit_config import load_playit_config
 
@@ -1186,6 +1196,7 @@ class PlayitMixin:
                 self._server_info.id,
                 endpoint=str(vc_cfg.get("voicechat_endpoint", "")).strip(),
                 voicechat_port=vc_port,
+                loader=loader,
             )
 
         return True, _("Installed {}").format(title)
@@ -1194,8 +1205,15 @@ class PlayitMixin:
         dialog = Adw.AlertDialog()
         dialog.set_heading(_("Add {} tunnel?").format(tunnel_name))
         names = ", ".join(title for _project_id, title in mods)
+        from hosty.shared.utils.constants import mod_loader_name, normalize_loader_type
+
+        loader_name = mod_loader_name(
+            normalize_loader_type(getattr(self._server_info, "loader_type", None)) if self._server_info else None
+        )
         dialog.set_body(
-            _("This tunnel needs {}. Hosty can install compatible Fabric versions automatically.").format(names)
+            _("This tunnel needs {}. Hosty can install compatible {} versions automatically.").format(
+                names, loader_name
+            )
         )
 
         dialog.add_response("cancel", _("Cancel"))
@@ -1303,6 +1321,7 @@ class PlayitMixin:
                     voicechat_endpoint=str(cfg.get("voicechat_endpoint", "")).strip(),
                     bedrock_port=br_port,
                     voicechat_port=vc_port,
+                    loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
                 )
 
             def ui_done():

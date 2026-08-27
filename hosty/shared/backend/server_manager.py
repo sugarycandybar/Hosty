@@ -23,9 +23,13 @@ from hosty.shared.core.events import EventEmitter
 from hosty.shared.utils.constants import (
     CONFIG_FILE,
     DEFAULT_RAM_MB,
+    LOADER_FABRIC,
     SERVERS_DIR,
     ServerStatus,
+    content_dir_name,
     get_required_java_version,
+    mod_loader_name,
+    normalize_loader_type,
 )
 from hosty.shared.utils.file_utils import atomic_write_json
 
@@ -39,6 +43,7 @@ class ServerInfo:
         self.id: str = data.get("id", str(uuid.uuid4()))
         self.name: str = data.get("name", _("Unnamed Server"))
         self.mc_version: str = data.get("mc_version", "")
+        self.loader_type: str = normalize_loader_type(data.get("loader_type"))
         self.loader_version: str = data.get("loader_version", "")
         self.ram_mb: int = data.get("ram_mb", DEFAULT_RAM_MB)
         self.java_version: int = data.get("java_version", 21)
@@ -60,6 +65,7 @@ class ServerInfo:
             "id": self.id,
             "name": self.name,
             "mc_version": self.mc_version,
+            "loader_type": self.loader_type,
             "loader_version": self.loader_version,
             "ram_mb": self.ram_mb,
             "java_version": self.java_version,
@@ -123,10 +129,11 @@ class ServerManager(EventEmitter):
         loader_version: str = "",
         ram_mb: int = DEFAULT_RAM_MB,
         java_version: int | None = None,
+        loader_type: str = LOADER_FABRIC,
     ) -> ServerInfo:
         """
         Create and register a new server.
-        Does NOT install Fabric -- call install_server() separately.
+        Does NOT install the mod loader -- call the install flow separately.
         """
         server_id = str(uuid.uuid4())
         java_ver = java_version if java_version is not None else get_required_java_version(mc_version)
@@ -136,6 +143,7 @@ class ServerManager(EventEmitter):
                 "id": server_id,
                 "name": name,
                 "mc_version": mc_version,
+                "loader_type": normalize_loader_type(loader_type),
                 "loader_version": loader_version,
                 "ram_mb": ram_mb,
                 "java_version": java_ver,
@@ -202,7 +210,7 @@ class ServerManager(EventEmitter):
             self.emit_on_main_thread("server-changed", server_id)
 
     def update_server_version(self, server_id: str, mc_version: str) -> tuple[bool, str]:
-        """Update the Minecraft and Fabric version for a server."""
+        """Update the Minecraft and loader version for a server."""
         return self.update_server_runtime(server_id, mc_version, None)
 
     def update_server_runtime(
@@ -213,7 +221,7 @@ class ServerManager(EventEmitter):
         progress_callback=None,
         compatibility_plan: dict | None = None,
     ) -> tuple[bool, str]:
-        """Install a new Minecraft/Fabric runtime, update compatible content, and isolate incompatible content."""
+        """Install a new runtime for the server's loader and update/isolate content."""
         from hosty.shared.utils.constants import get_required_java_version
 
         info = self._servers.get(server_id)
@@ -228,6 +236,9 @@ class ServerManager(EventEmitter):
         loader_version = str(loader_version or "").strip() if loader_version is not None else info.loader_version
         if not mc_version:
             return False, _("Minecraft version is required")
+
+        loader_type = normalize_loader_type(info.loader_type)
+        loader_name = mod_loader_name(loader_type)
 
         try:
             java_req = get_required_java_version(mc_version)
@@ -254,31 +265,40 @@ class ServerManager(EventEmitter):
             if not ok:
                 return False, _("Failed to download Java {}: {}").format(java_req, msg)
 
-        progress(0.28, _("Downloading Fabric installer"))
+        progress(0.28, _("Downloading {} installer").format(loader_name))
         installer_path = self.download_manager.download_installer(
             progress_callback=lambda f, text: progress(0.28 + f * 0.12, text),
+            loader_type=loader_type,
+            mc_version=mc_version,
+            loader_version=loader_version or None,
         )
         if not installer_path:
-            return False, _("Failed to download Fabric installer")
+            return False, _("Failed to download {} installer").format(loader_name)
 
-        for filename in ("server.jar", "fabric-server-launch.jar"):
+        for filename in ("server.jar", "fabric-server-launch.jar", "paper-server.jar"):
             try:
                 (root / filename).unlink(missing_ok=True)
             except Exception:
                 pass
 
-        progress(0.42, _("Downloading Minecraft {} server").format(mc_version))
-        ok, msg = self.download_manager.download_server_jar(
-            mc_version,
-            str(root),
-            progress_callback=lambda f, text: progress(0.42 + f * 0.22, text),
-        )
-        if not ok:
-            return False, msg
+        # Fabric needs the vanilla server.jar pre-placed; Forge/NeoForge
+        # installers fetch their own Minecraft files.
+        if loader_type == LOADER_FABRIC:
+            progress(0.42, _("Downloading Minecraft {} server").format(mc_version))
+            ok, msg = self.download_manager.download_server_jar(
+                mc_version,
+                str(root),
+                progress_callback=lambda f, text: progress(0.42 + f * 0.22, text),
+            )
+            if not ok:
+                return False, msg
+        else:
+            progress(0.42, _("Downloading Minecraft {} server").format(mc_version))
 
         java_path = self.java_manager.get_java_path(java_req) or self.java_manager.get_java_for_mc(mc_version) or "java"
-        progress(0.66, _("Installing Fabric server"))
-        ok, msg = self.download_manager.install_fabric_server(
+        progress(0.66, _("Installing {} server").format(loader_name))
+        ok, msg = self.download_manager.install_server(
+            loader_type=loader_type,
             java_path=java_path,
             installer_jar=installer_path,
             mc_version=mc_version,
@@ -362,7 +382,7 @@ class ServerManager(EventEmitter):
 
     @staticmethod
     def version_sort_key(value: str) -> tuple:
-        """Natural sort key for Minecraft/Fabric version strings."""
+        """Natural sort key for Minecraft/loader version strings."""
         text = str(value or "").strip().lower()
         parts: list[object] = []
         for token in re.findall(r"\d+|[a-z]+", text):
@@ -458,10 +478,12 @@ class ServerManager(EventEmitter):
         self._write_mod_dependency_state(root, state)
         return old_dep_names, new_dep_names
 
-    def _remove_orphaned_dependency_files(self, root: Path, dependency_names: set[str]) -> None:
+    def _remove_orphaned_dependency_files(
+        self, root: Path, dependency_names: set[str], content_dir: str = "mods"
+    ) -> None:
         if not dependency_names:
             return
-        mods_dir = root / "mods"
+        mods_dir = root / content_dir
         if not mods_dir.is_dir():
             return
         state = self._tracked_mod_dependency_state(root)
@@ -519,13 +541,15 @@ class ServerManager(EventEmitter):
                 return None
             if not versions:
                 return None
+            loader = normalize_loader_type(info.loader_type)
+            loader_l = loader.lower()
             if kind == "datapacks":
                 candidates = [v for v in versions if not (v.loaders or [])]
             elif kind == "modpacks":
-                loader_candidates = [v for v in versions if "fabric" in [x.lower() for x in (v.loaders or [])]]
+                loader_candidates = [v for v in versions if loader_l in [x.lower() for x in (v.loaders or [])]]
                 candidates = loader_candidates or versions
             else:
-                candidates = [v for v in versions if "fabric" in [x.lower() for x in (v.loaders or [])]]
+                candidates = [v for v in versions if loader_l in [x.lower() for x in (v.loaders or [])]]
             exact = [v for v in candidates if target_mc_version in (v.game_versions or [])]
             return exact[0] if exact else False
 
@@ -630,7 +654,8 @@ class ServerManager(EventEmitter):
         from hosty.shared.backend import modrinth_client
 
         root = info.server_dir
-        mods_dir = root / "mods"
+        content_dir = content_dir_name(info.loader_type)
+        mods_dir = root / content_dir
         mods_dir.mkdir(parents=True, exist_ok=True)
         dp_dir = self._server_datapacks_dir(root)
         dp_dir.mkdir(parents=True, exist_ok=True)
@@ -696,7 +721,9 @@ class ServerManager(EventEmitter):
                 if not project_id or not version_id or not filename or not download_url:
                     continue
 
-                deps = modrinth_client.resolve_required_dependencies(version_id, target_mc_version, "fabric")
+                deps = modrinth_client.resolve_required_dependencies(
+                    version_id, target_mc_version, normalize_loader_type(info.loader_type)
+                )
                 for dep in deps:
                     dep_name = Path(str(dep.filename)).name
                     if dep_name.casefold() in managed_mods or dep_name.casefold() == filename.casefold():
@@ -726,7 +753,7 @@ class ServerManager(EventEmitter):
                     if old:
                         old.unlink(missing_ok=True)
                     self._remove_filename_from_tracked_mods(root, old_filename)
-                self._remove_orphaned_dependency_files(root, old_dep_names - new_dep_names)
+                self._remove_orphaned_dependency_files(root, old_dep_names - new_dep_names, content_dir)
                 mod_state[project_id] = {
                     "title": str(entry.get("title", "")),
                     "version_id": version_id,
@@ -778,7 +805,7 @@ class ServerManager(EventEmitter):
             return {"mods": [], "modpacks": [], "datapacks": []}
 
         root = info.server_dir
-        mods_dir = root / "mods"
+        mods_dir = root / content_dir_name(info.loader_type)
         datapacks_dir = self._server_datapacks_dir(root)
         disabled_mods = root / "mods_incompatible"
         disabled_datapacks = root / "datapacks_incompatible"
@@ -1032,6 +1059,22 @@ class ServerManager(EventEmitter):
         """Get an existing ServerProcess without creating a new one."""
         return self._processes.get(server_id)
 
+    def refresh_process_runtime(self, server_id: str) -> None:
+        """Push runtime settings (Java path, JVM args) onto the cached process.
+
+        Process objects are created once and reused, so settings changed in
+        Properties must be synced onto them to take effect on the next start
+        without an app restart.
+        """
+        info = self._servers.get(server_id)
+        process = self._processes.get(server_id)
+        if not info or not process:
+            return
+        java_path = self.java_manager.get_java_path(info.java_version) or shutil.which("java")
+        if java_path:
+            process.java_path = java_path
+        process.jvm_args = info.jvm_args
+
     def server_status(self, server_id: str) -> dict | None:
         """Return a JSON-ready snapshot of a server's metadata plus live process state."""
         info = self._servers.get(server_id)
@@ -1100,7 +1143,12 @@ class ServerManager(EventEmitter):
             str(info.server_dir),
             server_id,
             voicechat_port=self.get_voicechat_port(server_id),
+            loader=info.loader_type,
         )
+
+        # Pick up the freshly downloaded runtime (the cached process may
+        # predate the download and hold a system-java fallback path).
+        self.refresh_process_runtime(server_id)
 
         if not process.start():
             return False, {"kind": "start-failed"}
