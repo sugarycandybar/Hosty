@@ -45,6 +45,52 @@ FABRIC_GAME_VERSIONS_URL = f"{FABRIC_META_BASE}/game"
 FABRIC_LOADER_VERSIONS_URL = f"{FABRIC_META_BASE}/loader"
 FABRIC_INSTALLER_VERSIONS_URL = f"{FABRIC_META_BASE}/installer"
 
+# Forge / NeoForge APIs
+FORGE_PROMOTIONS_URL = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json"
+FORGE_MAVEN_INSTALLER_URL = (
+    "https://maven.minecraftforge.net/net/minecraftforge/forge/{mc}-{version}/forge-{mc}-{version}-installer.jar"
+)
+NEOFORGE_VERSIONS_URL = "https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge"
+NEOFORGE_MAVEN_INSTALLER_URL = (
+    "https://maven.neoforged.net/releases/net/neoforged/neoforge/{version}/neoforge-{version}-installer.jar"
+)
+
+# PaperMC Fill API (v2 is sunset)
+PAPER_FILL_API_BASE = "https://fill.papermc.io/v3"
+PAPER_LATEST_BUILD_URL = f"{PAPER_FILL_API_BASE}/projects/paper/versions/{{mc}}/builds/latest"
+PAPER_BUILD_URL = f"{PAPER_FILL_API_BASE}/projects/paper/versions/{{mc}}/builds/{{build}}"
+HOSTY_USER_AGENT = f"Hosty/{APP_VERSION} (+{APP_WEBSITE})"
+
+# Mod loaders
+LOADER_FABRIC = "fabric"
+LOADER_NEOFORGE = "neoforge"
+LOADER_FORGE = "forge"
+LOADER_PAPER = "paper"
+SUPPORTED_LOADERS = [LOADER_FABRIC, LOADER_NEOFORGE, LOADER_FORGE, LOADER_PAPER]
+LOADER_NAMES = {
+    LOADER_FABRIC: _("Fabric"),
+    LOADER_NEOFORGE: _("NeoForge"),
+    LOADER_FORGE: _("Forge"),
+    LOADER_PAPER: _("Paper"),
+}
+
+
+def normalize_loader_type(value: str | None) -> str:
+    """Return a known loader id, defaulting to fabric for unknown/legacy values."""
+    value = str(value or "").strip().lower()
+    return value if value in SUPPORTED_LOADERS else LOADER_FABRIC
+
+
+def mod_loader_name(loader_type: str | None) -> str:
+    """Return the display name for a loader type."""
+    return LOADER_NAMES.get(normalize_loader_type(loader_type), LOADER_NAMES[LOADER_FABRIC])
+
+
+def content_dir_name(loader_type: str | None) -> str:
+    """Directory (inside the server dir) where loader jars live."""
+    return "plugins" if normalize_loader_type(loader_type) == LOADER_PAPER else "mods"
+
+
 # Adoptium JRE API
 ADOPTIUM_API_BASE = "https://api.adoptium.net/v3/binary/latest"
 
@@ -105,7 +151,7 @@ def _parse_mc_version_tuple(mc_version: str) -> tuple[int, int, int] | None:
 
 
 def get_required_java_version(mc_version: str) -> int:
-    """Determine required Java version for Fabric-compatible Minecraft ranges."""
+    """Determine required Java version for Minecraft version ranges."""
     parsed = _parse_mc_version_tuple(mc_version)
     if not parsed:
         return DEFAULT_JAVA_VERSION

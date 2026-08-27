@@ -39,6 +39,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         self._worlds_group: Adw.PreferencesGroup | None = None
         self._mods_group: Adw.PreferencesGroup | None = None
+        self._open_mods_row: Adw.ActionRow | None = None
         self._check_updates_row: Adw.ActionRow | None = None
         self._mods_update_busy = False
         self._modpack_version_enrich_busy = False
@@ -107,11 +108,11 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         page.add(self._worlds_group)
 
         self._mods_group = Adw.PreferencesGroup(title=_("Mods"))
-        open_mods_row = Adw.ActionRow(title=_("Open mods folder"))
-        open_mods_row.add_prefix(Gtk.Image.new_from_icon_name("application-x-addon-symbolic"))
-        open_mods_row.set_activatable(True)
-        open_mods_row.connect("activated", self._on_open_mods_folder)
-        self._mods_group.add(open_mods_row)
+        self._open_mods_row = Adw.ActionRow(title=_("Open mods folder"))
+        self._open_mods_row.add_prefix(Gtk.Image.new_from_icon_name("application-x-addon-symbolic"))
+        self._open_mods_row.set_activatable(True)
+        self._open_mods_row.connect("activated", self._on_open_mods_folder)
+        self._mods_group.add(self._open_mods_row)
 
         modrinth_row = Adw.ActionRow(
             title=_("Modrinth"),
@@ -154,10 +155,33 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         scroll.set_child(page)
         return scroll
 
+    def _is_paper(self) -> bool:
+        from hosty.shared.utils.constants import LOADER_PAPER, normalize_loader_type
+
+        return bool(self._server_info and normalize_loader_type(self._server_info.loader_type) == LOADER_PAPER)
+
+    def _update_mods_titles(self) -> None:
+        is_paper = self._is_paper()
+        group_title = _("Plugins") if is_paper else _("Mods")
+        open_title = _("Open plugins folder") if is_paper else _("Open mods folder")
+        installed_title = _("Installed Plugins") if is_paper else _("Installed Mods")
+        empty_title = _("No plugins installed") if is_paper else _("No mods installed")
+        if self._mods_group:
+            self._mods_group.set_title(group_title)
+        if self._open_mods_row:
+            self._open_mods_row.set_title(open_title)
+        if self._mods_expander:
+            self._mods_expander.set_title(installed_title)
+            # Update empty-state row if present
+            for row in list(self._mod_rows):
+                if row.get_title() in (_("No mods installed"), _("No plugins installed")):
+                    row.set_title(empty_title)
+
     def set_server(self, server_info: ServerInfo, server_manager: ServerManager):
         self._pop_to_root()
         self._server_info = server_info
         self._server_manager = server_manager
+        self._update_mods_titles()
         self._worlds_snapshot = tuple()
         self._disabled_snapshot = tuple()
         self._refresh_backups_row_subtitle()
@@ -269,7 +293,9 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._world_rows.append(row)
 
         # ---- Installed Mods expander ----
-        mods_dir = root / "mods"
+        mods_dir = self._content_dir(root)
+        if mods_dir is None:
+            mods_dir = root / "mods"
         mods_dir.mkdir(parents=True, exist_ok=True)
         jars = sorted(mods_dir.glob("*.jar"), key=lambda p: p.name.lower())
         entries = self._modpack_entries()
@@ -292,7 +318,8 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._mod_rows.append(row)
 
             if not self._mod_rows:
-                info = self._add_info_row_to_expander(self._mods_expander, _("No mods installed"))
+                empty = _("No plugins installed") if self._is_paper() else _("No mods installed")
+                info = self._add_info_row_to_expander(self._mods_expander, empty)
                 self._mod_rows.append(info)
 
             # Update expander subtitle with count
@@ -500,7 +527,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
     def _on_open_mods_folder(self, *_):
         root = self._server_dir()
         if root:
-            d = root / "mods"
+            d = self._content_dir(root) or (root / "mods")
             d.mkdir(parents=True, exist_ok=True)
             self._open_target(d)
 

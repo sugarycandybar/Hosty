@@ -5,6 +5,7 @@ FilesView -- folders, worlds, backups, and Modrinth integration (per selected se
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
 import gi
 
@@ -18,6 +19,22 @@ from ..utils import *
 
 
 class ModrinthMixin:
+    def _server_loader(self) -> str:
+        """Return the selected server's loader type (defaults to fabric)."""
+        from hosty.shared.utils.constants import LOADER_FABRIC, normalize_loader_type
+
+        if self._server_info is None:
+            return LOADER_FABRIC
+        return normalize_loader_type(getattr(self._server_info, "loader_type", None))
+
+    def _content_dir(self, root) -> Path | None:
+        """Return the loader-appropriate jar directory (mods/, or plugins/ for Paper)."""
+        from hosty.shared.utils.constants import content_dir_name
+
+        if not root:
+            return None
+        return Path(root) / content_dir_name(self._server_loader())
+
     def _push_modrinth_page(self, *_args) -> None:
         self._modrinth_nav = Adw.NavigationView()
         self._modrinth_nav.set_hexpand(True)
@@ -61,7 +78,7 @@ class ModrinthMixin:
 
         entry = Gtk.SearchEntry()
         entry.set_hexpand(True)
-        entry.set_placeholder_text("Search Fabric mods…")
+        entry.set_placeholder_text(_("Search mods…"))
         entry.add_css_class("modrinth-search-entry")
         search_outer.append(entry)
 
@@ -220,11 +237,11 @@ class ModrinthMixin:
         def update_search_hint() -> None:
             ptype = selected_project_type()
             if ptype == "modpack":
-                entry.set_placeholder_text(_("Search Fabric modpacks…"))
+                entry.set_placeholder_text(_("Search modpacks…"))
             elif ptype == "datapack":
                 entry.set_placeholder_text(_("Search datapacks…"))
             else:
-                entry.set_placeholder_text(_("Search Fabric mods…"))
+                entry.set_placeholder_text(_("Search mods…"))
 
         def clear_results():
             while True:
@@ -234,11 +251,8 @@ class ModrinthMixin:
                 results.remove(r)
 
         def installed_mod_names() -> set[str]:
-            root = self._server_dir()
-            if not root:
-                return set()
-            mods_dir = root / "mods"
-            if not mods_dir.is_dir():
+            mods_dir = self._content_dir(self._server_dir())
+            if not mods_dir or not Path(mods_dir).is_dir():
                 return set()
             return {p.name.lower() for p in mods_dir.glob("*.jar")}
 
@@ -287,7 +301,7 @@ class ModrinthMixin:
                         sort=sort_key,
                         game_version=(mc_version if mc_version else None),
                         category=category,
-                        loader="fabric",
+                        loader=self._server_loader(),
                         server_side_only=(project_type != "datapack"),
                         project_type=project_type,
                     )
@@ -386,11 +400,8 @@ class ModrinthMixin:
         return False
 
     def _installed_mod_names(self) -> set[str]:
-        root = self._server_dir()
-        if not root:
-            return set()
-        mods_dir = root / "mods"
-        if not mods_dir.is_dir():
+        mods_dir = self._content_dir(self._server_dir())
+        if not mods_dir or not mods_dir.is_dir():
             return set()
         return {p.name.lower() for p in mods_dir.glob("*.jar")}
 
@@ -441,11 +452,11 @@ class ModrinthMixin:
         server_dir = str(self._server_info.server_dir)
 
         if "geyser" in identifiers:
-            playit.configure_geyser_mod(server_dir)
+            playit.configure_geyser_mod(server_dir, loader=self._server_loader())
             return
 
         if "floodgate" in identifiers:
-            playit.configure_floodgate_mod(server_dir)
+            playit.configure_floodgate_mod(server_dir, loader=self._server_loader())
             return
 
         if "simple-voice-chat" in identifiers or "voice-chat" in identifiers:
@@ -655,7 +666,7 @@ class ModrinthMixin:
                 _set_row_btn(sensitive=False)
                 return
             try:
-                loader_for_query = "datapack" if is_datapack else "fabric"
+                loader_for_query = "datapack" if is_datapack else self._server_loader()
                 versions = modrinth_client.find_compatible_versions(
                     hit.project_id,
                     mc_version,
@@ -928,7 +939,9 @@ class ModrinthMixin:
                 if not root:
                     raise RuntimeError("No server selected.")
 
-                mods_dir = root / "mods"
+                mods_dir = self._content_dir(root)
+                if not mods_dir:
+                    raise RuntimeError("No server selected.")
                 mods_dir.mkdir(parents=True, exist_ok=True)
                 installed_names_local = {p.name.lower() for p in mods_dir.glob("*.jar")}
 
@@ -1000,13 +1013,15 @@ class ModrinthMixin:
                 if not root:
                     raise RuntimeError("No server selected.")
 
-                mods_dir = root / "mods"
+                mods_dir = self._content_dir(root)
+                if not mods_dir:
+                    raise RuntimeError("No server selected.")
                 mods_dir.mkdir(parents=True, exist_ok=True)
                 installed_names_local = {p.name.lower() for p in mods_dir.glob("*.jar")}
                 deps = modrinth_client.resolve_required_dependencies(
                     chosen.version_id,
                     mc_version,
-                    loader="fabric",
+                    loader=self._server_loader(),
                 )
                 deps_to_install = []
                 for dep in deps:
@@ -1308,7 +1323,7 @@ class ModrinthMixin:
                             )
                         )
 
-                loader_for_query = "datapack" if is_datapack else "fabric"
+                loader_for_query = "datapack" if is_datapack else self._server_loader()
                 all_versions = modrinth_client.find_compatible_versions(
                     hit.project_id,
                     mc_version,

@@ -2,6 +2,8 @@
 PerformanceView - Server performance monitoring (CPU, RAM, TPS).
 """
 
+import math
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -17,6 +19,9 @@ except ImportError:
     HAS_PSUTIL = False
 
 from hosty.shared.backend.server_process import ServerProcess
+
+# Corner radius of libadwaita "card" containers (px)
+CARD_RADIUS = 12.0
 
 
 class SparklineWidget(Gtk.DrawingArea):
@@ -35,12 +40,38 @@ class SparklineWidget(Gtk.DrawingArea):
         self._data.append(value)
         self.queue_draw()
 
+    def get_data(self) -> list[float]:
+        """Return a copy of the plotted values."""
+        return list(self._data)
+
+    def set_data(self, data: list[float]):
+        """Replace the plotted values (padded/truncated to max_points)."""
+        data = [max(0.0, min(100.0, float(v))) for v in (data or [])]
+        padded = [0.0] * (self._max_points - len(data)) + data[-self._max_points :]
+        self._data = padded
+        self.queue_draw()
+
     def clear(self):
         self._data = [0.0] * self._max_points
         self.queue_draw()
 
+    def _clip_rounded_top(self, cr, width, height):
+        """Clip painting to the card's rounded top corners."""
+        r = CARD_RADIUS
+        cr.move_to(0, height)
+        cr.line_to(0, r)
+        cr.arc(r, r, r, math.pi, 1.5 * math.pi)
+        cr.line_to(width - r, 0)
+        cr.arc(width - r, r, r, 1.5 * math.pi, 2.0 * math.pi)
+        cr.line_to(width, height)
+        cr.close_path()
+        cr.clip()
+
     def _draw_func(self, area, cr, width, height, user_data):
         r, g, b = self._color
+
+        cr.save()
+        self._clip_rounded_top(cr, width, height)
 
         # 1. Fill background with subtle alpha
         cr.set_source_rgba(r, g, b, 20.0 / 255.0)
@@ -72,6 +103,8 @@ class SparklineWidget(Gtk.DrawingArea):
             cr.set_line_join(cairo.LINE_JOIN_ROUND)
             cr.set_line_cap(cairo.LINE_CAP_ROUND)
             cr.stroke()
+
+        cr.restore()
 
 
 class MetricCard(Gtk.Box):
@@ -117,6 +150,15 @@ class MetricCard(Gtk.Box):
         self._sparkline.add_value(norm)
         self._value_label.set_label(f"{text} {self._unit}")
 
+    def get_history(self) -> tuple[list[float], str]:
+        """Return (plotted values, current label text) for session restore."""
+        return self._sparkline.get_data(), self._value_label.get_label()
+
+    def restore(self, history: list[float], text: str):
+        """Restore plotted values and label text (e.g. after switching servers)."""
+        self._sparkline.set_data(history)
+        self._value_label.set_label(text or f"- {self._unit}")
+
     def reset(self):
         self._sparkline.clear()
         self._value_label.set_label(f"- {self._unit}")
@@ -125,6 +167,13 @@ class MetricCard(Gtk.Box):
 class PerformanceView(Gtk.Box):
     """Server performance monitoring view using native Adwaita aesthetics."""
 
+    # How often (in seconds) to poll the Paper `tps` command via the console
+    PAPER_TPS_POLL_SECONDS = 10
+    # After this many seconds without a lag event, TPS starts recovering toward 20
+    TPS_RECOVER_AFTER_SECONDS = 30
+    # TPS added per second during recovery
+    TPS_RECOVERY_RATE = 0.5
+
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._process = None
@@ -132,6 +181,12 @@ class PerformanceView(Gtk.Box):
         self._psutil_process = None
         self._tps_value = 20.0
         self._tps_handler_id = None
+        self._loader_type = ""
+        self._tps_poll_counter = 0
+        self._tps_last_event = 0.0
+        # Per-server metric history so switching servers preserves graphs
+        self._server_histories: dict[str, dict] = {}
+        self._current_server_id: str | None = None
 
         self._scrolled = Gtk.ScrolledWindow()
         self._scrolled.set_vexpand(True)
@@ -192,10 +247,15 @@ class PerformanceView(Gtk.Box):
         if vadj:
             vadj.set_value(vadj.get_lower())
 
-    def set_process(self, process: ServerProcess):
-        """Connect to a server process for monitoring."""
+    def set_process(self, process: ServerProcess, loader_type: str = "", server_id: str = ""):
+        """Connect to a server process for monitoring (per-server history preserved)."""
+        self._stash_current_history()
+        self._current_server_id = server_id or None
         self._process = process
         self._psutil_process = None
+        self._loader_type = str(loader_type or "")
+        self._tps_poll_counter = 0
+        self._restore_history(self._current_server_id)
 
         if process:
             if self._tps_handler_id:
@@ -227,15 +287,55 @@ class PerformanceView(Gtk.Box):
             GLib.source_remove(self._timer_id)
             self._timer_id = None
 
+    def _stash_current_history(self) -> None:
+        """Save the current server's graphs and TPS state."""
+        if not self._current_server_id:
+            return
+        cpu_hist, cpu_text = self._cpu_card.get_history()
+        ram_hist, ram_text = self._ram_card.get_history()
+        tps_hist, tps_text = self._tps_card.get_history()
+        self._server_histories[self._current_server_id] = {
+            "cpu": cpu_hist,
+            "cpu_text": cpu_text,
+            "ram": ram_hist,
+            "ram_text": ram_text,
+            "tps": tps_hist,
+            "tps_text": tps_text,
+            "tps_value": self._tps_value,
+            "tps_last_event": self._tps_last_event,
+        }
+
+    def _restore_history(self, server_id: str | None) -> None:
+        """Load a server's graphs and TPS state (fresh defaults when unknown)."""
+        data = self._server_histories.get(server_id) if server_id else None
+        if not data:
+            self._cpu_card.reset()
+            self._ram_card.reset()
+            self._tps_card.reset()
+            self._tps_value = 20.0
+            self._tps_last_event = 0.0
+            return
+        self._cpu_card.restore(data["cpu"], data["cpu_text"])
+        self._ram_card.restore(data["ram"], data["ram_text"])
+        self._tps_card.restore(data["tps"], data["tps_text"])
+        self._tps_value = float(data.get("tps_value", 20.0))
+        self._tps_last_event = float(data.get("tps_last_event", 0.0))
+
     def reset(self):
-        """Reset all stats to empty state."""
+        """Reset all stats for the current server to empty state."""
         self._cpu_card.reset()
         self._ram_card.reset()
         self._tps_card.reset()
 
+        self._tps_value = 20.0
+        self._tps_poll_counter = 0
+        self._tps_last_event = 0.0
+        self._psutil_process = None
+        if self._current_server_id:
+            self._server_histories.pop(self._current_server_id, None)
+
         self._pid_row.set_subtitle("-")
         self._uptime_row.set_subtitle("-")
-        self._psutil_process = None
 
     def _update_stats(self) -> bool:
         """Update performance statistics. Returns True to keep timer running."""
@@ -280,25 +380,75 @@ class PerformanceView(Gtk.Box):
                 self._psutil_process = None
 
         # TPS
+        self._recover_tps()
+        self._poll_paper_tps()
         self._tps_card.add_value(self._tps_value, f"{self._tps_value:.1f}")
 
         return True
 
+    def _recover_tps(self) -> None:
+        """Ease TPS back toward 20 after lag warnings stop (console has no all-clear)."""
+        import time
+
+        from hosty.shared.utils.constants import LOADER_PAPER, normalize_loader_type
+
+        if self._tps_value >= 20.0:
+            return
+        # Paper's polled readings are authoritative; don't fight them
+        if normalize_loader_type(self._loader_type) == LOADER_PAPER:
+            return
+        if time.monotonic() - self._tps_last_event < self.TPS_RECOVER_AFTER_SECONDS:
+            return
+        self._tps_value = min(20.0, self._tps_value + self.TPS_RECOVERY_RATE)
+
+    def _poll_paper_tps(self) -> None:
+        """Periodically ask Paper for real TPS via its console command."""
+        from hosty.shared.utils.constants import LOADER_PAPER, ServerStatus, normalize_loader_type
+
+        if not self._process or normalize_loader_type(self._loader_type) != LOADER_PAPER:
+            return
+        if self._process.status != ServerStatus.RUNNING:
+            return
+
+        self._tps_poll_counter += 1
+        if self._tps_poll_counter >= self.PAPER_TPS_POLL_SECONDS:
+            self._tps_poll_counter = 0
+            self._process.send_command("tps")
+
     def _on_output_for_tps(self, process, text):
         """Parse server output for TPS information."""
         import re
+        import time
 
-        match = re.search(r"Running (\d+)ms behind", text)
-        if match:
-            behind_ms = int(match.group(1))
-            tick_time = 50 + behind_ms / 20
-            self._tps_value = min(20.0, 1000.0 / max(1, tick_time))
-            return
-
-        match = re.search(r"TPS.*?(\d+\.?\d*)", text)
+        # Paper's `tps` command: "TPS from last 1m, 5m, 15m: 20.0, 19.8, 20.0"
+        match = re.search(r"TPS from last[^:]*:\s*([\d.]+)", text)
         if match:
             try:
                 self._tps_value = min(20.0, float(match.group(1)))
+                self._tps_last_event = time.monotonic()
+            except ValueError:
+                pass
+            return
+
+        # Vanilla/fabric/forge lag warning:
+        # "Can't keep up! ... Running 5000ms or 100 ticks behind"
+        match = re.search(r"Running (\d+)ms(?: or (\d+) ticks)? behind", text)
+        if match:
+            behind_ms = int(match.group(1))
+            ticks = int(match.group(2) or 0) or max(1, behind_ms // 50)
+            # Average TPS over the lag window: ticks took (ticks*50 + behind) ms
+            measured = 1000.0 * ticks / (ticks * 50.0 + behind_ms)
+            self._tps_value = min(20.0, max(0.1, measured))
+            self._tps_last_event = time.monotonic()
+            return
+
+        # Generic fallback (e.g. spark): require a decimal value so duration
+        # suffixes like "1m" are never mistaken for a TPS reading.
+        match = re.search(r"\bTPS\b[^0-9]*(\d+\.\d+)", text)
+        if match:
+            try:
+                self._tps_value = min(20.0, float(match.group(1)))
+                self._tps_last_event = time.monotonic()
             except ValueError:
                 pass
             return

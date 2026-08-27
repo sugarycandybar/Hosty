@@ -5,6 +5,7 @@ Handles stdin/stdout/stderr piping and lifecycle management.
 
 import re
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -56,14 +57,78 @@ class ServerProcess(EventEmitter):
     def is_running(self) -> bool:
         return self._status in (ServerStatus.RUNNING, ServerStatus.STARTING)
 
+    def _find_args_file(self, lib_version_dir: Path) -> Path | None:
+        """Find the platform-appropriate Java @argfile in a loader library dir."""
+        preferences = {
+            "win32": ("win", "windows"),
+            "darwin": ("osx", "mac"),
+        }.get(sys.platform, ("unix", "linux"))
+        candidates = [p for p in lib_version_dir.glob("*args.txt") if p.is_file()]
+
+        def score(path: Path) -> int:
+            name = path.name.lower()
+            for priority, needle in enumerate(preferences):
+                if needle in name:
+                    return priority
+            return len(preferences)
+
+        return min(candidates, key=score) if candidates else None
+
+    @staticmethod
+    def _natural_key(path: Path) -> list:
+        return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", path.name)]
+
+    def _build_launch_command(self) -> tuple[list[str] | None, str]:
+        """Build the java launch command based on the installed mod loader.
+
+        Returns (command_args, error_message). Exactly one is populated.
+        """
+        fabric_jar = self.server_dir / "fabric-server-launch.jar"
+        if fabric_jar.exists():
+            return ["-jar", "fabric-server-launch.jar", "nogui"], ""
+
+        paper_jar = self.server_dir / "paper-server.jar"
+        if paper_jar.exists():
+            return ["-jar", "paper-server.jar", "nogui"], ""
+
+        # Forge / NeoForge: launch via the installer-generated Java argfile
+        # under libraries/, e.g. libraries/net/neoforged/neoforge/<ver>/
+        libs_root = self.server_dir / "libraries" / "net"
+        if libs_root.is_dir():
+            for provider in ("neoforged", "minecraftforge"):
+                provider_dir = libs_root / provider
+                if not provider_dir.is_dir():
+                    continue
+                version_dirs = sorted(
+                    (d for d in provider_dir.glob("*/*") if d.is_dir()),
+                    key=self._natural_key,
+                    reverse=True,
+                )
+                for version_dir in version_dirs:
+                    args_file = self._find_args_file(version_dir)
+                    if args_file:
+                        cmd = []
+                        user_jvm = self.server_dir / "user_jvm_args.txt"
+                        if user_jvm.exists():
+                            cmd.append(f"@{user_jvm}")
+                        cmd.append(f"@{args_file}")
+                        cmd.append("nogui")
+                        return cmd, ""
+
+        return None, (
+            "[Hosty] Error: No server launch configuration found "
+            "(expected fabric-server-launch.jar (Fabric), paper-server.jar (Paper), "
+            "or a run configuration under libraries/ (Forge/NeoForge))\n"
+        )
+
     def start(self) -> bool:
         """Start the Minecraft server."""
         if self.is_running:
             return False
 
-        launch_jar = self.server_dir / "fabric-server-launch.jar"
-        if not launch_jar.exists():
-            self._emit_output("[Hosty] Error: fabric-server-launch.jar not found\n")
+        launch_args, launch_error = self._build_launch_command()
+        if not launch_args:
+            self._emit_output(launch_error)
             return False
 
         if not self.java_path:
@@ -77,7 +142,7 @@ class ServerProcess(EventEmitter):
         ]
         if self.jvm_args:
             cmd.extend(self.jvm_args.split())
-        cmd.extend(["-jar", "fabric-server-launch.jar", "nogui"])
+        cmd.extend(launch_args)
 
         self.status = ServerStatus.STARTING
         self.player_count = 0

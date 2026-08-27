@@ -1638,8 +1638,26 @@ class PlayitManager(EventEmitter):
 
         return "\n".join(out) + "\n"
 
-    def configure_geyser_mod(self, server_dir: str, bedrock_port: int = 19132) -> bool:
-        """Ensure Geyser's Fabric config listens on the Bedrock UDP port."""
+    @staticmethod
+    def _content_jar_dir(server_dir: str, loader: str = "") -> Path:
+        """Directory where loader/plugin jars live ('mods', or 'plugins' for Paper)."""
+        from hosty.shared.utils.constants import content_dir_name, normalize_loader_type
+
+        return Path(server_dir) / content_dir_name(normalize_loader_type(loader))
+
+    @staticmethod
+    def _geyser_config_dir(server_dir: str, loader: str = "") -> Path:
+        """Return the loader-specific Geyser config directory (e.g. config/Geyser-Fabric)."""
+        from hosty.shared.utils.constants import LOADER_PAPER, mod_loader_name, normalize_loader_type
+
+        loader = normalize_loader_type(loader)
+        if loader == LOADER_PAPER:
+            # Geyser runs as a Bukkit plugin on Paper (Geyser-Spigot.jar)
+            return Path(server_dir) / "plugins" / "Geyser-Spigot"
+        return Path(server_dir) / "config" / f"Geyser-{mod_loader_name(loader)}"
+
+    def configure_geyser_mod(self, server_dir: str, bedrock_port: int = 19132, loader: str = "") -> bool:
+        """Ensure Geyser's per-loader config listens on the Bedrock UDP port."""
         try:
             port = int(bedrock_port)
         except Exception:
@@ -1647,7 +1665,7 @@ class PlayitManager(EventEmitter):
         if port < 1024 or port > 65535:
             port = 19132
 
-        config_dir = Path(server_dir) / "config" / "Geyser-Fabric"
+        config_dir = self._geyser_config_dir(server_dir, loader)
         config_file = config_dir / "config.yml"
         try:
             config_dir.mkdir(parents=True, exist_ok=True)
@@ -1657,9 +1675,9 @@ class PlayitManager(EventEmitter):
         except Exception:
             return False
 
-    def configure_floodgate_mod(self, server_dir: str) -> bool:
+    def configure_floodgate_mod(self, server_dir: str, loader: str = "") -> bool:
         """Ensure Geyser is configured to use Floodgate authentication."""
-        config_dir = Path(server_dir) / "config" / "Geyser-Fabric"
+        config_dir = self._geyser_config_dir(server_dir, loader)
         config_file = config_dir / "config.yml"
         try:
             config_dir.mkdir(parents=True, exist_ok=True)
@@ -1708,14 +1726,17 @@ class PlayitManager(EventEmitter):
         server_id: str,
         endpoint: str = "",
         voicechat_port: int = 0,
+        loader: str = "",
     ) -> bool:
-        """Auto-configure Simple Voice Chat mod to use the playit tunnel.
+        """Auto-configure Simple Voice Chat to use the playit tunnel.
 
         1) Extract the assigned UDP address and port from the local Playit agent's status/API.
-        2) Open config/voicechat/voicechat-server.properties.
+        2) Open the loader-appropriate voicechat-server.properties.
         3) Overwrite port, voice_host, and bind_address.
         4) Save the file, clean up any stale .toml sibling.
         """
+        from hosty.shared.utils.constants import LOADER_PAPER, normalize_loader_type
+
         domain, remote_port = _split_endpoint(endpoint)
         voice_tunnel = None
         if not domain or not remote_port:
@@ -1741,7 +1762,10 @@ class PlayitManager(EventEmitter):
             if self._update_tunnel_local_port(voice_tunnel.id, local_port):
                 voice_tunnel.port = local_port
 
-        config_dir = Path(server_dir) / "config" / "voicechat"
+        if normalize_loader_type(loader) == LOADER_PAPER:
+            config_dir = Path(server_dir) / "plugins" / "voicechat"
+        else:
+            config_dir = Path(server_dir) / "config" / "voicechat"
         config_dir.mkdir(parents=True, exist_ok=True)
 
         # Remove stale .toml file -- modern SVC only reads .properties
@@ -1763,25 +1787,27 @@ class PlayitManager(EventEmitter):
         voicechat_endpoint: str = "",
         bedrock_port: int = 19132,
         voicechat_port: int = 24454,
+        loader: str = "",
     ) -> dict[str, bool]:
         """Best-effort background repair for playit-backed mod config files."""
         result = {"geyser": False, "voicechat": False}
         if str(bedrock_endpoint or "").strip():
-            result["geyser"] = self.configure_geyser_mod(server_dir, bedrock_port)
-            mods_dir = Path(server_dir) / "mods"
+            result["geyser"] = self.configure_geyser_mod(server_dir, bedrock_port, loader=loader)
+            mods_dir = self._content_jar_dir(server_dir, loader)
             has_floodgate = False
             try:
                 has_floodgate = any("floodgate" in jar.stem.lower() for jar in mods_dir.glob("*.jar"))
             except Exception:
                 has_floodgate = False
             if has_floodgate:
-                self.configure_floodgate_mod(server_dir)
+                self.configure_floodgate_mod(server_dir, loader=loader)
         if str(voicechat_endpoint or "").strip():
             result["voicechat"] = self.configure_voicechat_mod(
                 server_dir,
                 server_id,
                 endpoint=voicechat_endpoint,
                 voicechat_port=voicechat_port,
+                loader=loader,
             )
         return result
 
@@ -1792,6 +1818,7 @@ class PlayitManager(EventEmitter):
         secret: str = "",
         bedrock_port: int = 19132,
         voicechat_port: int = 24454,
+        loader: str = "",
     ) -> dict[str, str]:
         """Auto-create bedrock/voicechat tunnels if mods are installed and no tunnel exists yet.
 
@@ -1805,7 +1832,7 @@ class PlayitManager(EventEmitter):
 
         result = {"bedrock_endpoint": "", "voicechat_endpoint": ""}
         cfg = load_playit_config(server_dir)
-        mods_dir = Path(server_dir) / "mods"
+        mods_dir = self._content_jar_dir(server_dir, loader)
         dirty = False
 
         # Refresh tunnel list and validate existing endpoints

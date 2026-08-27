@@ -1,5 +1,5 @@
 """
-CreateServerDialog - Multi-step dialog for creating a new Fabric server.
+CreateServerDialog - Multi-step dialog for creating a new modded server.
 """
 
 import threading
@@ -18,8 +18,11 @@ from hosty.shared.utils.constants import (
     GAMEMODES,
     LEVEL_TYPE_NAMES,
     LEVEL_TYPES,
+    LOADER_FABRIC,
+    LOADER_NAMES,
     MAX_RAM_MB,
     MIN_RAM_MB,
+    SUPPORTED_LOADERS,
     get_required_java_version,
 )
 from hosty.shared.utils.image_utils import convert_to_png
@@ -42,7 +45,7 @@ COMMON_JAVA_VERSIONS = [8, 11, 16, 17, 21, 25]
 
 
 class CreateServerDialog(Adw.Dialog):
-    """Dialog for creating a new Fabric Minecraft server."""
+    """Dialog for creating a new modded Minecraft server."""
 
     __gsignals__ = {
         "server-created": (GObject.SignalFlags.RUN_FIRST, None, (str,)),
@@ -53,8 +56,11 @@ class CreateServerDialog(Adw.Dialog):
         self._server_manager = server_manager
         self._game_versions: list[str] = []
         self._loader_versions: list[str] = []
+        self._loader_build: str = ""
+        self._loader_fetch_token: int = 0
         self._icon_source_path: str = ""
         self._world_import_source_path: str = ""
+        self._java_item_rows: list[dict] = []
 
         self.set_title(_("Create Server"))
         self.set_content_width(500)
@@ -222,6 +228,14 @@ class CreateServerDialog(Adw.Dialog):
             title=_("Runtime"),
         )
 
+        loader_labels = [LOADER_NAMES[loader] for loader in SUPPORTED_LOADERS]
+        self._loader_row = Adw.ComboRow(
+            title=_("Mod loader"),
+            model=Gtk.StringList.new(loader_labels),
+        )
+        self._loader_row.connect("notify::selected", self._on_loader_changed)
+        version_group.add(self._loader_row)
+
         self._mc_version_list = Gtk.StringList.new([_("Loading...")])
         self._mc_version_row = Adw.ComboRow(
             title=_("Minecraft version"),
@@ -231,12 +245,12 @@ class CreateServerDialog(Adw.Dialog):
         self._mc_version_row.connect("notify::selected", self._on_mc_version_changed)
         version_group.add(self._mc_version_row)
 
-        self._fabric_version_row = Adw.ActionRow(
-            title=_("Fabric loader"),
+        self._loader_version_row = Adw.ActionRow(
+            title=_("Loader version"),
             subtitle=_("Loading..."),
         )
-        self._fabric_version_row.set_activatable(False)
-        version_group.add(self._fabric_version_row)
+        self._loader_version_row.set_activatable(False)
+        version_group.add(self._loader_version_row)
 
         java_labels = [f"Java {v}" for v in COMMON_JAVA_VERSIONS]
         self._java_version_row = Adw.ComboRow(
@@ -245,6 +259,7 @@ class CreateServerDialog(Adw.Dialog):
             model=Gtk.StringList.new(java_labels),
         )
         self._java_version_row.connect("notify::selected", self._on_java_version_changed)
+        self._apply_java_item_factories()
         version_group.add(self._java_version_row)
 
         page.add(version_group)
@@ -279,6 +294,7 @@ class CreateServerDialog(Adw.Dialog):
         self._optimise_row.set_active(False)
         mods_group.add(self._optimise_row)
         page.add(mods_group)
+        self._mods_group = mods_group
 
         scrolled.set_child(page)
         return scrolled
@@ -316,7 +332,7 @@ class CreateServerDialog(Adw.Dialog):
         return box
 
     def _fetch_versions(self):
-        """Fetch available versions from Fabric Meta API."""
+        """Fetch available versions for the default runtime."""
 
         def on_versions(game_vers, loader_vers):
             self._game_versions = game_vers
@@ -333,12 +349,67 @@ class CreateServerDialog(Adw.Dialog):
             self._mc_version_row.set_sensitive(True)
             self._mc_version_row.set_selected(0)
             self._on_mc_version_changed(self._mc_version_row, None)
-
-        if self._loader_versions:
-            # Show the newest loader version (first in list) as read-only
-            self._fabric_version_row.set_subtitle(self._loader_versions[0])
+        else:
+            self._mc_version_list = Gtk.StringList.new([_("No versions found")])
+            self._mc_version_row.set_model(self._mc_version_list)
 
         self._validate()
+
+    def _selected_loader_type(self) -> str:
+        idx = self._loader_row.get_selected()
+        return SUPPORTED_LOADERS[idx] if 0 <= idx < len(SUPPORTED_LOADERS) else LOADER_FABRIC
+
+    def _selected_mc_version(self) -> str:
+        idx = self._mc_version_row.get_selected()
+        return self._game_versions[idx] if idx < len(self._game_versions) else ""
+
+    def _on_loader_changed(self, *_args):
+        """Handle mod loader selection change."""
+        loader_type = self._selected_loader_type()
+        # Optimising-mod presets are Fabric-only today
+        self._mods_group.set_visible(loader_type == LOADER_FABRIC)
+        self._refresh_loader_build()
+        self._validate()
+
+    def _refresh_loader_build(self):
+        """Resolve the newest/recommended loader build for the current selection."""
+        self._loader_fetch_token += 1
+        token = self._loader_fetch_token
+        loader_type = self._selected_loader_type()
+        mc_version = self._selected_mc_version()
+
+        self._loader_build = ""
+        if not mc_version:
+            self._loader_version_row.set_subtitle(_("Select a Minecraft version first"))
+            return
+
+        self._loader_version_row.set_subtitle(_("Loading..."))
+
+        def worker():
+            # Reuse the already-fetched Fabric loader list when possible
+            if loader_type == LOADER_FABRIC and self._loader_versions:
+                build = self._loader_versions[0]
+            else:
+                build = self._server_manager.download_manager.resolve_loader_build(loader_type, mc_version)
+            GLib.idle_add(lambda: self._on_loader_build_resolved(token, build))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_loader_build_resolved(self, token: int, build: str) -> bool:
+        """Apply a resolved loader build unless a newer request superseded it."""
+        if token != self._loader_fetch_token:
+            return False
+        self._loader_build = build
+        if build:
+            self._loader_version_row.set_subtitle(build)
+        else:
+            self._loader_version_row.set_subtitle(
+                _("No {} builds available for Minecraft {}").format(
+                    LOADER_NAMES[self._selected_loader_type()], self._selected_mc_version()
+                )
+            )
+        self._validate()
+        return False
 
     def _on_mc_version_changed(self, row, _pspec):
         """Handle MC version selection change."""
@@ -348,6 +419,9 @@ class CreateServerDialog(Adw.Dialog):
             java_ver = get_required_java_version(mc_ver)
             self._select_java_version(java_ver)
 
+        # Requirement/selection may have changed; re-tint items and move checkmark
+        self._refresh_java_item_state()
+        self._refresh_loader_build()
         self._validate()
 
     def _select_java_version(self, java_ver: int) -> None:
@@ -356,7 +430,73 @@ class CreateServerDialog(Adw.Dialog):
         self._java_version_row.set_selected(COMMON_JAVA_VERSIONS.index(closest))
         self._update_java_subtitle()
 
+    def _required_java_version(self) -> int:
+        """Java version recommended for the currently selected MC version."""
+        try:
+            return get_required_java_version(self._selected_mc_version())
+        except Exception:
+            return 21
+
+    def _apply_java_item_factories(self) -> None:
+        """Tint insufficient Java versions and mark the selected one (see style.css)."""
+        self._java_version_row.set_factory(self._make_java_item_factory(with_check=False))
+        self._java_version_row.set_list_factory(self._make_java_item_factory(with_check=True))
+
+    def _refresh_java_item_state(self) -> None:
+        """Re-tint labels and move the selected checkmark on bound combo items.
+
+        Popover rows only re-bind when recycled, so requirement/selection
+        changes need an explicit refresh.
+        """
+        selected_item = self._java_version_row.get_selected_item()
+        selected_text = selected_item.get_string() if selected_item else ""
+        for row in self._java_item_rows:
+            label = row["label"]
+            try:
+                version = int(label.get_text().split()[-1])
+            except ValueError:
+                continue
+            label.set_css_classes(["java-insufficient"] if version < self._required_java_version() else [])
+            check = row.get("check")
+            if check is not None:
+                check.set_visible(label.get_text() == selected_text)
+
+    def _make_java_item_factory(self, with_check: bool = False) -> Gtk.SignalListItemFactory:
+        """Build a combo item factory; the popup variant shows a selected checkmark."""
+
+        def on_setup(_factory, item):
+            label = Gtk.Label(xalign=0)
+            label.set_hexpand(True)
+            check = None
+            if with_check:
+                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+                check = Gtk.Image.new_from_icon_name("object-select-symbolic")
+                check.set_visible(False)
+                box.append(label)
+                box.append(check)
+                item.set_child(box)
+            else:
+                item.set_child(label)
+            self._java_item_rows.append({"label": label, "check": check})
+
+        def on_bind(_factory, item):
+            child = item.get_child()
+            entry = item.get_item()  # GtkStringObject; position is unreliable here
+            if child is None or entry is None:
+                return
+            label = child.get_first_child() if with_check else child
+            if not isinstance(label, Gtk.Label):
+                return
+            label.set_text(entry.get_string())
+            self._refresh_java_item_state()
+
+        factory = Gtk.SignalListItemFactory()
+        factory.connect("setup", on_setup)
+        factory.connect("bind", on_bind)
+        return factory
+
     def _on_java_version_changed(self, *_args) -> None:
+        self._refresh_java_item_state()
         self._update_java_subtitle()
 
     def _update_java_subtitle(self) -> None:
@@ -492,7 +632,7 @@ class CreateServerDialog(Adw.Dialog):
             self._cancel_btn.set_label(_("Back"))
             self._cancel_btn.set_sensitive(True)
             self._create_btn.set_label(_("Create"))
-            self._create_btn.set_sensitive(bool(name) and has_versions)
+            self._create_btn.set_sensitive(bool(name) and has_versions and bool(self._loader_build))
             return
 
         self._cancel_btn.set_label(_("Cancel"))
@@ -515,10 +655,9 @@ class CreateServerDialog(Adw.Dialog):
             return
 
         name = self._name_entry.get_text().strip()
-        mc_idx = self._mc_version_row.get_selected()
-        mc_version = self._game_versions[mc_idx] if mc_idx < len(self._game_versions) else ""
-        # Use the newest loader version (first in the list)
-        loader_version = self._loader_versions[0] if self._loader_versions else ""
+        mc_version = self._selected_mc_version()
+        loader_type = self._selected_loader_type()
+        loader_version = self._loader_build
         ram_mb = int(self._ram_row.get_value())
         seed = self._seed_entry.get_text().strip()
         difficulty_idx = self._difficulty_row.get_selected()
@@ -559,6 +698,7 @@ class CreateServerDialog(Adw.Dialog):
             args=(
                 name,
                 mc_version,
+                loader_type,
                 loader_version,
                 ram_mb,
                 java_version,
@@ -579,6 +719,7 @@ class CreateServerDialog(Adw.Dialog):
         self,
         name,
         mc_version,
+        loader_type,
         loader_version,
         ram_mb,
         java_version,
@@ -592,6 +733,9 @@ class CreateServerDialog(Adw.Dialog):
         install_optimisations,
     ):
         """Background installation thread."""
+        from hosty.shared.utils.constants import mod_loader_name
+
+        loader_name = mod_loader_name(loader_type)
         try:
             java_ver = java_version
             java_mgr = self._server_manager.java_manager
@@ -614,15 +758,18 @@ class CreateServerDialog(Adw.Dialog):
                     self._show_error(_("Failed to download JRE: {}").format(msg))
                     return
 
-            self._update_progress(0.28, _("Downloading Fabric installer..."), "")
+            self._update_progress(0.28, _("Downloading {} installer...").format(loader_name), "")
 
-            # Step 2: Download Fabric installer
+            # Step 2: Download the loader installer
             installer_path = dl_mgr.download_installer(
                 progress_callback=lambda frac, msg: self._update_progress(0.28 + frac * 0.14, msg, ""),
+                loader_type=loader_type,
+                mc_version=mc_version,
+                loader_version=loader_version or None,
             )
 
             if not installer_path:
-                self._show_error(_("Failed to download Fabric installer"))
+                self._show_error(_("Failed to download {} installer").format(loader_name))
                 return
 
             # Step 3: Create server entry
@@ -633,30 +780,34 @@ class CreateServerDialog(Adw.Dialog):
                 loader_version=loader_version,
                 ram_mb=ram_mb,
                 java_version=java_ver,
+                loader_type=loader_type,
             )
 
-            # Step 3.5: Download vanilla server.jar from Mojang
-            self._update_progress(0.48, _("Downloading Minecraft server.jar..."), _("MC {}").format(mc_version))
-            success, msg = dl_mgr.download_server_jar(
-                mc_version=mc_version,
-                server_dir=str(server_info.server_dir),
-                progress_callback=lambda frac, msg: self._update_progress(
-                    0.48 + frac * 0.12, msg, _("MC {}").format(mc_version)
-                ),
-            )
+            # Step 3.5: Download vanilla server.jar from Mojang (Fabric only;
+            # Forge/NeoForge installers fetch their own Minecraft files)
+            if loader_type == LOADER_FABRIC:
+                self._update_progress(0.48, _("Downloading Minecraft server.jar..."), _("MC {}").format(mc_version))
+                success, msg = dl_mgr.download_server_jar(
+                    mc_version=mc_version,
+                    server_dir=str(server_info.server_dir),
+                    progress_callback=lambda frac, msg: self._update_progress(
+                        0.48 + frac * 0.12, msg, _("MC {}").format(mc_version)
+                    ),
+                )
 
-            if not success:
-                self._show_error(_("Failed to download server.jar: {}").format(msg))
-                return
+                if not success:
+                    self._show_error(_("Failed to download server.jar: {}").format(msg))
+                    return
 
-            # Step 4: Install Fabric
-            self._update_progress(0.62, _("Installing Fabric server..."), _("MC {}").format(mc_version))
+            # Step 4: Install the mod loader
+            self._update_progress(0.62, _("Installing {} server...").format(loader_name), _("MC {}").format(mc_version))
 
             java_path = java_mgr.get_java_path(java_ver)
             if not java_path:
                 java_path = java_mgr.get_java_for_mc(mc_version) or "java"
 
-            success, msg = dl_mgr.install_fabric_server(
+            success, msg = dl_mgr.install_server(
+                loader_type=loader_type,
                 java_path=java_path,
                 installer_jar=installer_path,
                 mc_version=mc_version,
@@ -666,7 +817,7 @@ class CreateServerDialog(Adw.Dialog):
             )
 
             if not success:
-                self._show_error(_("Fabric installation failed: {}").format(msg))
+                self._show_error(_("{} installation failed: {}").format(loader_name, msg))
                 return
 
             # Step 5: Apply server settings
@@ -814,7 +965,9 @@ class CreateServerDialog(Adw.Dialog):
         def _update():
             self._progress_status.set_icon_name("object-select-symbolic")
             self._progress_status.set_title(_("Server Created!"))
-            self._progress_status.set_description(_("Your Fabric server is ready to start"))
+            self._progress_status.set_description(
+                _("Your {} server is ready to start").format(LOADER_NAMES[self._selected_loader_type()])
+            )
             self._progress_bar.set_fraction(1.0)
             self._progress_label.set_label("")
 

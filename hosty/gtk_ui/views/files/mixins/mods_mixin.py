@@ -665,8 +665,8 @@ class ModsMixin:
         root = self._server_dir()
         if not root:
             return parents
-        mods_dir = root / "mods"
-        installed = {p.name.lower() for p in mods_dir.glob("*.jar")} if mods_dir.is_dir() else set()
+        mods_dir = self._content_dir(root)
+        installed = {p.name.lower() for p in mods_dir.glob("*.jar")} if mods_dir and mods_dir.is_dir() else set()
         return [p for p in parents if p in installed]
 
     def _cleanup_orphaned_dependencies(self, removed_mod_filename: str) -> None:
@@ -679,8 +679,8 @@ class ModsMixin:
         if not root:
             return
 
-        mods_dir = root / "mods"
-        if not mods_dir.is_dir():
+        mods_dir = self._content_dir(root)
+        if not mods_dir or not mods_dir.is_dir():
             return
 
         state = self._read_mod_dependency_state()
@@ -826,7 +826,9 @@ class ModsMixin:
             self._alert(_("No server selected"), _("Select a server before deleting a modpack."))
             return
 
-        mods_dir = root / "mods"
+        mods_dir = self._content_dir(root)
+        if not mods_dir:
+            return
         removed_count = 0
         for mod_name in [str(m).strip() for m in (entry.get("mods") or []) if str(m).strip()]:
             target = self._find_mod_jar_path(mods_dir, mod_name)
@@ -931,13 +933,14 @@ class ModsMixin:
             # Check standalone updates
             standalone_updates = []
             blocked = 0
+            loader_type = self._server_loader()
             for project_id, meta in individual_state.items():
                 current_version = str((meta or {}).get("version_id", "")).strip()
-                # Find compatible mod version with fabric loader
+                # Find compatible mod version for the server's loader
                 latest = modrinth_client.find_compatible_version(
                     project_id,
                     mc_version,
-                    loader="fabric",
+                    loader=loader_type,
                 )
                 if not latest:
                     continue
@@ -971,7 +974,7 @@ class ModsMixin:
                 deps = modrinth_client.resolve_required_dependencies(
                     latest.version_id,
                     mc_version,
-                    loader="fabric",
+                    loader=loader_type,
                 )
                 dep_hits_modpack = any(str(dep.filename).strip().lower() in managed_mods for dep in deps)
                 if dep_hits_modpack:
@@ -1145,7 +1148,9 @@ class ModsMixin:
             GLib.idle_add(lambda t=mod_operation_token: self._end_mod_operation(t))
             return
 
-        mods_dir = root / "mods"
+        mods_dir = self._content_dir(root)
+        if not mods_dir:
+            return
         mods_dir.mkdir(parents=True, exist_ok=True)
 
         applied = 0

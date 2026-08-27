@@ -345,6 +345,7 @@ class HostyWindow(Adw.ApplicationWindow):
                     voicechat_endpoint=str(fresh_cfg.get("voicechat_endpoint", "")).strip(),
                     bedrock_port=br_port,
                     voicechat_port=vc_port,
+                    loader=info.loader_type,
                 )
 
             def clear_starting_flag():

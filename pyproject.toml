@@ -15,6 +15,13 @@ select = ["E", "F", "I", "W", "UP"]
 "hosty/gtk_ui/**/*.py" = ["E402", "F403", "F405", "F821"]
 "hosty/shared/**/*.py" = ["F821"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "network: hits real APIs (skipped in offline CI)",
+]
+
 [tool.mypy]
 python_version = "3.13"
 ignore_missing_imports = true

@@ -1,2 +1,2 @@
-# Hosty - Fabric Minecraft Server Manager
+# Hosty - Minecraft Server Manager
 from hosty.version import __version__
