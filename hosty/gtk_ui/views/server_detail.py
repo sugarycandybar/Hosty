@@ -191,9 +191,7 @@ class ServerDetailView(Gtk.Box):
 
         # Update title
         self._view_switcher_title.set_title(server_info.name)
-        self._view_switcher_title.set_subtitle(
-            f"{server_info.mc_version} · {mod_loader_name(server_info.loader_type)}"
-        )
+        self._view_switcher_title.set_subtitle(f"{server_info.mc_version} · {mod_loader_name(server_info.loader_type)}")
 
         # Get/create the server process for the selected server (start/stop, status row)
         selected = self._server_manager.get_process(server_info.id)
