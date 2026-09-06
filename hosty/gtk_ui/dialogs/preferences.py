@@ -50,6 +50,10 @@ def show_preferences_window(
         title=_("Application"),
     )
     data_row = Adw.ActionRow(title=_("Data folder"), subtitle=str(DATA_DIR))
+    try:
+        data_row.set_subtitle_lines(2)
+    except Exception:
+        pass
     data_button = Gtk.Button(valign=Gtk.Align.CENTER)
     data_image = Gtk.Image.new_from_icon_name("folder-open-symbolic")
     data_button.set_child(data_image)
@@ -242,6 +246,10 @@ def show_preferences_window(
     remote_switch = Adw.SwitchRow(title=_("Remote management"))
     remote_switch.set_active(preferences.remote_management_enabled)
     remote_switch.set_subtitle(_("Disabled"))
+    try:
+        remote_switch.set_subtitle_lines(2)
+    except Exception:
+        pass
     remote_group.add(remote_switch)
 
     daemon_config = load_daemon_config()

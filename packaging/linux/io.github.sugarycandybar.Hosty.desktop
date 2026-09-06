@@ -8,3 +8,4 @@ Terminal=false
 Categories=Utility;Game;
 Keywords=minecraft;server;fabric;neoforge;forge;paper;mods;plugins;modrinth;java;hosting;multiplayer;mc;
 StartupNotify=true
+X-Purism-FormFactor=Workstation;Mobile;

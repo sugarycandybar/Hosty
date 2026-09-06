@@ -3361,8 +3361,8 @@ msgstr ""
 msgid "Connect"
 msgstr ""
 
-#: hosty/gtk_ui/views/server_detail.py:91
-msgid "Performance"
+#: hosty/gtk_ui/views/server_detail.py:94
+msgid "Monitor"
 msgstr ""
 
 #: hosty/gtk_ui/views/server_detail.py:92

@@ -3417,9 +3417,9 @@ msgstr "Konsola"
 msgid "Connect"
 msgstr "Połącz się"
 
-#: hosty/gtk_ui/views/server_detail.py:91
-msgid "Performance"
-msgstr "Wydajność"
+#: hosty/gtk_ui/views/server_detail.py:94
+msgid "Monitor"
+msgstr "Monitor"
 
 #: hosty/gtk_ui/views/server_detail.py:92
 msgid "Properties"

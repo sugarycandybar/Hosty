@@ -38,7 +38,7 @@ class HostyWindow(Adw.ApplicationWindow):
         except Exception:
             pass
         self.set_default_size(1000, 700)
-        self.set_size_request(400, 400)
+        self.set_size_request(360, 400)
         self.add_css_class("hosty-window")
 
         # Toast overlay wraps everything
@@ -73,6 +73,7 @@ class HostyWindow(Adw.ApplicationWindow):
         breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 600sp"))
         breakpoint.add_setter(self._split_view, "collapsed", True)
         self.add_breakpoint(breakpoint)
+        self._split_view.connect("notify::collapsed", self._on_split_collapsed_changed)
 
         self._toast_overlay.set_child(self._split_view)
         self.set_content(self._toast_overlay)
@@ -193,6 +194,11 @@ class HostyWindow(Adw.ApplicationWindow):
         """Handle new server added - switch to it."""
         # The sidebar handles adding the row and selecting it
         pass
+
+    def _on_split_collapsed_changed(self, *_args):
+        """Land on content (not the sidebar overlay) when collapsing."""
+        if self._split_view.get_collapsed() and self._current_server_id:
+            self._split_view.set_show_sidebar(False)
 
     def _on_server_removed(self, manager, server_id):
         """Return to welcome when current selection is removed or list is empty."""

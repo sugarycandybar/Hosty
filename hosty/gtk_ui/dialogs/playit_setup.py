@@ -61,8 +61,8 @@ class PlayitSetupDialog(Adw.Dialog):
         self._did_try_open_setup_link = False
 
         self.set_title(_("Set Up Playit"))
-        self.set_content_width(520)
-        self.set_content_height(520)
+        self.set_content_width(400)
+        self.set_content_height(500)
 
         self._toolbar_view = Adw.ToolbarView()
 

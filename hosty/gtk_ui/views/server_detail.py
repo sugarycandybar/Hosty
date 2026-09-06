@@ -10,7 +10,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GLib, Gtk
+from gi.repository import Adw, GLib, GObject, Gtk
 
 from hosty.gtk_ui.views.connect import ConnectView
 from hosty.gtk_ui.views.console_view import ConsoleView
@@ -91,7 +91,7 @@ class ServerDetailView(Gtk.Box):
         self._add_lazy_tab("console", _("Console"), "utilities-terminal-symbolic")
         self._tab_hosts["console"].append(self._console_stack)
         self._add_lazy_tab("connect", _("Connect"), "network-workgroup-symbolic")
-        self._add_lazy_tab("performance", _("Performance"), "power-profile-performance-symbolic")
+        self._add_lazy_tab("performance", _("Monitor"), "power-profile-performance-symbolic")
         self._add_lazy_tab("properties", _("Properties"), "emblem-system-symbolic")
         self._add_lazy_tab("files", _("Files"), "folder-symbolic")
         self._view_stack.set_visible_child_name("connect")
@@ -106,10 +106,13 @@ class ServerDetailView(Gtk.Box):
         # Bottom view switcher bar (for narrow layouts)
         self._switcher_bar = Adw.ViewSwitcherBar()
         self._switcher_bar.set_stack(self._view_stack)
-        self._switcher_bar.set_reveal(False)
-        self._view_switcher_title.connect("notify::title-visible", self._on_switcher_title_visible_changed)
+        self._view_switcher_title.bind_property(
+            "title-visible",
+            self._switcher_bar,
+            "reveal",
+            GObject.BindingFlags.SYNC_CREATE,
+        )
         self._toolbar_view.add_bottom_bar(self._switcher_bar)
-        GLib.idle_add(self._sync_switcher_bar_reveal)
 
         self._mods_operation_handler_id = self._server_manager.connect(
             "mods-operation-changed", self._on_mods_operation_changed
@@ -173,15 +176,6 @@ class ServerDetailView(Gtk.Box):
         """Push a fullscreen page onto the outer nav, overlaying the tab bar."""
         self._outer_nav.push(page)
 
-    def _on_switcher_title_visible_changed(self, *_args):
-        """Reveal the bottom switcher only in compact layouts."""
-        self._sync_switcher_bar_reveal()
-
-    def _sync_switcher_bar_reveal(self):
-        """Keep bottom switcher visibility in sync with title visibility."""
-        self._switcher_bar.set_reveal(self._view_switcher_title.get_title_visible())
-        return False
-
     def load_server(self, server_info: ServerInfo):
         """Load a server's details into the view."""
         # Pop any fullscreen overlay pages (like Modrinth) back to root
@@ -196,10 +190,10 @@ class ServerDetailView(Gtk.Box):
             return
 
         # Update title
-        self._view_switcher_title.set_title(
-            f"{server_info.name} · {server_info.mc_version} · {mod_loader_name(server_info.loader_type)}"
+        self._view_switcher_title.set_title(server_info.name)
+        self._view_switcher_title.set_subtitle(
+            f"{server_info.mc_version} · {mod_loader_name(server_info.loader_type)}"
         )
-        self._view_switcher_title.set_subtitle("")
 
         # Get/create the server process for the selected server (start/stop, status row)
         selected = self._server_manager.get_process(server_info.id)

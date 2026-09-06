@@ -468,7 +468,7 @@ class PropertiesView(Gtk.Box):
 
         dialog = Adw.Dialog()
         dialog.set_title(_("Update Version"))
-        dialog.set_content_width(520)
+        dialog.set_content_width(400)
         dialog.set_content_height(420)
 
         toolbar = Adw.ToolbarView()
@@ -499,7 +499,7 @@ class PropertiesView(Gtk.Box):
             subtitle=mod_loader_name(self._server_info.loader_type),
         )
         loader_type_row.set_activatable(False)
-        loader_type_row.add_suffix(Gtk.Image.new_from_icon_name("lock-symbolic"))
+        loader_type_row.add_suffix(Gtk.Image.new_from_icon_name("changes-prevent-symbolic"))
         loader_type_row.set_tooltip_text(_("The mod loader can't be changed after creation"))
         runtime_group.add(loader_type_row)
 

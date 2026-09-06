@@ -37,7 +37,7 @@ class IconPickerDialog(Adw.Dialog):
         self._crop_size = 1.0
 
         self.set_title(_("Change Server Icon"))
-        self.set_content_width(450)
+        self.set_content_width(380)
         self.set_content_height(500)
 
         toolbar = Adw.ToolbarView()

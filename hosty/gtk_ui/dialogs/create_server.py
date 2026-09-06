@@ -63,8 +63,8 @@ class CreateServerDialog(Adw.Dialog):
         self._java_item_rows: list[dict] = []
 
         self.set_title(_("Create Server"))
-        self.set_content_width(500)
-        self.set_content_height(600)
+        self.set_content_width(400)
+        self.set_content_height(500)
 
         # Main content
         self._toolbar_view = Adw.ToolbarView()
@@ -304,26 +304,33 @@ class CreateServerDialog(Adw.Dialog):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         box.set_valign(Gtk.Align.CENTER)
         box.set_halign(Gtk.Align.CENTER)
-        box.set_margin_start(40)
-        box.set_margin_end(40)
+        box.set_hexpand(True)
+        box.set_margin_start(24)
+        box.set_margin_end(24)
 
         self._progress_status = Adw.StatusPage()
         self._progress_status.set_icon_name("folder-download-symbolic")
         self._progress_status.set_title(_("Creating Server"))
         self._progress_status.set_description(_("Preparing..."))
+        self._progress_status.set_vexpand(False)
+        self._progress_status.set_hexpand(True)
 
         # Progress bar
         self._progress_bar = Gtk.ProgressBar()
         self._progress_bar.set_show_text(True)
-        self._progress_bar.set_margin_start(40)
-        self._progress_bar.set_margin_end(40)
+        self._progress_bar.set_hexpand(True)
+        self._progress_bar.set_margin_start(12)
+        self._progress_bar.set_margin_end(12)
         self._progress_bar.add_css_class("hosty-progress")
 
         progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        progress_box.set_hexpand(True)
         progress_box.append(self._progress_bar)
 
         self._progress_label = Gtk.Label(label="")
         self._progress_label.add_css_class("dim-label")
+        self._progress_label.set_wrap(True)
+        self._progress_label.set_justify(Gtk.Justification.CENTER)
         progress_box.append(self._progress_label)
 
         self._progress_status.set_child(progress_box)

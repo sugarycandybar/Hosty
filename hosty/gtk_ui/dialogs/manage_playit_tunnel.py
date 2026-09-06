@@ -24,7 +24,7 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         super().__init__()
 
         self.set_title(_("Manage {} Tunnel").format(tunnel_name))
-        self.set_content_width(400)
+        self.set_content_width(360)
 
         # Parse domain if it contains a remote port (format: "domain:port")
         remote_port = local_port
