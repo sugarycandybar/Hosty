@@ -58,7 +58,11 @@
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
   <url type="vcs-browser">https://github.com/sugarycandybar/Hosty</url>
   <releases>
-    <release version="1.8.0" date="2026-09-28">
+    <release version="1.8.1" date="2026-09-06">
+      <description>
+        <p>Added mobile device support </p>
+      </description>
+    <release version="1.8.0" date="2026-08-28">
       <description>
         <p>Features and improvements:</p>
         <ul>
