@@ -44,9 +44,11 @@ class HostyWindow(Adw.ApplicationWindow):
         # Toast overlay wraps everything
         self._toast_overlay = Adw.ToastOverlay()
 
-        # OverlaySplitView
+        # OverlaySplitView. Pinning keeps the sidebar visible side-by-side
+        # instead of overlaying it when collapsed, which squeezes phone
+        # widths and pins the sidebar open on narrow cold starts.
         self._split_view = Adw.OverlaySplitView()
-        self._split_view.set_pin_sidebar(True)
+        self._split_view.set_pin_sidebar(False)
         self._split_view.set_show_sidebar(True)
 
         # ===== Sidebar =====
@@ -69,7 +71,9 @@ class HostyWindow(Adw.ApplicationWindow):
 
         self._split_view.set_content(self._content_stack)
 
-        # Responsive breakpoint
+        # Responsive breakpoint. NOTE: keep this the single breakpoint on
+        # the window -- two breakpoints with the same condition conflict
+        # and only one of them applies.
         breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 600sp"))
         breakpoint.add_setter(self._split_view, "collapsed", True)
         self.add_breakpoint(breakpoint)
@@ -196,8 +200,10 @@ class HostyWindow(Adw.ApplicationWindow):
         pass
 
     def _on_split_collapsed_changed(self, *_args):
-        """Land on content (not the sidebar overlay) when collapsing."""
-        if self._split_view.get_collapsed() and self._current_server_id:
+        """Adapt to narrow layouts: overlay (not sidebar) + bottom tabs."""
+        collapsed = self._split_view.get_collapsed()
+        self._detail_view.set_narrow_layout(collapsed)
+        if collapsed and self._current_server_id:
             self._split_view.set_show_sidebar(False)
 
     def _on_server_removed(self, manager, server_id):

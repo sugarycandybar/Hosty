@@ -10,7 +10,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, GLib, GObject, Gtk
+from gi.repository import Adw, GLib, Gtk
 
 from hosty.gtk_ui.views.connect import ConnectView
 from hosty.gtk_ui.views.console_view import ConsoleView
@@ -40,6 +40,7 @@ class ServerDetailView(Gtk.Box):
         self._start_in_progress = False
 
         self._tab_hosts: dict[str, Gtk.Box] = {}
+        self._narrow_layout = False
         self._console_views: dict[str, ConsoleView] = {}
         self._console_stack: Gtk.Stack = Gtk.Stack()
         self._console_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
@@ -103,21 +104,31 @@ class ServerDetailView(Gtk.Box):
         self._detail_content.append(self._view_stack)
         self._toolbar_view.set_content(self._detail_content)
 
-        # Bottom view switcher bar (for narrow layouts)
+        # Bottom view switcher bar (for narrow layouts). Revealed when the
+        # layout is collapsed OR the header switcher doesn't fit -- either
+        # condition alone can strand tab navigation, so both drive it.
         self._switcher_bar = Adw.ViewSwitcherBar()
         self._switcher_bar.set_stack(self._view_stack)
-        self._view_switcher_title.bind_property(
-            "title-visible",
-            self._switcher_bar,
-            "reveal",
-            GObject.BindingFlags.SYNC_CREATE,
-        )
+        self._switcher_bar.set_reveal(False)
+        self._view_switcher_title.connect("notify::title-visible", self._on_title_visible_changed)
         self._toolbar_view.add_bottom_bar(self._switcher_bar)
 
         self._mods_operation_handler_id = self._server_manager.connect(
             "mods-operation-changed", self._on_mods_operation_changed
         )
         self._server_manager.connect("server-removed", self._on_server_removed)
+
+    def set_narrow_layout(self, narrow: bool):
+        """Tell the detail view the window is in collapsed (phone) layout."""
+        self._narrow_layout = narrow
+        self._sync_switcher_bar()
+
+    def _on_title_visible_changed(self, *_args):
+        self._sync_switcher_bar()
+
+    def _sync_switcher_bar(self):
+        """Show bottom tabs when collapsed or when the header switcher is hidden."""
+        self._switcher_bar.set_reveal(self._narrow_layout or self._view_switcher_title.get_title_visible())
 
     def _add_lazy_tab(self, name: str, title: str, icon: str):
         host = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
