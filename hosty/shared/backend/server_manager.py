@@ -1139,9 +1139,19 @@ class ServerManager(EventEmitter):
         if voicechat_conflict is not None:
             return False, {"kind": "port-conflict", "port_type": "Voice Chat", "port": voicechat_conflict}
 
+        # Pass the stored public endpoint so voice_host stays
+        # domain:remote_port (not a stale value, not a bare domain).
+        # Without it configure_voicechat_mod can only refresh port/bind
+        # and leaves voice_host outdated after a tunnel regenerate.
+        try:
+            _playit_cfg = load_playit_config(info.server_dir)
+            _vc_endpoint = str(_playit_cfg.get("voicechat_endpoint", "")).strip()
+        except Exception:
+            _vc_endpoint = ""
         self.playit_manager.configure_voicechat_mod(
             str(info.server_dir),
             server_id,
+            endpoint=_vc_endpoint,
             voicechat_port=self.get_voicechat_port(server_id),
             loader=info.loader_type,
         )

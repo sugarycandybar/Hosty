@@ -2,6 +2,7 @@
 HostyWindow - Main application window with NavigationSplitView.
 """
 
+import logging
 import sys
 import threading
 
@@ -17,6 +18,8 @@ from hosty.gtk_ui.views.welcome_view import WelcomeView
 from hosty.shared.backend.playit_config import load_playit_config
 from hosty.shared.backend.server_manager import ServerManager
 from hosty.shared.utils.constants import APP_ID
+
+logger = logging.getLogger(__name__)
 
 
 class HostyWindow(Adw.ApplicationWindow):
@@ -347,6 +350,19 @@ class HostyWindow(Adw.ApplicationWindow):
                 auto_install=bool(cfg.get("auto_install", True)),
             )
             if ok:
+                # Validate stored endpoints (clear ones deleted via the
+                # dashboard) and create missing tunnels for installed mods.
+                try:
+                    playit.auto_create_tunnel_mods(
+                        server_id,
+                        str(info.server_dir),
+                        secret=str(cfg.get("secret", "")).strip(),
+                        bedrock_port=int(cfg.get("bedrock_port", 19132)),
+                        voicechat_port=int(cfg.get("voicechat_port", 24454)),
+                        loader=info.loader_type,
+                    )
+                except Exception:
+                    logger.exception("playit auto-create/validate failed for server %s", server_id)
                 fresh_cfg = self._load_playit_config(server_id)
                 br_port = int(fresh_cfg.get("bedrock_port", 19132))
                 vc_port = int(fresh_cfg.get("voicechat_port", 24454))

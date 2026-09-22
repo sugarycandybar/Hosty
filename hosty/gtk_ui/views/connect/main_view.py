@@ -36,6 +36,8 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._java_tunnel_in_progress = False
         self._bedrock_in_progress = False
         self._voicechat_in_progress = False
+        self._tunnels_usage_refreshing = False
+        self._tunnels_usage_updated_at = 0.0
         self._local_ip_rows: list[Adw.ActionRow] = []
         self._local_ip_value = _("Not available")
         self._whitelist_status_rows: list[Adw.ActionRow] = []
@@ -189,6 +191,11 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         )
         self._auto_start_row.connect("notify::active", self._on_auto_start_toggled)
         settings_row.add_row(self._auto_start_row)
+
+        self._tunnels_usage_row = Adw.ActionRow(title=_("Tunnels"), subtitle=_("Not available"))
+        self._tunnels_usage_row.add_prefix(Gtk.Image.new_from_icon_name("network-wired-symbolic"))
+        self._tunnels_usage_row.set_activatable(False)
+        settings_row.add_row(self._tunnels_usage_row)
 
         dashboard_row = Adw.ActionRow(title=_("Open playit dashboard"))
         dashboard_row.add_prefix(Gtk.Image.new_from_icon_name("video-display-symbolic"))

@@ -5,7 +5,9 @@ ConnectView - Server connection tools (playit.gg tunnel).
 from __future__ import annotations
 
 import json
+import logging
 import threading
+import time
 from pathlib import Path
 
 import gi
@@ -23,6 +25,8 @@ PLAYIT_DASHBOARD_URL = "https://playit.gg/account/tunnels"
 
 
 from ..utils import *
+
+logger = logging.getLogger(__name__)
 
 
 class PlayitMixin:
@@ -121,6 +125,9 @@ class PlayitMixin:
                         "voicechat_endpoint": str(cfg.get("voicechat_endpoint", "")).strip(),
                         "bedrock_port": int(cfg.get("bedrock_port", 19132)),
                         "voicechat_port": int(cfg.get("voicechat_port", 24454)),
+                        "java_tunnel_id": str(cfg.get("java_tunnel_id", "")).strip(),
+                        "bedrock_tunnel_id": str(cfg.get("bedrock_tunnel_id", "")).strip(),
+                        "voicechat_tunnel_id": str(cfg.get("voicechat_tunnel_id", "")).strip(),
                     },
                 )
             except Exception:
@@ -214,6 +221,7 @@ class PlayitMixin:
             self._bedrock_tunnel_spinner.set_spinning(False)
             self._voicechat_tunnel_spinner.set_visible(False)
             self._voicechat_tunnel_spinner.set_spinning(False)
+            self._tunnels_usage_row.set_subtitle(_("Not available"))
             self._tunnel_btn.set_label(_("Start Agent"))
             self._tunnel_btn.remove_css_class("destructive-action")
             self._tunnel_btn.add_css_class("suggested-action")
@@ -357,6 +365,8 @@ class PlayitMixin:
             self._voicechat_tunnel_spinner.set_visible(False)
             self._voicechat_tunnel_spinner.set_spinning(False)
 
+        self._refresh_tunnels_usage_row()
+
         tunnel_actions_locked = bool(
             self._start_in_progress
             or self._java_tunnel_in_progress
@@ -377,10 +387,50 @@ class PlayitMixin:
         else:
             self._tunnel_btn.remove_css_class("hosty-starting-button")
 
+    def _refresh_tunnels_usage_row(self):
+        """Show cached tunnel usage and refresh it in the background (throttled)."""
+        if not self._server_manager:
+            return
+        playit = self._server_manager.playit_manager
+        if not playit.has_claimed_secret() or playit.tunnels_refreshed_at is None:
+            self._tunnels_usage_row.set_subtitle(_("Not available"))
+        else:
+            used, maximum = playit.get_tunnel_usage()
+            self._tunnels_usage_row.set_subtitle(_("{} of {} used").format(used, maximum))
+        self._maybe_refresh_tunnel_usage()
+
+    def _maybe_refresh_tunnel_usage(self):
+        if not self._server_manager:
+            return
+        playit = self._server_manager.playit_manager
+        if not playit.has_claimed_secret() or self._tunnels_usage_refreshing:
+            return
+        if time.monotonic() - self._tunnels_usage_updated_at < 60:
+            return
+        self._tunnels_usage_refreshing = True
+
+        def run():
+            try:
+                ready, _detail = playit._ensure_api_ready()
+                if ready:
+                    playit._retrieve_tunnels()
+            except Exception:
+                pass
+
+            def ui_done():
+                self._tunnels_usage_refreshing = False
+                self._tunnels_usage_updated_at = time.monotonic()
+                self._refresh_tunnels_usage_row()
+
+            GLib.idle_add(ui_done)
+
+        threading.Thread(target=run, daemon=True).start()
+
     def _on_playit_status_changed(self, *_args):
         self._refresh_status_row()
 
     def _on_playit_endpoint_changed(self, *_args):
+        self._load_server_config()
         self._refresh_status_row()
 
     def _on_copy_tunnel_domain(self, *_args):
@@ -604,15 +654,22 @@ class PlayitMixin:
                 self._refresh_status_row()
 
                 def run():
-                    ok, msg, endpoint = self._server_manager.playit_manager.add_java_tunnel(
+                    playit_mgr = self._server_manager.playit_manager
+                    old_shared = self._has_other_server_with_tunnel_on_port("java_endpoint", old_port)
+                    if not old_shared:
+                        # Replacement is created before the old tunnel is
+                        # dropped; at the account cap, free the slot first.
+                        playit_mgr.ensure_free_slot(old_port, "tcp")
+
+                    ok, msg, endpoint = playit_mgr.add_java_tunnel(
                         server_id,
                         server_dir,
                         secret=secret,
                         auto_install=True,
                     )
 
-                    if ok and endpoint and not self._has_other_server_with_tunnel_on_port("java_endpoint", old_port):
-                        self._server_manager.playit_manager._delete_tunnels_by_port(old_port, "tcp")
+                    if ok and endpoint and not old_shared:
+                        playit_mgr._delete_tunnels_by_port(old_port, "tcp")
 
                     def ui_done():
                         self._java_tunnel_in_progress = False
@@ -620,14 +677,23 @@ class PlayitMixin:
                             self._save_server_config({"java_endpoint": endpoint})
                         self._refresh_status_row()
                         if not ok:
-                            self._alert(_("Could not create Java tunnel"), msg)
+                            # Creation failed: restore the previous port so the
+                            # saved config never points at a missing tunnel.
+                            self._server_manager.set_java_port(server_id, old_port)
+                            self._alert(
+                                _("Could not create Java tunnel"),
+                                _("{} Java port restored to {}.").format(msg, old_port),
+                            )
 
                     GLib.idle_add(ui_done)
 
                 threading.Thread(target=run, daemon=True).start()
 
             dialog = ManagePlayitTunnelDialog(
-                "Java", _("Minecraft Java (TCP)"), server_port, str(self._cfg.get("java_endpoint", "")).strip()
+                "Java",
+                _("Minecraft Java (TCP)"),
+                server_port,
+                str(self._cfg.get("java_endpoint", "")).strip(),
             )
             dialog.connect("regenerate", lambda *_: self._confirm_regenerate_tunnel("Java", start_operation))
             dialog.connect("delete", lambda *_: self._on_delete_java_tunnel())
@@ -715,7 +781,14 @@ class PlayitMixin:
                 self._refresh_status_row()
 
                 def run():
-                    ok, msg, endpoint = self._server_manager.playit_manager.add_bedrock_tunnel(
+                    playit_mgr = self._server_manager.playit_manager
+                    old_shared = self._has_other_server_with_tunnel_on_port("bedrock_endpoint", old_port)
+                    if not old_shared:
+                        # Replacement is created before the old tunnel is
+                        # dropped; at the account cap, free the slot first.
+                        playit_mgr.ensure_free_slot(old_port, "udp")
+
+                    ok, msg, endpoint = playit_mgr.add_bedrock_tunnel(
                         server_id,
                         server_dir,
                         secret=secret,
@@ -723,8 +796,8 @@ class PlayitMixin:
                         bedrock_port=new_port,
                     )
 
-                    if ok and endpoint and not self._has_other_server_with_tunnel_on_port("bedrock_endpoint", old_port):
-                        self._server_manager.playit_manager._delete_tunnels_by_port(old_port, "udp")
+                    if ok and endpoint and not old_shared:
+                        playit_mgr._delete_tunnels_by_port(old_port, "udp")
 
                     def ui_done():
                         self._bedrock_in_progress = False
@@ -732,14 +805,26 @@ class PlayitMixin:
                             self._save_server_config({"bedrock_endpoint": endpoint})
                         self._refresh_status_row()
                         if not ok:
-                            self._alert(_("Could not create Bedrock tunnel"), msg)
+                            # Creation failed: restore the previous port so the
+                            # saved config never points at a missing tunnel.
+                            self._server_manager.set_bedrock_port(server_id, old_port)
+                            self._cfg["bedrock_port"] = old_port
+                            self._save_server_config()
+                            self._server_manager.playit_manager.configure_geyser_mod(server_dir, old_port)
+                            self._alert(
+                                _("Could not create Bedrock tunnel"),
+                                _("{} Bedrock port restored to {}.").format(msg, old_port),
+                            )
 
                     GLib.idle_add(ui_done)
 
                 threading.Thread(target=run, daemon=True).start()
 
             dialog = ManagePlayitTunnelDialog(
-                "Bedrock", _("Minecraft Bedrock (UDP)"), br_port, str(self._cfg.get("bedrock_endpoint", "")).strip()
+                "Bedrock",
+                _("Minecraft Bedrock (UDP)"),
+                br_port,
+                str(self._cfg.get("bedrock_endpoint", "")).strip(),
             )
             dialog.connect("regenerate", lambda *_: self._confirm_regenerate_tunnel("Bedrock", start_operation))
             dialog.connect("delete", lambda *_: self._on_delete_bedrock_tunnel())
@@ -807,6 +892,20 @@ class PlayitMixin:
                         voicechat_port=vc_port,
                     )
 
+                # Write the fresh public endpoint into
+                # voicechat-server.properties (voice_host=domain:port).
+                if ok and endpoint:
+                    try:
+                        self._server_manager.playit_manager.configure_voicechat_mod(
+                            server_dir,
+                            server_id,
+                            endpoint=endpoint,
+                            voicechat_port=vc_port,
+                            loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                        )
+                    except Exception:
+                        pass
+
                 def ui_done():
                     self._voicechat_in_progress = False
                     if ok and endpoint:
@@ -814,7 +913,13 @@ class PlayitMixin:
                         self._propagate_tunnel_endpoint("voicechat_endpoint", vc_port, endpoint)
                     self._refresh_status_row()
                     if ok:
-                        self._toast(msg)
+                        # SVC only reads voicechat-server.properties at
+                        # startup: a running server keeps the old voice_host
+                        # in memory until restarted.
+                        if self._server_running():
+                            self._toast(_("{}. Restart the server to apply voice chat settings.").format(msg))
+                        else:
+                            self._toast(msg)
                     else:
                         self._alert(_("Could not update Voice Chat tunnel"), msg)
 
@@ -843,7 +948,14 @@ class PlayitMixin:
                 self._refresh_status_row()
 
                 def run():
-                    ok, msg, endpoint = self._server_manager.playit_manager.add_voicechat_tunnel(
+                    playit_mgr = self._server_manager.playit_manager
+                    old_shared = self._has_other_server_with_tunnel_on_port("voicechat_endpoint", old_port)
+                    if not old_shared:
+                        # Replacement is created before the old tunnel is
+                        # dropped; at the account cap, free the slot first.
+                        playit_mgr.ensure_free_slot(old_port, "udp")
+
+                    ok, msg, endpoint = playit_mgr.add_voicechat_tunnel(
                         server_id,
                         server_dir,
                         secret=secret,
@@ -851,12 +963,22 @@ class PlayitMixin:
                         voicechat_port=new_port,
                     )
 
-                    if (
-                        ok
-                        and endpoint
-                        and not self._has_other_server_with_tunnel_on_port("voicechat_endpoint", old_port)
-                    ):
-                        self._server_manager.playit_manager._delete_tunnels_by_port(old_port, "udp")
+                    if ok and endpoint and not old_shared:
+                        playit_mgr._delete_tunnels_by_port(old_port, "udp")
+
+                    # Refresh voicechat-server.properties with the new public
+                    # endpoint so voice_host stays domain:remote_port.
+                    if ok and endpoint:
+                        try:
+                            self._server_manager.playit_manager.configure_voicechat_mod(
+                                server_dir,
+                                server_id,
+                                endpoint=endpoint,
+                                voicechat_port=new_port,
+                                loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                            )
+                        except Exception:
+                            pass
 
                     def ui_done():
                         self._voicechat_in_progress = False
@@ -864,7 +986,17 @@ class PlayitMixin:
                             self._save_server_config({"voicechat_endpoint": endpoint})
                         self._refresh_status_row()
                         if not ok:
-                            self._alert(_("Could not create Voice Chat tunnel"), msg)
+                            # Creation failed: restore the previous port so the
+                            # saved config never points at a missing tunnel.
+                            # (voicechat-server.properties is re-synced on the
+                            # next server start or regenerate.)
+                            self._server_manager.set_voicechat_port(server_id, old_port)
+                            self._cfg["voicechat_port"] = old_port
+                            self._save_server_config()
+                            self._alert(
+                                _("Could not create Voice Chat tunnel"),
+                                _("{} Voice Chat port restored to {}.").format(msg, old_port),
+                            )
 
                     GLib.idle_add(ui_done)
 
@@ -1310,6 +1442,27 @@ class PlayitMixin:
         def run():
             ok, msg = worker()
             if ok:
+                try:
+                    br_port_probe = int(self._cfg.get("bedrock_port", 19132))
+                except Exception:
+                    br_port_probe = 19132
+                try:
+                    vc_port_probe = int(self._cfg.get("voicechat_port", 24454))
+                except Exception:
+                    vc_port_probe = 24454
+                # Validate stored endpoints (clear ones deleted via the
+                # dashboard) and create missing tunnels for installed mods.
+                try:
+                    self._server_manager.playit_manager.auto_create_tunnel_mods(
+                        server_id,
+                        server_dir,
+                        secret=secret,
+                        bedrock_port=br_port_probe,
+                        voicechat_port=vc_port_probe,
+                        loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                    )
+                except Exception:
+                    logger.exception("playit auto-create/validate failed for server %s", server_id)
                 cfg = load_playit_config(server_dir)
                 br_port = int(cfg.get("bedrock_port", 19132))
                 vc_port = int(cfg.get("voicechat_port", 24454))
@@ -1326,6 +1479,7 @@ class PlayitMixin:
 
             def ui_done():
                 self._start_in_progress = False
+                self._load_server_config()
                 self._refresh_status_row()
                 if ok:
                     self._toast(_("Playit agent started"))
