@@ -1423,6 +1423,12 @@ class PlayitMixin:
             self._toast(_("Playit startup is already in progress"))
             return
 
+        if self._server_info:
+            # An explicit start resumes the keep-alive paused by _on_stop.
+            root = self.get_root()
+            if root and hasattr(root, "clear_playit_auto_start_pause"):
+                root.clear_playit_auto_start_pause(self._server_info.id)
+
         self._save_server_config()
         server_id = self._server_info.id
         server_dir = str(self._server_info.server_dir)
@@ -1495,6 +1501,13 @@ class PlayitMixin:
             return
 
         ok, msg = self._server_manager.playit_manager.stop()
+        if self._server_info:
+            # An explicit stop must stick: pause the 1s keep-alive or it
+            # restarts the agent for every running server. Resumed by an
+            # explicit start (or stopping the server / toggling auto-start).
+            root = self.get_root()
+            if root and hasattr(root, "pause_playit_auto_start_for_running_server"):
+                root.pause_playit_auto_start_for_running_server(self._server_info.id)
         self._refresh_status_row()
         if ok:
             self._toast(_("Playit agent stopped"))

@@ -1,5 +1,4 @@
-"""Tests for Minecraft multiplayer server icons.
-"""
+"""Tests for Minecraft multiplayer server icons."""
 
 from pathlib import Path
 
@@ -139,9 +138,7 @@ def test_dialogs_use_canonical_icon():
         assert "server-icon.png" in src or "SERVER_ICON_FILENAME" in src or "prepare_server_icon" in src, (
             f"{name} does not reference the canonical server-icon.png"
         )
-        assert '"icon.png"' not in src and "'icon.png'" not in src, (
-            f"{name} still writes legacy icon.png"
-        )
+        assert '"icon.png"' not in src and "'icon.png'" not in src, f"{name} still writes legacy icon.png"
 
 
 def test_set_server_icon_normalizes_to_canonical(server_manager, tmp_path: Path):

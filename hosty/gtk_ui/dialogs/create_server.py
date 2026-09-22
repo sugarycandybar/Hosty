@@ -857,9 +857,7 @@ class CreateServerDialog(Adw.Dialog):
             if icon_source_path:
                 self._update_progress(0.92, _("Applying server icon..."), "")
                 try:
-                    icon_output = prepare_server_icon(
-                        icon_source_path, str(server_info.server_dir)
-                    )
+                    icon_output = prepare_server_icon(icon_source_path, str(server_info.server_dir))
                     self._server_manager.set_server_icon(server_info.id, str(icon_output))
                 except Exception:
                     pass
