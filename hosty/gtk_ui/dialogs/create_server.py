@@ -25,7 +25,7 @@ from hosty.shared.utils.constants import (
     SUPPORTED_LOADERS,
     get_required_java_version,
 )
-from hosty.shared.utils.image_utils import convert_to_png
+from hosty.shared.utils.image_utils import prepare_server_icon
 
 OPTIMISATION_MODS = [
     ("lithium", _("Lithium")),
@@ -853,12 +853,13 @@ class CreateServerDialog(Adw.Dialog):
                     self._show_error(_("Failed to import world: {}").format(msg))
                     return
 
-            # Step 6: Save icon if selected
+            # Step 6: Save icon if selected (server-icon.png 64x64 for MC multiplayer list)
             if icon_source_path:
                 self._update_progress(0.92, _("Applying server icon..."), "")
                 try:
-                    icon_output = server_info.server_dir / "icon.png"
-                    convert_to_png(icon_source_path, str(icon_output), size=128)
+                    icon_output = prepare_server_icon(
+                        icon_source_path, str(server_info.server_dir)
+                    )
                     self._server_manager.set_server_icon(server_info.id, str(icon_output))
                 except Exception:
                     pass

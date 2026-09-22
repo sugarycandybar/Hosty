@@ -12,7 +12,11 @@ from pathlib import Path
 
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk
 
-from hosty.shared.utils.image_utils import convert_to_png, load_pixbuf
+from hosty.shared.utils.image_utils import (
+    convert_to_png,
+    load_pixbuf,
+    prepare_server_icon,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -187,16 +191,13 @@ class IconPickerDialog(Adw.Dialog):
             return
 
         try:
-            output_path = self._server_dir / "icon.png"
-            self._server_dir.mkdir(parents=True, exist_ok=True)
-
-            convert_to_png(
+            output_path = prepare_server_icon(
                 self._source_path,
-                str(output_path),
-                size=128,
+                str(self._server_dir),
             )
 
-            # Clean up preview
+            # Clean up preview (prepare_server_icon already removes legacy
+            # files, but keep this for older previews).
             preview_path = self._server_dir / "icon_preview.png"
             preview_path.unlink(missing_ok=True)
 

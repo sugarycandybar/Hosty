@@ -673,7 +673,7 @@ class DownloadManager:
         # Validate installer file before invoking java
         installer_path = Path(installer_jar)
         if not installer_path.is_file():
-            return False, _("Installer file not found at {} — please retry creation").format(installer_jar)
+            return False, _("Installer file not found at {} - please retry creation").format(installer_jar)
         if not _is_valid_jar(installer_path):
             try:
                 installer_path.unlink(missing_ok=True)

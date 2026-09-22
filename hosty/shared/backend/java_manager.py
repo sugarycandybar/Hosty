@@ -262,7 +262,7 @@ class JavaManager:
                     break
                 except Exception as e:
                     last_exc = e
-                    # 404 means the binary genuinely doesn't exist — don't retry
+                    # 404 means the binary doesn't exist - don't retry
                     if isinstance(e, requests.exceptions.HTTPError) and e.response is not None:
                         if e.response.status_code == 404:
                             raise

@@ -104,6 +104,53 @@ class ServerManager(EventEmitter):
                     self._servers[info.id] = info
             except Exception as e:
                 logger.warning("Failed to load servers: %s", e)
+        self._migrate_server_icons()
+
+    def _migrate_server_icons(self):
+        """Migrate legacy ``icon.png`` (128px) to ``server-icon.png`` (64px).
+
+        Old Hosty versions wrote ``icon.png``, which Hosty's sidebar shows
+        but Minecraft's multiplayer list silently ignores. For each server:
+        - if a valid ``server-icon.png`` already exists, point icon_path at it
+        - elif legacy ``icon.png`` exists, convert it to ``server-icon.png``
+        - elif icon_path is empty but ``server-icon.png`` was placed manually,
+          adopt it.
+        """
+        try:
+            from hosty.shared.utils.image_utils import (
+                SERVER_ICON_FILENAME,
+                is_valid_server_icon,
+                migrate_legacy_server_icon,
+            )
+        except Exception:
+            return
+        changed = False
+        for info in self._servers.values():
+            try:
+                root = info.server_dir
+                if not root.exists():
+                    continue
+                canonical = root / SERVER_ICON_FILENAME
+                migrated = migrate_legacy_server_icon(str(root))
+                if migrated and Path(migrated).exists():
+                    if info.icon_path != str(migrated):
+                        # Adopt canonical if: no icon set, pointing at legacy
+                        # file, pointing at a missing file, or canonical is
+                        # valid (covers manually-placed icons too).
+                        if (
+                            not info.icon_path
+                            or info.icon_path.endswith("/icon.png")
+                            or info.icon_path.endswith("\\icon.png")
+                            or info.icon_path == str(root / "icon.png")
+                            or not Path(info.icon_path).exists()
+                            or is_valid_server_icon(str(canonical))
+                        ):
+                            info.icon_path = str(migrated)
+                            changed = True
+            except Exception:
+                continue
+        if changed:
+            self._save()
 
     def _save(self):
         """Persist servers to JSON."""
@@ -169,12 +216,85 @@ class ServerManager(EventEmitter):
             self.emit_on_main_thread("server-changed", server_id)
 
     def set_server_icon(self, server_id: str, icon_path: str):
-        """Set the icon for a server."""
+        """Set the icon for a server.
+
+        Normalizes to ``server-icon.png`` (64x64) so the icon appears in
+        Minecraft's multiplayer list, not just in Hosty's sidebar. If the
+        given file exists but is not yet the canonical file, it is converted.
+        """
         info = self._servers.get(server_id)
         if info:
-            info.icon_path = icon_path
+            canonical_path = icon_path
+            try:
+                from hosty.shared.utils.image_utils import (
+                    SERVER_ICON_FILENAME,
+                    prepare_server_icon,
+                )
+
+                given = Path(icon_path) if icon_path else None
+                canonical = info.server_dir / SERVER_ICON_FILENAME
+                if given is not None and given.exists():
+                    try:
+                        same = canonical.exists() and given.resolve() == canonical.resolve()
+                    except Exception:
+                        same = False
+                    if same:
+                        canonical_path = str(canonical)
+                    else:
+                        # Convert whatever the user picked into the canonical file.
+                        try:
+                            canonical_path = prepare_server_icon(str(given), str(info.server_dir))
+                        except Exception as e:
+                            logger.warning("Failed to normalize server icon: %s", e)
+                            canonical_path = icon_path
+            except Exception:
+                pass
+            info.icon_path = canonical_path
             self._save()
             self.emit_on_main_thread("server-changed", server_id)
+
+    def ensure_multiplayer_icon(self, server_id: str) -> str | None:
+        """Ensure ``server-icon.png`` exists for a server.
+
+        The Minecraft server only reads the icon at startup, so this is
+        called before launch as well as at load time. Returns the canonical
+        path, or None if there is no icon to ensure.
+        """
+        info = self._servers.get(server_id)
+        if not info:
+            return None
+        try:
+            from hosty.shared.utils.image_utils import (
+                SERVER_ICON_FILENAME,
+                is_valid_server_icon,
+                migrate_legacy_server_icon,
+                prepare_server_icon,
+            )
+
+            canonical = info.server_dir / SERVER_ICON_FILENAME
+            if is_valid_server_icon(str(canonical)):
+                if info.icon_path != str(canonical):
+                    info.icon_path = str(canonical)
+                    self._save()
+                return str(canonical)
+            migrated = migrate_legacy_server_icon(str(info.server_dir))
+            if migrated and is_valid_server_icon(migrated):
+                info.icon_path = migrated
+                self._save()
+                return migrated
+            # icon_path may point at a valid source that was never converted
+            # (e.g. set before the fix, or placed manually elsewhere).
+            if info.icon_path and Path(info.icon_path).is_file():
+                try:
+                    out = prepare_server_icon(info.icon_path, str(info.server_dir))
+                    info.icon_path = out
+                    self._save()
+                    return out
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return None
 
     def get_autostart_server(self) -> ServerInfo | None:
         """Get the first server configured to auto-start, if any."""
@@ -1109,7 +1229,7 @@ class ServerManager(EventEmitter):
             return False, {"kind": "not-found"}
 
         # Ensure the selected Java runtime exists before launching; the
-        # properties dialog only promises auto-install — this is where it
+        # properties dialog only promises auto-install - this is where it
         # actually happens.
         if not self.java_manager.is_java_available(info.java_version):
             sys_ver = self.java_manager.system_java_version
@@ -1155,6 +1275,14 @@ class ServerManager(EventEmitter):
             voicechat_port=self.get_voicechat_port(server_id),
             loader=info.loader_type,
         )
+
+        # Ensure the multiplayer icon exists before launch: the MC server
+        # only reads server-icon.png at startup, so a missing/legacy icon
+        # must be (re)generated here, not after the process is running.
+        try:
+            self.ensure_multiplayer_icon(server_id)
+        except Exception:
+            pass
 
         # Pick up the freshly downloaded runtime (the cached process may
         # predate the download and hold a system-java fallback path).
@@ -1626,7 +1754,7 @@ class ServerManager(EventEmitter):
                 shutil.rmtree(staged, ignore_errors=True)
                 raise
 
-            # Staged copy verified — only now remove existing worlds and swap in
+            # Staged copy verified - only now remove existing worlds and swap in
             level_name = self._configured_level_name(root)
             for item in root.iterdir():
                 if item == staged:

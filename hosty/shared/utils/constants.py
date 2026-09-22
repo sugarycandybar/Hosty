@@ -7,7 +7,7 @@ import re
 import sys
 from pathlib import Path
 
-import hosty.i18n  # noqa: F401 — installs _() into builtins
+import hosty.i18n  # noqa: F401 - installs _() into builtins
 from hosty.version import __version__
 
 # Application identity
