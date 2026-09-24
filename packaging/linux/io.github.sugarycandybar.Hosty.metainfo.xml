@@ -58,6 +58,17 @@
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
   <url type="vcs-browser">https://github.com/sugarycandybar/Hosty</url>
   <releases>
+    <release version="1.8.2" date="2026-09-24">
+      <description>
+        <p>Bug fixes and improvements:</p>
+        <ul>
+          <li>Fixed server icons</li>
+          <li>Fixed playit voicechat tunnels</li>
+          <li>Added playit tunnel counter</li>
+          <li>Various bug fixes</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.8.1" date="2026-09-08">
       <description>
         <p>Added mobile device support </p>
