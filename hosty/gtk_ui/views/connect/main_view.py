@@ -275,6 +275,9 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
             row.set_active(enabled)
         self._suppress_whitelist_toggle = False
 
+    def refresh_server_state(self) -> None:
+        self._refresh_whitelist_status()
+
     def _on_whitelist_toggled(self, row, _pspec):
         if self._suppress_whitelist_toggle:
             return

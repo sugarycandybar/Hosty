@@ -97,6 +97,7 @@ class ServerDetailView(Gtk.Box):
         self._add_lazy_tab("files", _("Files"), "folder-symbolic")
         self._view_stack.set_visible_child_name("connect")
         self._ensure_connect_view()
+        self._view_stack.connect("notify::visible-child-name", self._on_tab_changed)
 
         self._detail_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self._detail_content.set_hexpand(True)
@@ -122,6 +123,15 @@ class ServerDetailView(Gtk.Box):
         """Tell the detail view the window is in collapsed (phone) layout."""
         self._narrow_layout = narrow
         self._sync_switcher_bar()
+
+    def _on_tab_changed(self, stack, _pspec):
+        """Refresh the newly shown tab (Connect re-reads server.properties)."""
+        try:
+            visible = stack.get_visible_child_name()
+        except Exception:
+            return
+        if visible == "connect" and self._connect_view is not None and self._current_server is not None:
+            self._connect_view.refresh_server_state()
 
     def _on_title_visible_changed(self, *_args):
         self._sync_switcher_bar()
@@ -279,6 +289,9 @@ class ServerDetailView(Gtk.Box):
         """Handle selected server's process status (Start/Stop button)."""
         self._update_toggle_for_selected(status)
         self._sync_perf_with_io_process()
+        if status == ServerStatus.RUNNING and self._connect_view is not None:
+            # server.properties is (re)generated on boot; re-read rows that mirror it.
+            self._connect_view.refresh_server_state()
 
     def _update_toggle_for_selected(self, status: str):
         """Update Start/Stop from the sidebar-selected server's process."""
