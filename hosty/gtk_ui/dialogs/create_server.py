@@ -56,6 +56,7 @@ class CreateServerDialog(Adw.Dialog):
         self._server_manager = server_manager
         self._game_versions: list[str] = []
         self._loader_versions: list[str] = []
+        self._loader_version_values: list[str] = []
         self._loader_build: str = ""
         self._loader_fetch_token: int = 0
         self._icon_source_path: str = ""
@@ -245,11 +246,12 @@ class CreateServerDialog(Adw.Dialog):
         self._mc_version_row.connect("notify::selected", self._on_mc_version_changed)
         version_group.add(self._mc_version_row)
 
-        self._loader_version_row = Adw.ActionRow(
+        self._loader_version_row = Adw.ComboRow(
             title=_("Loader version"),
-            subtitle=_("Loading..."),
+            model=Gtk.StringList.new([_("Loading...")]),
         )
-        self._loader_version_row.set_activatable(False)
+        self._loader_version_row.set_sensitive(False)
+        self._loader_version_row.connect("notify::selected", self._on_loader_version_changed)
         version_group.add(self._loader_version_row)
 
         java_labels = [f"Java {v}" for v in COMMON_JAVA_VERSIONS]
@@ -378,45 +380,76 @@ class CreateServerDialog(Adw.Dialog):
         self._refresh_loader_build()
         self._validate()
 
+    def _selected_loader_version(self) -> str:
+        idx = self._loader_version_row.get_selected()
+        if 0 <= idx < len(self._loader_version_values):
+            return self._loader_version_values[idx]
+        return ""
+
+    def _on_loader_version_changed(self, *_args) -> None:
+        """Handle loader version selection change."""
+        self._loader_build = self._selected_loader_version()
+        self._validate()
+
     def _refresh_loader_build(self):
-        """Resolve the newest/recommended loader build for the current selection."""
+        """Fetch selectable loader builds; default to newest/recommended."""
         self._loader_fetch_token += 1
         token = self._loader_fetch_token
         loader_type = self._selected_loader_type()
         mc_version = self._selected_mc_version()
 
         self._loader_build = ""
+        self._loader_version_values = []
         if not mc_version:
-            self._loader_version_row.set_subtitle(_("Select a Minecraft version first"))
+            self._loader_version_row.set_model(Gtk.StringList.new([_("Select a Minecraft version first")]))
+            self._loader_version_row.set_sensitive(False)
             return
 
-        self._loader_version_row.set_subtitle(_("Loading..."))
+        self._loader_version_row.set_model(Gtk.StringList.new([_("Loading...")]))
+        self._loader_version_row.set_sensitive(False)
 
         def worker():
             # Reuse the already-fetched Fabric loader list when possible
             if loader_type == LOADER_FABRIC and self._loader_versions:
-                build = self._loader_versions[0]
+                builds = list(self._loader_versions)
+                default = builds[0] if builds else ""
             else:
-                build = self._server_manager.download_manager.resolve_loader_build(loader_type, mc_version)
-            GLib.idle_add(lambda: self._on_loader_build_resolved(token, build))
+                builds = self._server_manager.download_manager.fetch_loader_builds(loader_type, mc_version)
+                try:
+                    default = self._server_manager.download_manager.resolve_loader_build(loader_type, mc_version)
+                except Exception:
+                    default = ""
+                if not default and builds:
+                    default = builds[0]
+            GLib.idle_add(lambda: self._on_loader_builds_resolved(token, builds, default))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_loader_build_resolved(self, token: int, build: str) -> bool:
-        """Apply a resolved loader build unless a newer request superseded it."""
+    def _on_loader_builds_resolved(self, token: int, builds: list[str], default: str) -> bool:
+        """Populate the loader version dropdown unless superseded."""
         if token != self._loader_fetch_token:
             return False
-        self._loader_build = build
-        if build:
-            self._loader_version_row.set_subtitle(build)
+        builds = [str(b) for b in (builds or []) if str(b).strip()]
+        self._loader_version_values = builds
+        if builds:
+            self._loader_version_row.set_model(Gtk.StringList.new(builds))
+            self._loader_version_row.set_sensitive(True)
+            try:
+                selected = builds.index(default) if default in builds else 0
+            except Exception:
+                selected = 0
+            self._loader_version_row.set_selected(selected)
+            self._loader_build = self._selected_loader_version() or default
         else:
-            self._loader_version_row.set_subtitle(
-                _("No {} builds available for Minecraft {}").format(
-                    LOADER_NAMES[self._selected_loader_type()], self._selected_mc_version()
-                )
-            )
+            self._loader_version_row.set_model(Gtk.StringList.new([_("No builds available")]))
+            self._loader_version_row.set_sensitive(False)
+            self._loader_build = ""
         self._validate()
         return False
+
+    def _on_loader_build_resolved(self, token: int, build: str) -> bool:
+        """Backward-compatible single-build resolver (kept for tests)."""
+        return self._on_loader_builds_resolved(token, [build] if build else [], build)
 
     def _on_mc_version_changed(self, row, _pspec):
         """Handle MC version selection change."""
@@ -664,7 +697,7 @@ class CreateServerDialog(Adw.Dialog):
         name = self._name_entry.get_text().strip()
         mc_version = self._selected_mc_version()
         loader_type = self._selected_loader_type()
-        loader_version = self._loader_build
+        loader_version = self._selected_loader_version() or self._loader_build
         ram_mb = int(self._ram_row.get_value())
         seed = self._seed_entry.get_text().strip()
         difficulty_idx = self._difficulty_row.get_selected()

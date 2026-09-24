@@ -28,6 +28,7 @@ from hosty.shared.utils.constants import (
     NEOFORGE_MAVEN_INSTALLER_URL,
     NEOFORGE_VERSIONS_URL,
     PAPER_BUILD_URL,
+    PAPER_FILL_API_BASE,
     PAPER_LATEST_BUILD_URL,
     mod_loader_name,
     normalize_loader_type,
@@ -92,6 +93,107 @@ class DownloadManager:
         except Exception as e:
             logger.warning("Failed to fetch loader versions: %s", e)
             return []
+
+    def fetch_forge_loader_versions(self, mc_version: str) -> list[str]:
+        """Fetch available Forge loader versions for a Minecraft version.
+
+        Returns [recommended, latest] deduplicated (recommended first, as it
+        is the default). Empty when none are published for this MC version.
+        """
+        mc_version = str(mc_version or "").strip()
+        if not mc_version:
+            return []
+        try:
+            resp = requests.get(FORGE_PROMOTIONS_URL, timeout=15)
+            resp.raise_for_status()
+            promos = resp.json().get("promos", {})
+        except Exception as e:
+            logger.warning("Failed to fetch Forge promotions: %s", e)
+            return []
+        out: list[str] = []
+        for key in (f"{mc_version}-recommended", f"{mc_version}-latest"):
+            build = str(promos.get(key) or "").strip()
+            if build and build not in out:
+                out.append(build)
+        return out
+
+    def fetch_neoforge_loader_versions(self, mc_version: str) -> list[str]:
+        """Fetch available NeoForge versions for a Minecraft version's branch.
+
+        Stable builds come first (newest first), then betas (newest first),
+        so index 0 matches :meth:`resolve_loader_build`'s default.
+        """
+        branch = self._neoforge_branch_segments(mc_version)
+        if not branch:
+            return []
+        try:
+            resp = requests.get(NEOFORGE_VERSIONS_URL, timeout=15)
+            resp.raise_for_status()
+            versions = resp.json().get("versions", [])
+        except Exception as e:
+            logger.warning("Failed to fetch NeoForge versions: %s", e)
+            return []
+        suffix_re = re.compile(r"^(?P<base>\d+(?:\.\d+)*)(?P<tag>-\w+)?$")
+        stable: list[tuple[tuple, str]] = []
+        betas: list[tuple[tuple, str]] = []
+        for v in versions:
+            m = suffix_re.match(str(v))
+            if not m:
+                continue
+            base_nums = [int(p) for p in m.group("base").split(".")]
+            if base_nums[: len(branch)] != branch:
+                continue
+            entry = (tuple(base_nums), str(v))
+            if "beta" in (m.group("tag") or "").lower():
+                betas.append(entry)
+            else:
+                stable.append(entry)
+        stable.sort(key=lambda item: item[0], reverse=True)
+        betas.sort(key=lambda item: item[0], reverse=True)
+        return [v for _, v in stable] + [v for _, v in betas]
+
+    def fetch_paper_loader_versions(self, mc_version: str) -> list[str]:
+        """Fetch available Paper build numbers for a Minecraft version, newest first."""
+        mc_version = str(mc_version or "").strip()
+        if not mc_version:
+            return []
+        try:
+            resp = requests.get(
+                f"{PAPER_FILL_API_BASE}/projects/paper/versions/{mc_version}/builds",
+                headers={"User-Agent": HOSTY_USER_AGENT},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            builds = resp.json()
+            if isinstance(builds, dict):
+                builds = builds.get("builds") or builds.get("data") or []
+            if not isinstance(builds, list):
+                return []
+            ids = sorted(
+                {int(b.get("id")) for b in builds if isinstance(b, dict) and str(b.get("id")).isdigit()},
+                reverse=True,
+            )
+            return [str(i) for i in ids]
+        except Exception as e:
+            logger.warning("Failed to fetch Paper builds: %s", e)
+            return []
+
+    def fetch_loader_builds(self, loader_type: str, mc_version: str | None = None) -> list[str]:
+        """Fetch all selectable loader builds for a loader type + MC version.
+
+        Newest/default first. Fabric ignores ``mc_version`` (global list).
+        """
+        loader_type = normalize_loader_type(loader_type)
+        mc_version = str(mc_version or "").strip()
+        if loader_type == LOADER_FABRIC:
+            return self.fetch_loader_versions()
+        if loader_type == LOADER_FORGE:
+            return self.fetch_forge_loader_versions(mc_version)
+        if loader_type == LOADER_NEOFORGE:
+            return self.fetch_neoforge_loader_versions(mc_version)
+        if loader_type == LOADER_PAPER:
+            return self.fetch_paper_loader_versions(mc_version)
+        return []
 
     @staticmethod
     def _neoforge_branch_segments(mc_version: str) -> list[int]:

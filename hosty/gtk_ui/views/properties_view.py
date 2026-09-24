@@ -442,19 +442,28 @@ class PropertiesView(Gtk.Box):
         if not self._server_manager or not self._server_info or not self._change_version_btn:
             return
         self._change_version_btn.set_sensitive(False)
-        self._change_version_btn.set_tooltip_text(_("Checking for newer Minecraft versions..."))
+        self._change_version_btn.set_tooltip_text(_("Checking for updates..."))
+        server_id = self._server_info.id
 
         def worker():
-            versions = self._server_manager.download_manager.fetch_game_versions()
-            current = self._server_info.mc_version
-            has_upgrade = any(ServerManager.is_version_after(v, current) for v in versions)
+            try:
+                status = self._server_manager.check_runtime_updates(server_id)
+            except Exception:
+                status = {"has_mc_update": False, "has_loader_update": False}
+            has_mc = bool(status.get("has_mc_update"))
+            has_loader = bool(status.get("has_loader_update"))
+            has_upgrade = has_mc or has_loader
 
             def done():
                 self._change_version_btn.set_sensitive(has_upgrade)
-                if has_upgrade:
+                if has_mc and has_loader:
+                    self._change_version_btn.set_tooltip_text(_("Minecraft and loader updates available"))
+                elif has_mc:
                     self._change_version_btn.set_tooltip_text(_("Upgrade server version"))
+                elif has_loader:
+                    self._change_version_btn.set_tooltip_text(_("Update loader version"))
                 else:
-                    self._change_version_btn.set_tooltip_text(_("No newer Minecraft versions available"))
+                    self._change_version_btn.set_tooltip_text(_("No updates available"))
                 return False
 
             GLib.idle_add(done)
@@ -503,11 +512,12 @@ class PropertiesView(Gtk.Box):
         loader_type_row.set_tooltip_text(_("The mod loader can't be changed after creation"))
         runtime_group.add(loader_type_row)
 
-        loader_version_row = Adw.ActionRow(
+        loader_version_values: list[str] = []
+        loader_version_row = Adw.ComboRow(
             title=_("Loader version"),
-            subtitle=_("Loading..."),
+            model=Gtk.StringList.new([_("Loading...")]),
         )
-        loader_version_row.set_activatable(False)
+        loader_version_row.set_sensitive(False)
         runtime_group.add(loader_version_row)
 
         java_info_row = Adw.ActionRow(
@@ -545,6 +555,8 @@ class PropertiesView(Gtk.Box):
         selected_loader = {"value": ""}
         loader_fetch_token = {"count": 0}
         compatibility_plan: dict = {}
+        current_mc_at_open = self._server_info.mc_version
+        current_loader_at_open = self._server_info.loader_version or ""
 
         toolbar.set_content(stack)
         dialog.set_child(toolbar)
@@ -575,8 +587,14 @@ class PropertiesView(Gtk.Box):
                 return ""
             return mc_values[idx]
 
+        def selected_loader_version() -> str:
+            idx = int(loader_version_row.get_selected())
+            if 0 <= idx < len(loader_version_values):
+                return loader_version_values[idx]
+            return selected_loader["value"]
+
         def refresh_loader_build() -> None:
-            """Resolve the newest/recommended build of the server's own loader."""
+            """Fetch selectable loader builds; default to newest/recommended."""
             if not self._server_info:
                 return
             loader_fetch_token["count"] += 1
@@ -585,38 +603,118 @@ class PropertiesView(Gtk.Box):
             mc_version = selected_mc_version()
 
             selected_loader["value"] = ""
-            loader_version_row.set_subtitle(_("Loading..."))
+            loader_version_values.clear()
+            loader_version_row.set_model(Gtk.StringList.new([_("Loading...")]))
+            loader_version_row.set_sensitive(False)
 
             def worker():
-                build = self._server_manager.download_manager.resolve_loader_build(loader_type, mc_version)
-                GLib.idle_add(lambda: on_loader_build_resolved(token, build))
+                builds = self._server_manager.download_manager.fetch_loader_builds(loader_type, mc_version)
+                try:
+                    default = self._server_manager.download_manager.resolve_loader_build(
+                        loader_type, mc_version
+                    )
+                except Exception:
+                    default = ""
+                if not default and builds:
+                    default = builds[0]
+                GLib.idle_add(lambda: on_loader_builds_resolved(token, builds, default))
 
             threading.Thread(target=worker, daemon=True).start()
 
-        def on_loader_build_resolved(token: int, build: str) -> bool:
+        def on_loader_builds_resolved(token: int, builds: list[str], default: str) -> bool:
             if not self._server_info or token != loader_fetch_token["count"]:
                 return False
-            selected_loader["value"] = build
-            if build:
-                loader_version_row.set_subtitle(build)
+            builds = [str(b) for b in (builds or []) if str(b).strip()]
+            # Upgrade-only: hide older builds so a downgrade can't be picked.
+            # Same-MC shows only newer builds. Fabric versions are global, so
+            # a newer MC still hides older Fabric builds (same-or-newer
+            # shown, keeping the loader is fine). Other loaders are
+            # branch-specific, so a different MC allows any of its builds.
+            loader_type = normalize_loader_type(self._server_info.loader_type)
+            if selected_mc_version() == current_mc_at_open:
+                builds = [
+                    b
+                    for b in builds
+                    if ServerManager.is_loader_version_newer(b, current_loader_at_open)
+                ]
+                if default and not ServerManager.is_loader_version_newer(default, current_loader_at_open):
+                    default = builds[0] if builds else ""
+            elif loader_type == LOADER_FABRIC:
+                builds = [
+                    b
+                    for b in builds
+                    if b == current_loader_at_open
+                    or ServerManager.is_loader_version_newer(b, current_loader_at_open)
+                ]
+                if (
+                    default
+                    and default != current_loader_at_open
+                    and not ServerManager.is_loader_version_newer(default, current_loader_at_open)
+                ):
+                    default = builds[0] if builds else ""
+            loader_version_values.clear()
+            loader_version_values.extend(builds)
+            if builds:
+                loader_version_row.set_model(Gtk.StringList.new(builds))
+                loader_version_row.set_sensitive(True)
+                try:
+                    sel = builds.index(default) if default in builds else 0
+                except Exception:
+                    sel = 0
+                # Block the changed handler while programmatically selecting
+                loader_version_row.set_selected(sel)
+                selected_loader["value"] = loader_version_values[sel] if sel < len(loader_version_values) else default
             else:
-                loader_version_row.set_subtitle(
-                    _("No {} builds available for Minecraft {}").format(
-                        mod_loader_name(self._server_info.loader_type), selected_mc_version()
-                    )
-                )
+                if selected_mc_version() == current_mc_at_open:
+                    loader_version_row.set_model(Gtk.StringList.new([_("No newer builds available")]))
+                else:
+                    loader_version_row.set_model(Gtk.StringList.new([_("No builds available")]))
+                loader_version_row.set_sensitive(False)
+                selected_loader["value"] = ""
             validate()
             return False
 
+        def on_loader_build_resolved(token: int, build: str) -> bool:
+            return on_loader_builds_resolved(token, [build] if build else [], build)
+
+        def has_runtime_changes() -> bool:
+            sel_mc = selected_mc_version()
+            sel_loader = selected_loader_version()
+            if not sel_mc or not sel_loader:
+                return False
+            if sel_loader == current_loader_at_open:
+                # Same loader: only an MC change counts (MC upgrade,
+                # loader kept). Same MC + same loader is a no-op.
+                return sel_mc != current_mc_at_open
+            if not self._server_info:
+                return False
+            if normalize_loader_type(self._server_info.loader_type) == LOADER_FABRIC:
+                # Fabric versions are global: older is a downgrade on any MC.
+                return ServerManager.is_loader_version_newer(sel_loader, current_loader_at_open)
+            if sel_mc != current_mc_at_open:
+                return True
+            return ServerManager.is_loader_version_newer(sel_loader, current_loader_at_open)
+
         def validate(*_args):
+            # Keep dict in sync when user picks a different loader build
+            sync = selected_loader_version()
+            if sync:
+                selected_loader["value"] = sync
             update_java_info(selected_mc_version())
-            primary_btn.set_sensitive(bool(mc_values) and bool(selected_loader["value"]))
+            primary_btn.set_sensitive(bool(mc_values) and bool(selected_loader["value"]) and has_runtime_changes())
 
         def on_mc_changed(*_args):
             refresh_loader_build()
             validate()
 
+        def on_loader_changed(*_args):
+            sel = selected_loader_version()
+            if sel:
+                selected_loader["value"] = sel
+            validate()
+
         mc_row.connect("notify::selected", on_mc_changed)
+        loader_version_row.connect("notify::selected", on_loader_changed)
 
         def on_cancel(*_args):
             visible = stack.get_visible_child_name()
@@ -624,7 +722,7 @@ class PropertiesView(Gtk.Box):
                 stack.set_visible_child_name("runtime")
                 cancel_btn.set_label(_("Cancel"))
                 primary_btn.set_label(_("Next"))
-                primary_btn.set_sensitive(bool(mc_values) and bool(selected_loader["value"]))
+                validate()
                 return
             if visible == "progress":
                 return
@@ -658,22 +756,28 @@ class PropertiesView(Gtk.Box):
             games = self._server_manager.download_manager.fetch_game_versions()
 
             def loaded():
-                current_mc = self._server_info.mc_version
-                next_games = [v for v in games if ServerManager.is_version_after(v, current_mc)]
+                if not self._server_info:
+                    return False
+                candidates = self._server_manager.update_candidate_versions(self._server_info.id, games)
                 mc_values.clear()
-                mc_values.extend(next_games)
+                mc_values.extend(candidates)
                 mc_row.set_model(Gtk.StringList.new(mc_values or [_("No versions found")]))
                 if mc_values:
                     mc_row.set_selected(0)
                     # set_selected triggers the refresh of the loader build
                 else:
-                    loader_version_row.set_subtitle(_("No newer Minecraft versions available"))
+                    loader_version_values.clear()
+                    loader_version_row.set_model(Gtk.StringList.new([_("No updates available")]))
+                    loader_version_row.set_sensitive(False)
                     validate()
                 return False
 
             GLib.idle_add(loaded)
 
         def show_mod_review(*_args):
+            sync_loader = selected_loader_version()
+            if sync_loader:
+                selected_loader["value"] = sync_loader
             if not mc_values or not selected_loader["value"]:
                 return
             selected_mc["value"] = selected_mc_version()

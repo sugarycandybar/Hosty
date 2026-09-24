@@ -356,9 +356,25 @@ class ServerManager(EventEmitter):
         loader_version = str(loader_version or "").strip() if loader_version is not None else info.loader_version
         if not mc_version:
             return False, _("Minecraft version is required")
+        if mc_version == info.mc_version and str(loader_version or "") == str(info.loader_version or ""):
+            return False, _("Already up to date")
 
         loader_type = normalize_loader_type(info.loader_type)
         loader_name = mod_loader_name(loader_type)
+        installed_loader = str(info.loader_version or "").strip()
+        target_loader = str(loader_version or "").strip()
+        if (
+            installed_loader
+            and target_loader
+            and target_loader != installed_loader
+            and not self.is_loader_version_newer(target_loader, installed_loader)
+        ):
+            # Fabric versions are global, so an older Fabric build is a
+            # downgrade regardless of MC version. Other loaders are
+            # branch-specific (NeoForge/Paper/Forge per-MC builds), so only
+            # the same-MC case is a comparable downgrade.
+            if loader_type == LOADER_FABRIC or mc_version == info.mc_version:
+                return False, _("Selected loader version is older than the installed version")
 
         try:
             java_req = get_required_java_version(mc_version)
@@ -438,6 +454,8 @@ class ServerManager(EventEmitter):
         progress(0.97, _("Moving incompatible files aside"))
         disabled = self.isolate_incompatible_components(server_id, mc_version, plan)
 
+        old_mc = info.mc_version
+        old_loader = info.loader_version
         info.mc_version = mc_version
         info.loader_version = loader_version
         self._save()
@@ -448,7 +466,16 @@ class ServerManager(EventEmitter):
         progress(1.0, _("Server runtime updated"))
 
         disabled_count = sum(len(v) for v in disabled.values())
-        detail = _("Updated to Minecraft {}.").format(mc_version) + _(" Updated {} compatible file(s).").format(applied)
+        if mc_version != old_mc:
+            detail = _("Updated to Minecraft {}.").format(mc_version) + _(" Updated {} compatible file(s).").format(
+                applied
+            )
+        elif str(loader_version or "") != str(old_loader or ""):
+            detail = _("Updated {} to {}.").format(loader_name, loader_version) + _(
+                " Updated {} compatible file(s)."
+            ).format(applied)
+        else:
+            detail = _("Server runtime updated.") + _(" Updated {} compatible file(s).").format(applied)
         if disabled_count:
             detail += _(" Disabled {} incompatible file(s).").format(disabled_count)
         if failed:
@@ -526,6 +553,81 @@ class ServerManager(EventEmitter):
     @classmethod
     def is_version_after(cls, candidate: str, current: str) -> bool:
         return cls.version_sort_key(candidate) > cls.version_sort_key(current)
+
+    @staticmethod
+    def is_loader_version_newer(candidate: str | None, current: str | None) -> bool:
+        """True when ``candidate`` is a newer loader build than ``current``.
+
+        Empty candidates never count as updates. An empty current version
+        counts as outdated whenever a candidate build exists, so servers
+        missing a stored loader version still offer the update.
+        """
+        latest = str(candidate or "").strip()
+        installed = str(current or "").strip()
+        if not latest:
+            return False
+        if not installed:
+            return True
+        if latest == installed:
+            return False
+        return ServerManager.is_version_after(latest, installed)
+
+    def check_runtime_updates(self, server_id: str) -> dict:
+        """Check for newer Minecraft and loader builds for a server.
+
+        Fetches the game version list and the latest loader build for the
+        server's current Minecraft version. Returns a dict with
+        ``game_versions``, ``has_mc_update``, ``latest_loader`` and
+        ``has_loader_update`` keys. Empty/failed fetches yield ``False``
+        flags rather than raising.
+        """
+        info = self._servers.get(server_id)
+        if not info:
+            return {
+                "game_versions": [],
+                "has_mc_update": False,
+                "latest_loader": "",
+                "has_loader_update": False,
+            }
+        try:
+            games = self.download_manager.fetch_game_versions()
+        except Exception:
+            games = []
+        has_mc = any(self.is_version_after(v, info.mc_version) for v in (games or []))
+        try:
+            latest_loader = self.download_manager.resolve_loader_build(info.loader_type, info.mc_version)
+        except Exception:
+            latest_loader = ""
+        return {
+            "game_versions": games or [],
+            "has_mc_update": bool(has_mc),
+            "latest_loader": str(latest_loader or ""),
+            "has_loader_update": self.is_loader_version_newer(latest_loader, info.loader_version),
+        }
+
+    def update_candidate_versions(self, server_id: str, game_versions: list[str] | None = None) -> list[str]:
+        """MC versions valid as update targets, newest first.
+
+        Newer Minecraft versions are always included. The server's current
+        version is also included when it is present in the fetched list (or
+        when the fetched list is unavailable but a current version exists),
+        so loader-only in-place updates are possible without changing the
+        Minecraft version.
+        """
+        info = self._servers.get(server_id)
+        if not info:
+            return []
+        games = list(game_versions) if game_versions is not None else []
+        candidates = [v for v in games if self.is_version_after(v, info.mc_version)]
+        current = str(info.mc_version or "").strip()
+        if current and current not in candidates:
+            if not games or current in games:
+                candidates.append(current)
+            elif games:
+                # Current version no longer listed (e.g. snapshot-only or
+                # removed) - still allow in-place loader refresh.
+                candidates.append(current)
+        return candidates
 
     def _tracked_mod_state(self, root: Path) -> dict:
         data = self._json_file(root / ".hosty-mod-installs.json")
