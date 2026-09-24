@@ -610,9 +610,7 @@ class PropertiesView(Gtk.Box):
             def worker():
                 builds = self._server_manager.download_manager.fetch_loader_builds(loader_type, mc_version)
                 try:
-                    default = self._server_manager.download_manager.resolve_loader_build(
-                        loader_type, mc_version
-                    )
+                    default = self._server_manager.download_manager.resolve_loader_build(loader_type, mc_version)
                 except Exception:
                     default = ""
                 if not default and builds:
@@ -632,19 +630,14 @@ class PropertiesView(Gtk.Box):
             # branch-specific, so a different MC allows any of its builds.
             loader_type = normalize_loader_type(self._server_info.loader_type)
             if selected_mc_version() == current_mc_at_open:
-                builds = [
-                    b
-                    for b in builds
-                    if ServerManager.is_loader_version_newer(b, current_loader_at_open)
-                ]
+                builds = [b for b in builds if ServerManager.is_loader_version_newer(b, current_loader_at_open)]
                 if default and not ServerManager.is_loader_version_newer(default, current_loader_at_open):
                     default = builds[0] if builds else ""
             elif loader_type == LOADER_FABRIC:
                 builds = [
                     b
                     for b in builds
-                    if b == current_loader_at_open
-                    or ServerManager.is_loader_version_newer(b, current_loader_at_open)
+                    if b == current_loader_at_open or ServerManager.is_loader_version_newer(b, current_loader_at_open)
                 ]
                 if (
                     default
