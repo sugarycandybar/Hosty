@@ -697,6 +697,7 @@ class PlayitManager(EventEmitter):
         self._secret_key = None
         self.initialized = False
         self.tunnels = {"tcp": [], "udp": [], "both": []}
+        self.tunnels_refreshed_at = None
         self.tunnel_cache.clear_cache()
         return reset_ok
 
@@ -745,7 +746,7 @@ class PlayitManager(EventEmitter):
         return False
 
     def _retrieve_tunnels(self) -> dict[str, list[Tunnel]]:
-        self.tunnels = {"tcp": [], "udp": [], "both": []}
+        fresh: dict[str, list[Tunnel]] = {"tcp": [], "udp": [], "both": []}
         if not self._agent_id:
             return self.tunnels
 
@@ -770,14 +771,34 @@ class PlayitManager(EventEmitter):
             self.udp_limit = max(1, int(udp_alloc["allowed"]))
         self.max_tunnels = max(1, int(tcp_alloc.get("allowed", self.max_tunnels)))
 
+        seen_ids: set[str] = set()
+        dupes = 0
         for tunnel_data in tunnel_items:
             try:
                 tunnel = self.Tunnel(self, tunnel_data)
             except Exception:
                 continue
-            key = tunnel.protocol if tunnel.protocol in self.tunnels else "tcp"
-            self.tunnels[key].append(tunnel)
+            tunnel_id = str(tunnel.id or "").strip()
+            if tunnel_id and tunnel_id in seen_ids:
+                # The API sometimes echoes the same tunnel twice (e.g. right
+                # after create/delete operations). Count it once, preferring
+                # the non-pending record.
+                dupes += 1
+                for bucket_list in fresh.values():
+                    for index, existing in enumerate(bucket_list):
+                        if str(existing.id or "") == tunnel_id:
+                            if existing.status == "pending" and tunnel.status != "pending":
+                                bucket_list[index] = tunnel
+                            break
+                continue
+            if tunnel_id:
+                seen_ids.add(tunnel_id)
+            key = tunnel.protocol if tunnel.protocol in fresh else "tcp"
+            fresh[key].append(tunnel)
+        if dupes:
+            logger.warning("playit tunnels/list echoed %d duplicate tunnel(s); counted once", dupes)
 
+        self.tunnels = fresh
         self.tunnels_refreshed_at = time.monotonic()
         return self.tunnels
 

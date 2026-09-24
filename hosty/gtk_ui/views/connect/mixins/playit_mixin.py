@@ -410,6 +410,7 @@ class PlayitMixin:
         self._tunnels_usage_refreshing = True
 
         def run():
+            refresh_mark = playit.tunnels_refreshed_at
             try:
                 ready, _detail = playit._ensure_api_ready()
                 if ready:
@@ -419,7 +420,8 @@ class PlayitMixin:
 
             def ui_done():
                 self._tunnels_usage_refreshing = False
-                self._tunnels_usage_updated_at = time.monotonic()
+                if playit.tunnels_refreshed_at is not None and playit.tunnels_refreshed_at is not refresh_mark:
+                    self._tunnels_usage_updated_at = time.monotonic()
                 self._refresh_tunnels_usage_row()
 
             GLib.idle_add(ui_done)

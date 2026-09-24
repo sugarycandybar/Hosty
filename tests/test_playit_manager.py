@@ -1052,3 +1052,161 @@ def test_null_tunnel_ids_normalize_to_empty(tmp_path):
     assert cfg["voicechat_tunnel_id"] == ""
     assert cfg["voicechat_endpoint"] == ""
     assert cfg["secret"] == ""
+
+
+def test_retrieve_dedupes_echoed_tunnels_by_id():
+    """tunnels/list sometimes echoes the same tunnel twice (e.g. around
+    create/delete). It must be counted once, preferring the active record."""
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pending_echo = {
+        "id": "t-dup",
+        "name": "hosty-voicechat-udp-24454-1",
+        "tunnel_type": "minecraft-bedrock",
+        "port_type": "udp",
+        "port_count": 1,
+        "alloc": {"status": "pending"},
+        "origin": {"data": {"local_port": 24454, "local_ip": "127.0.0.1"}},
+        "created_at": "",
+    }
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    payload = {
+        "status": "success",
+        "data": {
+            "tunnels": [
+                _tunnel_data(
+                    "t-tcp",
+                    proto="tcp",
+                    tunnel_type="minecraft-java",
+                    local_port=25565,
+                    domain="a.tun.ply.gg",
+                    remote_port=10001,
+                    name="hosty-srv-tcp-25565-1",
+                ),
+                pending_echo,
+                _tunnel_data(
+                    "t-dup",
+                    local_port=24454,
+                    domain="b.tun.ply.gg",
+                    remote_port=10002,
+                    name="hosty-voicechat-udp-24454-1",
+                ),
+                _tunnel_data(
+                    "t-dup",
+                    local_port=24454,
+                    domain="b.tun.ply.gg",
+                    remote_port=10002,
+                    name="hosty-voicechat-udp-24454-1",
+                ),
+            ],
+            "tcp_alloc": {"allowed": 4},
+            "udp_alloc": {"allowed": 4},
+        },
+    }
+
+    with patch.object(PlayitManager, "_request", return_value=payload):
+        pm._retrieve_tunnels()
+
+    assert pm.get_tunnel_usage() == (2, 4)
+    kept = [t for t in pm.tunnels["udp"] if t.id == "t-dup"]
+    assert len(kept) == 1
+    assert kept[0].status != "pending"
+    assert kept[0].port == 24454
+
+
+def _tcp_tunnel_data(tunnel_id="t-java", local_port=25565, domain="java.tun.ply.gg", remote_port=40000):
+    return _tunnel_data(
+        tunnel_id,
+        proto="tcp",
+        tunnel_type="minecraft-java",
+        local_port=local_port,
+        domain=domain,
+        remote_port=remote_port,
+        name=f"hosty-srv-tcp-{local_port}-1",
+    )
+
+
+def _empty_success():
+    return {"status": "success", "data": {"tunnels": [], "tcp_alloc": {"allowed": 4}, "udp_alloc": {"allowed": 4}}}
+
+
+def test_failed_retrieve_keeps_last_known_tunnels():
+    """A failed refresh (API blip during startup) must not wipe good data:
+    the usage row would otherwise show 0/4 until something refetches."""
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    good = {
+        "status": "success",
+        "data": {
+            "tunnels": [_tcp_tunnel_data()],
+            "tcp_alloc": {"allowed": 4},
+            "udp_alloc": {"allowed": 4},
+        },
+    }
+
+    with patch.object(PlayitManager, "_request", return_value=good):
+        pm._retrieve_tunnels()
+    assert pm.get_tunnel_usage() == (1, 4)
+    mark = pm.tunnels_refreshed_at
+    assert mark is not None
+
+    with patch.object(PlayitManager, "_request", side_effect=RuntimeError("blip")):
+        pm._retrieve_tunnels()
+
+    assert pm.get_tunnel_usage() == (1, 4)
+    assert pm.tunnels_refreshed_at is mark
+    assert [t.id for t in pm.tunnels["tcp"]] == ["t-java"]
+
+
+def test_successful_retrieve_replaces_tunnel_data():
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    first = {
+        "status": "success",
+        "data": {
+            "tunnels": [_tcp_tunnel_data("t-old")],
+            "tcp_alloc": {"allowed": 4},
+            "udp_alloc": {"allowed": 4},
+        },
+    }
+    second = {
+        "status": "success",
+        "data": {
+            "tunnels": [_tcp_tunnel_data("t-new")],
+            "tcp_alloc": {"allowed": 4},
+            "udp_alloc": {"allowed": 4},
+        },
+    }
+
+    with patch.object(PlayitManager, "_request", return_value=first):
+        pm._retrieve_tunnels()
+    with patch.object(PlayitManager, "_request", return_value=second):
+        pm._retrieve_tunnels()
+
+    assert [t.id for t in pm.tunnels["tcp"]] == ["t-new"]
+    assert pm.get_tunnel_usage() == (1, 4)
+
+
+def test_unlink_resets_tunnel_freshness():
+    """After unlink the row must show Not available, not stale counts."""
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm.tunnels["tcp"] = ["whatever"]
+    pm.tunnels_refreshed_at = 1234.5
+
+    pm.unlink_account()
+
+    assert pm.tunnels == {"tcp": [], "udp": [], "both": []}
+    assert pm.tunnels_refreshed_at is None
