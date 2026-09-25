@@ -872,6 +872,7 @@ class CreateServerDialog(Adw.Dialog):
             config.set_value("gamemode", gamemode)
             config.set_value("level-type", level_type)
             config.set_value("level-seed", seed)
+            config.set_value("white-list", DEFAULT_SERVER_PROPERTIES.get("white-list", "false"))
             config.save()
             config.set_eula(True)
             self._server_manager.set_java_port(server_info.id, 25565)

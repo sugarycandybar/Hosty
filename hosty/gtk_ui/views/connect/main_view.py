@@ -18,6 +18,8 @@ from hosty.shared.backend.server_manager import ServerInfo, ServerManager
 PLAYIT_DASHBOARD_URL = "https://playit.gg/account/tunnels"
 
 
+from hosty.shared.utils.constants import DEFAULT_SERVER_PROPERTIES
+
 from .mixins import LocalIpMixin, PlayersMixin, PlayitMixin
 from .utils import *
 
@@ -268,7 +270,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
             cfg = self._server_manager.get_config(self._server_info.id)
             if cfg:
                 cfg.load()
-                enabled = cfg.get_bool("white-list", False)
+                enabled = cfg.get_bool("white-list", DEFAULT_SERVER_PROPERTIES.get("white-list", "false"))
 
         self._suppress_whitelist_toggle = True
         for row in self._whitelist_toggle_rows:
