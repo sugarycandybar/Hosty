@@ -167,6 +167,33 @@ class _FakePlayitApi:
                 remote_port=7800,
             )
             return {"status": "success", "data": {"id": tunnel_id}}
+        if endpoint == "v1/tunnels/create":
+            # Voice chat uses raw (typeless) tunnels: game-typed UDP tunnels
+            # are protocol-filtered by playit's edges.
+            self.created += 1
+            tunnel_id = f"t-new-{self.created}"
+            protocol = payload.get("protocol") or {}
+            details = protocol.get("details") or {}
+            assert protocol.get("type") == "raw-ports", "voice must use raw-ports protocol"
+            assert details.get("port_type") == "udp"
+            assert str(details.get("software_description") or "").strip(), "raw tunnels need a description"
+            ep = payload.get("endpoint") or {}
+            assert (ep.get("details") or {}).get("region") == "global"
+            fields = (((payload.get("origin") or {}).get("data") or {}).get("config") or {}).get("fields", [])
+            local_port = 24454
+            for field in fields:
+                if field.get("name") == "local_port":
+                    local_port = int(field.get("value", 24454))
+            self.store[tunnel_id] = _tunnel_data(
+                tunnel_id,
+                proto="udp",
+                tunnel_type=None,
+                local_port=local_port,
+                domain="new.tun.ply.gg",
+                remote_port=7800,
+                name=payload.get("name"),
+            )
+            return {"status": "success", "data": {"id": tunnel_id}}
         raise AssertionError(f"unexpected endpoint {endpoint}")
 
     def patch(self, pm):
@@ -636,7 +663,7 @@ def test_stored_tunnel_id_is_reused_and_retargeted(tmp_path):
 
     pm = PlayitManager()
     pm._agent_id = "agent-1"
-    store = {"t-voice": _tunnel_data("t-voice", local_port=24454, name="hosty-voicechat-udp-24454-1")}
+    store = {"t-voice": _tunnel_data("t-voice", local_port=24454, name="hosty-voicechat-udp-24454-1", tunnel_type=None)}
     api = _FakePlayitApi(store, allowed=4)
     _save_voice_cfg(
         tmp_path,
@@ -666,7 +693,7 @@ def test_legacy_tunnel_adopted_by_port_and_kind(tmp_path):
 
     pm = PlayitManager()
     pm._agent_id = "agent-1"
-    store = {"t-voice": _tunnel_data("t-voice", local_port=24454, name="hosty-voicechat-udp-24454-9")}
+    store = {"t-voice": _tunnel_data("t-voice", local_port=24454, name="hosty-voicechat-udp-24454-9", tunnel_type=None)}
     api = _FakePlayitApi(store, allowed=4)
     _save_voice_cfg(tmp_path, voicechat_port=24454)
 
@@ -738,7 +765,7 @@ def test_auto_create_clears_stale_auto_endpoint(tmp_path):
     ):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454, loader="fabric")
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": ""}
+    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
     assert load_playit_config(tmp_path)["voicechat_endpoint"] == ""
 
 
@@ -808,7 +835,7 @@ def test_deleted_tunnel_is_not_resurrected_on_agent_start(tmp_path):
     ):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454, loader="fabric")
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": ""}
+    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
     assert load_playit_config(tmp_path)["voicechat_endpoint"] == ""
     assert load_playit_config(tmp_path)["voicechat_tunnel_id"] == "t-gone"
 
@@ -845,7 +872,7 @@ def test_fresh_install_gets_tunnel_created(tmp_path):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454, loader="fabric")
 
     assert add_mock.call_count == 1
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "new.tun.ply.gg:7800"}
+    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "new.tun.ply.gg:7800", "voicechat_migrated": ""}
     assert load_playit_config(tmp_path)["voicechat_endpoint"] == "new.tun.ply.gg:7800"
 
 
@@ -923,7 +950,7 @@ def test_auto_create_skips_validation_without_fresh_list(tmp_path):
     with patch.object(PlayitManager, "_request", side_effect=RuntimeError("offline")):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454, loader="fabric")
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": ""}
+    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
     assert load_playit_config(tmp_path)["voicechat_endpoint"] == "maybe.tun.ply.gg:7701"
 
 
@@ -966,7 +993,7 @@ def test_bedrock_failure_does_not_skip_voice_validation(tmp_path):
             "srv", str(tmp_path), bedrock_port=19132, voicechat_port=24454, loader="fabric"
         )
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": ""}
+    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
     cfg = load_playit_config(tmp_path)
     assert cfg["bedrock_endpoint"] == ""
     assert cfg["voicechat_endpoint"] == ""
@@ -994,7 +1021,7 @@ def test_auto_create_clears_stale_java_endpoint(tmp_path):
     ):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), loader="fabric")
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": ""}
+    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
     assert load_playit_config(tmp_path)["java_endpoint"] == ""
 
 
@@ -1210,3 +1237,510 @@ def test_unlink_resets_tunnel_freshness():
 
     assert pm.tunnels == {"tcp": [], "udp": [], "both": []}
     assert pm.tunnels_refreshed_at is None
+
+
+def test_legacy_bedrock_voice_tunnel_is_replaced_with_raw(tmp_path):
+    """A stored bedrock-typed voice tunnel is protocol-filtered by playit's
+    edges (voice packets dropped), so it must be replaced with a raw tunnel."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24454,
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        ok, _msg, endpoint = pm.add_voicechat_tunnel("srv", str(tmp_path), voicechat_port=24454)
+
+    assert ok is True
+    assert endpoint == "new.tun.ply.gg:7800"
+    assert "tunnels/delete" in api.calls
+    assert "v1/tunnels/create" in api.calls
+    assert "t-legacy" not in store
+    assert store["t-new-1"]["tunnel_type"] is None
+    assert load_playit_config(tmp_path)["voicechat_tunnel_id"] == "t-new-1"
+
+
+def test_legacy_voice_tunnel_kept_when_delete_fails(tmp_path):
+    """If the legacy tunnel cannot be deleted, keep serving it rather than
+    stranding the server without an endpoint."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4, fail_delete=True)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24454,
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        ok, _msg, endpoint = pm.add_voicechat_tunnel("srv", str(tmp_path), voicechat_port=24454)
+
+    assert ok is True
+    assert endpoint == "old.tun.ply.gg:1111"
+    assert "v1/tunnels/create" not in api.calls
+    assert "t-legacy" in store
+
+
+def test_bedrock_typed_tunnel_is_not_adopted_for_voice(tmp_path):
+    """A bedrock-typed tunnel on the voice port must not be adopted for
+    voice chat: it would be protocol-filtered. A raw tunnel is created."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    store = {
+        "t-bed": _tunnel_data(
+            "t-bed",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(tmp_path, voicechat_port=24454)
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        ok, _msg, endpoint = pm.add_voicechat_tunnel("srv", str(tmp_path), voicechat_port=24454)
+
+    assert ok is True
+    assert endpoint == "new.tun.ply.gg:7800"
+    assert "tunnels/delete" not in api.calls
+    assert "t-bed" in store
+
+
+def test_raw_voice_tunnel_is_reused_and_retargeted(tmp_path):
+    """Raw voice tunnels keep the old reuse behavior (no slot needed)."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    store = {
+        "t-voice": _tunnel_data(
+            "t-voice",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type=None,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24455,
+        voicechat_tunnel_id="t-voice",
+        voicechat_endpoint="nicely-units.tun.ply.gg:7701",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        ok, _msg, endpoint = pm.add_voicechat_tunnel("srv", str(tmp_path), voicechat_port=24455)
+
+    assert ok is True
+    assert endpoint == "nicely-units.tun.ply.gg:7701"
+    assert api.created == 0
+    assert "tunnels/delete" not in api.calls
+
+
+def _auto_create_pm(tmp_path):
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    pm.directory = tmp_path / "playit"
+    return pm
+
+
+def test_auto_create_migrates_legacy_voice_by_stored_id(tmp_path):
+    """The reported miss: a server that already had a bedrock-typed voice
+    tunnel must get it replaced with a raw one on start, with the account
+    map recording old -> new."""
+    import json
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24454,
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454)
+
+    assert result["voicechat_endpoint"] == "new.tun.ply.gg:7800"
+    assert "t-legacy" not in store
+    assert store["t-new-1"]["tunnel_type"] is None
+    cfg = load_playit_config(tmp_path)
+    assert cfg["voicechat_tunnel_id"] == "t-new-1"
+    assert cfg["voicechat_endpoint"] == "new.tun.ply.gg:7800"
+    mmap = json.loads((tmp_path / "playit" / ".voice-migrated.json").read_text(encoding="utf-8"))
+    assert mmap["t-legacy"] == {"id": "t-new-1", "endpoint": "new.tun.ply.gg:7800"}
+
+
+def test_auto_create_migrates_legacy_voice_by_endpoint_without_id(tmp_path):
+    """Servers that share an endpoint but store no tunnel id (the second
+    server) must migrate too, and record their new id."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(tmp_path, voicechat_port=24454, voicechat_endpoint="old.tun.ply.gg:1111")
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454)
+
+    assert result["voicechat_endpoint"] == "new.tun.ply.gg:7800"
+    cfg = load_playit_config(tmp_path)
+    assert cfg["voicechat_tunnel_id"] == "t-new-1"
+
+
+def test_auto_create_does_not_steal_bedrock_endpoint_for_voice(tmp_path):
+    """A voice endpoint pointing at a bedrock-kind tunnel is a
+    misconfiguration, not a migration candidate: leave it alone."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    store = {
+        "t-bed": _tunnel_data(
+            "t-bed",
+            local_port=19132,
+            name="hosty-bedrock-udp-19132-1",
+            tunnel_type="minecraft-bedrock",
+            domain="bed.tun.ply.gg",
+            remote_port=2222,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(tmp_path, voicechat_port=24454, voicechat_endpoint="bed.tun.ply.gg:2222")
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454)
+
+    assert result["voicechat_endpoint"] == ""
+    assert "tunnels/delete" not in api.calls
+    assert "v1/tunnels/create" not in api.calls
+    assert "t-bed" in store
+    assert load_playit_config(tmp_path)["voicechat_endpoint"] == "bed.tun.ply.gg:2222"
+
+
+def test_auto_create_heals_shared_tunnel_via_migration_map(tmp_path):
+    """Server B shares server A's legacy tunnel. A migrates (map recorded);
+    B heals from the map on its next start instead of stranding."""
+    import json
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    (tmp_path / "playit").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "playit" / ".voice-migrated.json").write_text(
+        json.dumps({"t-legacy": {"id": "t-new-1", "endpoint": "new.tun.ply.gg:7800"}}),
+        encoding="utf-8",
+    )
+    store = {
+        "t-new-1": _tunnel_data(
+            "t-new-1",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-2",
+            tunnel_type=None,
+            domain="new.tun.ply.gg",
+            remote_port=7800,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24454,
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        pm.auto_create_tunnel_mods("srv-b", str(tmp_path), voicechat_port=24454)
+
+    cfg = load_playit_config(tmp_path)
+    assert cfg["voicechat_tunnel_id"] == "t-new-1"
+    assert cfg["voicechat_endpoint"] == "new.tun.ply.gg:7800"
+    assert api.created == 0
+
+
+def test_auto_create_clears_mapped_endpoint_when_replacement_is_gone(tmp_path):
+    """If the mapped replacement was later deleted, validation clears the
+    endpoint instead of displaying a dead domain (id stays as tombstone)."""
+    import json
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    (tmp_path / "playit").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "playit" / ".voice-migrated.json").write_text(
+        json.dumps({"t-legacy": {"id": "t-new-1", "endpoint": "new.tun.ply.gg:7800"}}),
+        encoding="utf-8",
+    )
+    api = _FakePlayitApi({}, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24454,
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        pm.auto_create_tunnel_mods("srv-b", str(tmp_path), voicechat_port=24454)
+
+    cfg = load_playit_config(tmp_path)
+    assert cfg["voicechat_endpoint"] == ""
+    assert cfg["voicechat_tunnel_id"] == "t-new-1"
+
+
+def test_auto_create_migration_reports_new_endpoint(tmp_path):
+    """The UI toast relies on result['voicechat_migrated'] being set."""
+    from contextlib import ExitStack
+
+    pm = _auto_create_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24454,
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454)
+
+    assert result["voicechat_migrated"] == "new.tun.ply.gg:7800"
+
+
+def test_auto_create_migration_skipped_when_port_shared(tmp_path):
+    """Regenerate deletes by port: if another tunnel shares the voice port,
+    auto-migration must not run (manual regenerate stays available)."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        ),
+        "t-other": _tunnel_data(
+            "t-other",
+            local_port=24454,
+            name="hosty-bedrock-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="other.tun.ply.gg",
+            remote_port=2222,
+        ),
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24454,
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454)
+
+    assert result["voicechat_migrated"] == ""
+    assert "tunnels/delete" not in api.calls
+    assert "t-legacy" in store and "t-other" in store
+    assert load_playit_config(tmp_path)["voicechat_endpoint"] == "old.tun.ply.gg:1111"
+
+
+def test_auto_create_migration_skipped_over_cap(tmp_path):
+    """Delete-then-create while already over the account cap could strand
+    with nothing: skip instead."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        ),
+    }
+    for i in range(4):
+        store[f"t-fill-{i}"] = _tunnel_data(
+            f"t-fill-{i}",
+            proto="tcp",
+            tunnel_type="minecraft-java",
+            local_port=25560 + i,
+            domain=f"fill{i}.tun.ply.gg",
+            remote_port=5000 + i,
+            name=f"hosty-fill-{i}",
+        )
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        voicechat_port=24454,
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454)
+
+    assert result["voicechat_migrated"] == ""
+    assert "tunnels/delete" not in api.calls
+    assert "t-legacy" in store
+    assert load_playit_config(tmp_path)["voicechat_endpoint"] == "old.tun.ply.gg:1111"
+
+
+def test_shared_legacy_voice_tunnel_migrates_once_for_both_servers(tmp_path):
+    """Two servers sharing one bedrock-typed voice tunnel: the first start
+    migrates (single raw replacement), the second heals from the map."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = tmp_path / "srvA"
+    dir_b = tmp_path / "srvB"
+    dir_a.mkdir()
+    dir_b.mkdir()
+    for d in (dir_a, dir_b):
+        _save_voice_cfg(
+            d,
+            voicechat_port=24454,
+            voicechat_tunnel_id="t-legacy",
+            voicechat_endpoint="old.tun.ply.gg:1111",
+        )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        result_a = pm.auto_create_tunnel_mods("srv-a", str(dir_a), voicechat_port=24454)
+        result_b = pm.auto_create_tunnel_mods("srv-b", str(dir_b), voicechat_port=24454)
+
+    assert result_a["voicechat_endpoint"] == "new.tun.ply.gg:7800"
+    assert result_b["voicechat_endpoint"] == "new.tun.ply.gg:7800"
+    assert api.created == 1
+    assert "t-legacy" not in store
+    for d in (dir_a, dir_b):
+        cfg = load_playit_config(d)
+        assert cfg["voicechat_tunnel_id"] == "t-new-1"
+        assert cfg["voicechat_endpoint"] == "new.tun.ply.gg:7800"

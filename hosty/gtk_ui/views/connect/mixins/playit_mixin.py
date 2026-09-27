@@ -1287,6 +1287,18 @@ class PlayitMixin:
 
         version = self._exact_compatible_modrinth_version(project_id)
         if not version:
+            # Park it as disabled-by-version so the mod updater picks it
+            # back up once a compatible release exists.
+            try:
+                if self._server_manager and self._server_info:
+                    self._server_manager.park_incompatible_mod(
+                        self._server_info.id,
+                        project_id,
+                        title,
+                        self._server_info.mc_version,
+                    )
+            except Exception:
+                pass
             return False, _("{} is not available for Minecraft {}").format(title, self._server_info.mc_version)
 
         mods_dir = self._server_info.server_dir / content_dir_name(loader)
@@ -1504,12 +1516,13 @@ class PlayitMixin:
 
         ok, msg = self._server_manager.playit_manager.stop()
         if self._server_info:
-            # An explicit stop must stick: pause the 1s keep-alive or it
-            # restarts the agent for every running server. Resumed by an
-            # explicit start (or stopping the server / toggling auto-start).
+            # An explicit stop must stick everywhere: the agent is
+            # account-wide, so pausing only this server lets another
+            # running server's keep-alive restart it a second later.
+            # Resumed by an explicit start or toggling auto-start.
             root = self.get_root()
-            if root and hasattr(root, "pause_playit_auto_start_for_running_server"):
-                root.pause_playit_auto_start_for_running_server(self._server_info.id)
+            if root and hasattr(root, "pause_playit_auto_start_globally"):
+                root.pause_playit_auto_start_globally()
         self._refresh_status_row()
         if ok:
             self._toast(_("Playit agent stopped"))

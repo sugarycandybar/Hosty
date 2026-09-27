@@ -23,6 +23,7 @@ import requests
 
 from hosty.shared.core.events import EventEmitter
 from hosty.shared.utils.constants import DATA_DIR
+from hosty.shared.utils.file_utils import atomic_write_json
 from hosty.shared.utils.net import make_ssl_context
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
 
@@ -105,6 +106,11 @@ class PlayitManager(EventEmitter):
             self.id = str(tunnel_data.get("id", ""))
             self.name = str(tunnel_data.get("name", ""))
             self.type = tunnel_data.get("tunnel_type") or "both"
+            # Raw (typeless) tunnels report tunnel_type None. This matters
+            # because game-typed UDP tunnels are protocol-filtered by
+            # playit's edges: Simple Voice Chat packets are dropped on a
+            # minecraft-bedrock tunnel, so voice chat needs a raw tunnel.
+            self.raw_tunnel_type = tunnel_data.get("tunnel_type")
             self.protocol = tunnel_data.get("port_type") or "tcp"
             self.status = str((tunnel_data.get("alloc") or {}).get("status", "pending"))
 
@@ -171,6 +177,9 @@ class PlayitManager(EventEmitter):
         self._claim_url = ""
         self._read_thread: threading.Thread | None = None
         self._watch_thread: threading.Thread | None = None
+        # Serializes tunnel create/delete/retarget sequences so two
+        # concurrent server starts cannot orphan, duplicate, or steal tunnels.
+        self._tunnel_op_lock = threading.RLock()
 
         self._git_base = "https://github.com/playit-cloud/playit-agent/releases"
         self._api_base = "https://api.playit.gg"
@@ -870,6 +879,26 @@ class PlayitManager(EventEmitter):
             return default_port
         return default_port
 
+    @staticmethod
+    def _tunnel_name(label: str, protocol: str, port: int) -> str:
+        safe_label = re.sub(r"[^a-zA-Z0-9-]", "-", str(label or "").strip().lower())
+        safe_label = re.sub(r"-+", "-", safe_label).strip("-")
+        if safe_label and re.fullmatch(r"[0-9a-f-]{32,40}", safe_label):
+            safe_label = "server"
+        if not safe_label:
+            safe_label = "server"
+        safe_label = safe_label[:24]
+        return f"hosty-{safe_label}-{protocol}-{port}-{int(time.time()) % 100000}"
+
+    def _wait_for_tunnel(self, tunnel_id: str, protocol: str) -> Tunnel | None:
+        for _attempt in range(15):
+            self._retrieve_tunnels()
+            for tunnel in self.tunnels.get(protocol, []):
+                if tunnel.status != "pending" and tunnel.id == tunnel_id:
+                    return tunnel
+            time.sleep(1)
+        return None
+
     def _create_tunnel(
         self,
         port: int = 25565,
@@ -894,14 +923,7 @@ class PlayitManager(EventEmitter):
                 "both": None,
             }.get(protocol, "minecraft-java")
 
-        safe_label = re.sub(r"[^a-zA-Z0-9-]", "-", str(label or "").strip().lower())
-        safe_label = re.sub(r"-+", "-", safe_label).strip("-")
-        if safe_label and re.fullmatch(r"[0-9a-f-]{32,40}", safe_label):
-            safe_label = "server"
-        if not safe_label:
-            safe_label = "server"
-        safe_label = safe_label[:24]
-        tunnel_name = f"hosty-{safe_label}-{protocol}-{port}-{int(time.time()) % 100000}"
+        tunnel_name = self._tunnel_name(label, protocol, port)
 
         tunnel_data = {
             "name": tunnel_name,
@@ -927,12 +949,81 @@ class PlayitManager(EventEmitter):
 
             self.tunnel_cache.add_tunnel(tunnel_id, tunnel_data)
 
-            for _attempt in range(15):
-                self._retrieve_tunnels()
-                for tunnel in self.tunnels.get(protocol, []):
-                    if tunnel.status != "pending" and tunnel.id == tunnel_id:
-                        return tunnel
-                time.sleep(1)
+            return self._wait_for_tunnel(tunnel_id, protocol)
+        except Exception:
+            return None
+
+        return None
+
+    def _create_raw_tunnel(
+        self,
+        port: int = 24454,
+        protocol: str = "udp",
+        label: str = "",
+        software_description: str = "Simple Voice Chat voice traffic",
+    ) -> Tunnel | None:
+        """Create a raw (typeless) tunnel via the v1 API.
+
+        Game-typed UDP tunnels are protocol-filtered by playit's edges, so
+        Simple Voice Chat packets are dropped on a minecraft-bedrock tunnel
+        (verified: 0/33 raw datagrams arrived, 6/6 on a raw tunnel). Voice
+        chat must therefore use a raw tunnel.
+        """
+        if not (1024 <= port <= 65535):
+            port = 24454
+
+        if not self._check_tunnel_limit():
+            raise self.TunnelException(
+                _("This account cannot create more than {} tunnel(s). You can increase your limit here: {}").format(
+                    self.max_tunnels, "https://playit.gg/account/upgrade"
+                )
+            )
+
+        tunnel_name = self._tunnel_name(label, protocol, port)
+
+        tunnel_data = {
+            "name": tunnel_name,
+            "protocol": {
+                "type": "raw-ports",
+                "details": {
+                    "port_type": protocol,
+                    "port_count": 1,
+                    "software_description": software_description,
+                },
+            },
+            "origin": {
+                "type": "agent",
+                "data": {
+                    "agent_id": self._agent_id,
+                    "config": {
+                        "fields": [
+                            {"name": "local_ip", "value": "127.0.0.1"},
+                            {"name": "local_port", "value": str(port)},
+                        ]
+                    },
+                },
+            },
+            "endpoint": {"type": "region", "details": {"region": "global", "port": None}},
+            "enabled": True,
+        }
+
+        try:
+            data = self._request("v1/tunnels/create", json=tunnel_data)
+            tunnel_id = str((data.get("data") or {}).get("id", ""))
+            if not tunnel_id:
+                return None
+
+            # Cache a normalized entry: Tunnel falls back to the cache when
+            # the API payload lacks origin details.
+            self.tunnel_cache.add_tunnel(
+                tunnel_id,
+                {
+                    "name": tunnel_name,
+                    "origin": {"data": {"local_ip": "127.0.0.1", "local_port": port}},
+                },
+            )
+
+            return self._wait_for_tunnel(tunnel_id, protocol)
         except Exception:
             return None
 
@@ -1243,6 +1334,115 @@ class PlayitManager(EventEmitter):
         except Exception:
             pass
 
+    def _voice_migration_map_path(self) -> Path:
+        return self.directory / ".voice-migrated.json"
+
+    def _load_voice_migration_map(self) -> dict:
+        """Map of legacy bedrock-typed voice tunnel id -> {"id", "endpoint"}.
+
+        Several servers can share one voice tunnel but keep separate configs;
+        when one server migrates the shared tunnel, the others heal from this
+        account-level map on their next start instead of stranding.
+        """
+        try:
+            raw = self._voice_migration_map_path().read_text(encoding="utf-8")
+            data = json.loads(raw)
+            return dict(data) if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _record_voice_migration(self, old_id: str, new_id: str, endpoint: str) -> None:
+        try:
+            path = self._voice_migration_map_path()
+            data: dict = {}
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    data = {}
+            except Exception:
+                data = {}
+            data[str(old_id)] = {"id": str(new_id), "endpoint": str(endpoint)}
+            path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(path, data)
+        except Exception:
+            logger.exception("failed to record voice tunnel migration")
+
+    def _find_tunnel_for_endpoint(self, endpoint: str) -> Tunnel | None:
+        """Return the tunnel serving an endpoint, or None (same matching as validation)."""
+        ep = (endpoint or "").strip().lower()
+        if not ep:
+            return None
+        for tunnel in self._return_single_list():
+            if tunnel.hostname and tunnel.hostname.strip().lower() == ep:
+                return tunnel
+            if tunnel.domain and tunnel.remote_port:
+                if f"{tunnel.domain}:{tunnel.remote_port}".lower() == ep:
+                    return tunnel
+        return None
+
+    def _tunnel_endpoint(self, tunnel: Tunnel) -> str:
+        """Public endpoint string for a tunnel (domain:port when known)."""
+        if tunnel.domain and tunnel.remote_port:
+            return f"{tunnel.domain}:{tunnel.remote_port}"
+        if tunnel.domain:
+            return str(tunnel.domain)
+        return str(tunnel.hostname or "").strip()
+
+    def _voice_regen_is_safe(self, legacy: Tunnel, port: int) -> bool:
+        """Whether auto-migration may use the regenerate flow.
+
+        Regenerate deletes by local port, so refuse when another tunnel
+        shares the voice port (never touch another kind's tunnel); those
+        cases stay for manual regenerate. Also refuse when already over the
+        account cap, where delete-then-create could strand with nothing.
+        """
+        try:
+            used, maximum = self.get_tunnel_usage()
+            if used > maximum:
+                logger.warning("playit auto-create: over tunnel cap; skipping voice migration")
+                return False
+        except Exception:
+            pass
+        for tunnel in self.tunnels.get("udp", []):
+            if tunnel.id == legacy.id:
+                continue
+            try:
+                same_port = int(tunnel.port or 0) == int(port)
+            except Exception:
+                same_port = False
+            if same_port:
+                logger.warning(
+                    "playit auto-create: voice port %s shared by %s; skipping auto-migration",
+                    port,
+                    tunnel.id,
+                )
+                return False
+        return True
+
+    def _replace_legacy_voice_tunnel(self, old_tunnel: Tunnel, port: int) -> Tunnel:
+        """Replace a bedrock-typed voice tunnel with a raw one.
+
+        Deletes first (frees the account slot), then creates the raw tunnel.
+        Returns the new tunnel. If the delete fails, the legacy tunnel is
+        returned unchanged so the server keeps serving rather than stranding.
+        If the delete succeeds but the create fails, raises TunnelException.
+        """
+        old_id = str(old_tunnel.id or "")
+        if not self._delete_tunnel(old_tunnel):
+            logger.warning("could not delete legacy voice tunnel %s; keeping it", old_id)
+            old_tunnel.in_use = True
+            return old_tunnel
+        logger.info("replacing bedrock-typed voice tunnel %s with a raw tunnel", old_id)
+        new_tunnel = self._create_raw_tunnel(port, "udp", label="voicechat")
+        if not new_tunnel:
+            raise self.TunnelException(
+                _(
+                    "Replaced the legacy voice tunnel but failed to create a raw replacement. "
+                    "Delete an unused tunnel in the dashboard and try again."
+                )
+            )
+        return new_tunnel
+
     @staticmethod
     def _is_adoptable_tunnel(tunnel: Tunnel, kind_key: str) -> bool:
         """Whether an existing tunnel may serve a kind without stealing.
@@ -1250,6 +1450,8 @@ class PlayitManager(EventEmitter):
         Only Hosty-made tunnels (``hosty-`` prefix) are ever adopted, and
         never across kinds: a bedrock tunnel is not eligible for voice
         chat and vice versa. Hand-made dashboard tunnels are left alone.
+        Voice chat additionally requires a raw (typeless) tunnel, since
+        game-typed UDP tunnels are protocol-filtered by playit's edges.
         """
         name = str(tunnel.name or "")
         if not name.startswith("hosty-"):
@@ -1258,12 +1460,29 @@ class PlayitManager(EventEmitter):
         has_voice = "voice" in lowered
         has_bedrock = "bedrock" in lowered
         if kind_key == "voicechat":
+            if tunnel.raw_tunnel_type is not None:
+                return False
             return has_voice or not has_bedrock
         if kind_key == "bedrock":
             return has_bedrock or not has_voice
         return True
 
     def _allocate_kind_tunnel(
+        self,
+        server_dir: str,
+        port: int,
+        protocol: str,
+        label: str = "",
+        tunnel_type: str | None = None,
+        kind_key: str = "",
+    ) -> Tunnel | None:
+        """Serialized entry point for tunnel allocation (see _allocate_kind_tunnel_locked)."""
+        with self._tunnel_op_lock:
+            return self._allocate_kind_tunnel_locked(
+                server_dir, port, protocol, label=label, tunnel_type=tunnel_type, kind_key=kind_key
+            )
+
+    def _allocate_kind_tunnel_locked(
         self,
         server_dir: str,
         port: int,
@@ -1295,6 +1514,17 @@ class PlayitManager(EventEmitter):
         if stored_id:
             for tunnel in bucket:
                 if tunnel.id == stored_id:
+                    if kind_key == "voicechat" and tunnel.raw_tunnel_type == "minecraft-bedrock":
+                        # Legacy voice tunnel: protocol-filtered by playit's
+                        # edges, so replace with a raw tunnel (or keep serving
+                        # the legacy one if it cannot be deleted).
+                        replacement = self._replace_legacy_voice_tunnel(tunnel, int(port))
+                        if replacement.id != stored_id:
+                            self._record_voice_migration(stored_id, replacement.id, self._tunnel_endpoint(replacement))
+                            self._retrieve_tunnels()
+                            bucket = list(self.tunnels.get(protocol, []))
+                            break
+                        return replacement
                     if tunnel.port != int(port) and not self._update_tunnel_local_port(tunnel.id, int(port)):
                         raise self.TunnelException(
                             _("Could not point the {} tunnel at local port {}").format(kind_key or protocol, port)
@@ -1313,6 +1543,8 @@ class PlayitManager(EventEmitter):
                 tunnel.in_use = True
                 return tunnel
 
+        if kind_key == "voicechat":
+            return self._create_raw_tunnel(port, protocol, label=label)
         return self._create_tunnel(port, protocol, label=label, tunnel_type=tunnel_type)
 
     def _add_tunnel_for_protocol(
@@ -1435,6 +1667,30 @@ class PlayitManager(EventEmitter):
         voicechat_port: int = 24454,
         tunnel_kind: str = "",
     ) -> tuple[bool, str, str]:
+        """Serialized entry point (see _regenerate_tunnel_for_protocol_locked)."""
+        with self._tunnel_op_lock:
+            return self._regenerate_tunnel_for_protocol_locked(
+                server_id,
+                server_dir,
+                protocol,
+                secret=secret,
+                auto_install=auto_install,
+                bedrock_port=bedrock_port,
+                voicechat_port=voicechat_port,
+                tunnel_kind=tunnel_kind,
+            )
+
+    def _regenerate_tunnel_for_protocol_locked(
+        self,
+        server_id: str,
+        server_dir: str,
+        protocol: str,
+        secret: str = "",
+        auto_install: bool = False,
+        bedrock_port: int = 19132,
+        voicechat_port: int = 24454,
+        tunnel_kind: str = "",
+    ) -> tuple[bool, str, str]:
         ok, msg = self._ensure_api_ready(secret=secret, auto_install=auto_install)
         if not ok:
             return False, msg, ""
@@ -1523,6 +1779,28 @@ class PlayitManager(EventEmitter):
         return True, msg, endpoint
 
     def _delete_tunnel_for_protocol(
+        self,
+        server_dir: str,
+        protocol: str,
+        secret: str = "",
+        auto_install: bool = False,
+        bedrock_port: int = 19132,
+        voicechat_port: int = 24454,
+        tunnel_kind: str = "",
+    ) -> tuple[bool, str]:
+        """Serialized entry point (see _delete_tunnel_for_protocol_locked)."""
+        with self._tunnel_op_lock:
+            return self._delete_tunnel_for_protocol_locked(
+                server_dir,
+                protocol,
+                secret=secret,
+                auto_install=auto_install,
+                bedrock_port=bedrock_port,
+                voicechat_port=voicechat_port,
+                tunnel_kind=tunnel_kind,
+            )
+
+    def _delete_tunnel_for_protocol_locked(
         self,
         server_dir: str,
         protocol: str,
@@ -2121,11 +2399,13 @@ class PlayitManager(EventEmitter):
         independently so a bedrock failure can never skip voice validation
         (or vice versa), and this method never raises.
 
-        Returns dict with "bedrock_endpoint" and "voicechat_endpoint" (empty if not created).
+        Returns dict with "bedrock_endpoint" and "voicechat_endpoint" (empty if not created),
+        plus "voicechat_migrated" holding the new endpoint when a legacy
+        bedrock-typed voice tunnel was migrated to raw (empty otherwise).
         """
         from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
 
-        result = {"bedrock_endpoint": "", "voicechat_endpoint": ""}
+        result = {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
         try:
             cfg = load_playit_config(server_dir)
         except Exception:
@@ -2196,6 +2476,26 @@ class PlayitManager(EventEmitter):
         except Exception:
             logger.exception("playit auto-create: bedrock creation failed")
 
+        vc_port = voicechat_port if 1024 <= voicechat_port <= 65535 else 24454
+        try:
+            # Heal servers whose shared legacy tunnel was migrated away by
+            # another server: their stored id points at a deleted tunnel.
+            # The account-level map rewrites them to the replacement.
+            mmap = self._load_voice_migration_map()
+            if vc_id and vc_id in mmap:
+                live_ids = {t.id for t in self._return_single_list()}
+                if vc_id not in live_ids:
+                    mapped = mmap.get(vc_id) or {}
+                    if mapped.get("id"):
+                        vc_id = str(mapped.get("id"))
+                        vc_ep = str(mapped.get("endpoint") or "")
+                        cfg["voicechat_tunnel_id"] = vc_id
+                        cfg["voicechat_endpoint"] = vc_ep
+                        result["voicechat_endpoint"] = vc_ep
+                        dirty = True
+                        logger.info("playit auto-create: healed migrated voice tunnel for %s", server_dir)
+        except Exception:
+            logger.exception("playit auto-create: voice migration heal failed")
         try:
             if vc_ep and not self._tunnel_exists_for_endpoint(vc_ep):
                 cfg["voicechat_endpoint"] = ""
@@ -2204,6 +2504,60 @@ class PlayitManager(EventEmitter):
                 logger.warning("playit auto-create: cleared stale voice endpoint for %s", server_dir)
         except Exception:
             logger.exception("playit auto-create: voice validation failed")
+        try:
+            # Migrate legacy bedrock-typed voice tunnels to raw: playit's
+            # edges protocol-filter game-typed UDP, so voice packets are
+            # dropped on them (verified 0/33 vs 6/6 on raw).
+            legacy = None
+            if vc_id:
+                legacy = next((t for t in self._return_single_list() if t.id == vc_id), None)
+            elif vc_ep:
+                found = self._find_tunnel_for_endpoint(vc_ep)
+                if found is not None and "voice" in str(found.name or "").lower():
+                    legacy = found
+            if legacy is not None and legacy.raw_tunnel_type == "minecraft-bedrock":
+                old_id = str(legacy.id)
+                # Migrate through the same regenerate flow as the UI button
+                # (delete by port/endpoint, then allocate fresh which creates
+                # raw). The direct replace path stays for explicit allocation.
+                if self._voice_regen_is_safe(legacy, vc_port):
+                    try:
+                        ok, _msg, endpoint = self._regenerate_tunnel_for_protocol(
+                            server_id,
+                            server_dir,
+                            "udp",
+                            secret=secret,
+                            auto_install=True,
+                            voicechat_port=vc_port,
+                            tunnel_kind="voicechat",
+                        )
+                    except Exception:
+                        logger.exception("playit auto-create: voice regenerate failed")
+                        ok, endpoint = False, ""
+                    if ok and endpoint:
+                        new_tunnel = self._find_tunnel_for_endpoint(endpoint)
+                        if new_tunnel is not None:
+                            vc_ep = self._tunnel_endpoint(new_tunnel)
+                            vc_id = str(new_tunnel.id)
+                            cfg["voicechat_tunnel_id"] = vc_id
+                            cfg["voicechat_endpoint"] = vc_ep
+                            result["voicechat_endpoint"] = vc_ep
+                            result["voicechat_migrated"] = vc_ep
+                            self._record_voice_migration(old_id, vc_id, vc_ep)
+                            dirty = True
+                            logger.warning("playit auto-create: migrated legacy voice tunnel for %s", server_dir)
+                        else:
+                            logger.warning(
+                                "playit auto-create: voice regenerate ok but endpoint not found: %s",
+                                endpoint,
+                            )
+                    else:
+                        logger.warning(
+                            "playit auto-create: voice regenerate failed for %s; keeping legacy tunnel",
+                            server_dir,
+                        )
+        except Exception:
+            logger.exception("playit auto-create: voice migration failed")
         try:
             if not vc_ep and not vc_id and _mod_present("voice-chat", "simple-voice-chat"):
                 ok, _msg, endpoint = self.add_voicechat_tunnel(

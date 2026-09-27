@@ -1317,6 +1317,16 @@ class ModsMixin:
                 self._toast(_("Applied {} update(s), {} failed").format(applied, failed))
             return False
 
+        # Pick back up version-parked mods that now have a compatible
+        # release (e.g. tunnel requirements parked at install time).
+        try:
+            if self._server_manager and self._server_info:
+                restored, restore_failed = self._server_manager.retry_incompatible_components(self._server_info.id)
+                applied += restored
+                failed += restore_failed
+        except Exception:
+            pass
+
         GLib.idle_add(finish_ui)
 
     def _confirm_delete_mod(self, path: Path, name: str):

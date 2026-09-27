@@ -308,6 +308,15 @@ class ServerDetailView(Gtk.Box):
             self._toggle_btn.set_tooltip_text(_("Wait for the server to finish starting"))
             return
 
+        if status == ServerStatus.STOPPING:
+            self._toggle_btn.set_label(_("Stopping"))
+            self._toggle_btn.remove_css_class("suggested-action")
+            self._toggle_btn.remove_css_class("destructive-action")
+            self._toggle_btn.add_css_class("hosty-starting-button")
+            self._toggle_btn.set_sensitive(False)
+            self._toggle_btn.set_tooltip_text(_("Wait for the server to finish stopping"))
+            return
+
         if status == ServerStatus.RUNNING:
             self._toggle_btn.set_label(_("Stop"))
             self._toggle_btn.remove_css_class("suggested-action")
@@ -423,6 +432,12 @@ class ServerDetailView(Gtk.Box):
         if not server_id:
             return
 
+        if self._selected_process.status == ServerStatus.STOPPING:
+            # A stop is still in flight; starting now would orphan the old
+            # process. The button already shows this state (see
+            # _update_toggle_for_selected); ignore the click.
+            return
+
         if self._selected_process.is_running:
             self._server_manager.stop_server(server_id)
         elif not self._start_in_progress:
@@ -465,6 +480,13 @@ class ServerDetailView(Gtk.Box):
             dialog.present(self.get_root())
         elif kind == "port-conflict":
             self._show_port_conflict_dialog(error.get("port_type", "Java"), int(error.get("port", 0)))
+        elif kind == "stop-timeout":
+            dialog = Adw.AlertDialog.new(
+                _("Server Still Stopping"),
+                _("The previous stop is taking unusually long. Wait a moment and try starting again."),
+            )
+            dialog.add_response("ok", _("OK"))
+            dialog.present(self.get_root())
 
     def get_console_view(self, server_id: str | None = None) -> ConsoleView | None:
         if server_id and server_id in self._console_views:

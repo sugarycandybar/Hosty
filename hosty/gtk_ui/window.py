@@ -33,6 +33,11 @@ class HostyWindow(Adw.ApplicationWindow):
         self._running_server_ids: set[str] = set(self._server_manager.get_running_server_ids())
         self._playit_starting_server_ids: set[str] = set()
         self._playit_autostart_paused_ids: set[str] = set()
+        # Set when the user explicitly stops the agent from any server view:
+        # one agent serves the whole account, so off anywhere means off
+        # everywhere until an explicit start. In-memory only (fresh intent
+        # after relaunch).
+        self._playit_agent_manual_stop = False
         self._sleep_inhibit_cookie: int | None = None
 
         self.set_title(_("Hosty"))
@@ -321,6 +326,8 @@ class HostyWindow(Adw.ApplicationWindow):
             return
 
         # Handle explicit start action or keep-alive check
+        if self._playit_agent_manual_stop:
+            return
         if server_id in self._playit_autostart_paused_ids:
             return
 
@@ -416,8 +423,24 @@ class HostyWindow(Adw.ApplicationWindow):
     def pause_playit_auto_start_for_running_server(self, server_id: str):
         self._playit_autostart_paused_ids.add(server_id)
 
+    def pause_playit_auto_start_globally(self):
+        """Pause the agent keep-alive for every server.
+
+        The playit agent is account-wide, so an explicit stop from any
+        server view must stick everywhere instead of being restarted by
+        another running server's keep-alive.
+        """
+        self._playit_agent_manual_stop = True
+        try:
+            for sid in self._server_manager.get_running_server_ids():
+                self._playit_autostart_paused_ids.add(sid)
+        except Exception:
+            pass
+
     def clear_playit_auto_start_pause(self, server_id: str):
         self._playit_autostart_paused_ids.discard(server_id)
+        # An explicit start (or re-enabling auto-start) resumes everything.
+        self._playit_agent_manual_stop = False
 
     @property
     def sidebar(self):

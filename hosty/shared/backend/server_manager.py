@@ -1104,6 +1104,132 @@ class ServerManager(EventEmitter):
             out[key] = [v for v in values if isinstance(v, dict)]
         return out
 
+    def park_incompatible_mod(
+        self,
+        server_id: str,
+        project_id: str,
+        title: str = "",
+        mc_version: str = "",
+        filename: str = "",
+    ) -> bool:
+        """Record a mod that could not be installed for version reasons.
+
+        Used when a required tunnel mod (e.g. Geyser, Simple Voice Chat) has
+        no compatible release: the record lands in "Disabled by Version
+        Updates" and the mod updater picks it back up once compatible.
+        Never raises; returns True when a new record was stored.
+        """
+        info = self._servers.get(server_id)
+        pid = str(project_id or "").strip().lower()
+        if not info or not pid:
+            return False
+        try:
+            data = self.get_incompatible_components(server_id)
+            if any(str(r.get("project_id", "")).strip().lower() == pid for r in data.get("mods", [])):
+                return False
+            entry = self._incompatible_entry(pid, {"title": title or pid}, mc_version or info.mc_version, "mod")
+            if filename:
+                entry["filename"] = str(filename)
+            merged = {
+                "mods": [*data.get("mods", []), entry],
+                "modpacks": data.get("modpacks", []),
+                "datapacks": data.get("datapacks", []),
+            }
+            self._write_json_file(info.server_dir / ".hosty-incompatible-components.json", merged)
+            return True
+        except Exception:
+            logger.exception("failed to park incompatible mod %s", pid)
+            return False
+
+    def retry_incompatible_components(self, server_id: str) -> tuple[int, int]:
+        """Reinstall parked mods that now have a compatible release.
+
+        Only file-less records are retried (mods that never installed, e.g.
+        parked tunnel requirements); version-update casualties with moved-aside
+        files stay for the manual flow. Returns (restored, failed).
+        """
+        info = self._servers.get(server_id)
+        if not info:
+            return 0, 0
+
+        from hosty.shared.backend import modrinth_client
+
+        root = info.server_dir
+        mc_version = str(info.mc_version or "")
+        loader = normalize_loader_type(info.loader_type)
+        mods_dir = root / content_dir_name(loader)
+        try:
+            mods_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return 0, 0
+
+        restored = 0
+        failed = 0
+        parked = self.get_incompatible_components(server_id).get("mods", [])
+        for record in list(parked):
+            if not isinstance(record, dict):
+                continue
+            pid = str(record.get("project_id", "")).strip()
+            if not pid:
+                continue
+            if str(record.get("filename", "")).strip():
+                continue
+            try:
+                if pid in self._tracked_mod_state(root):
+                    self._forget_incompatible_record(server_id, pid)
+                    continue
+                version = modrinth_client.find_compatible_version(pid, mc_version, loader=loader)
+                if version is None:
+                    continue
+                filename = Path(str(version.filename or "")).name
+                if not filename:
+                    continue
+                if (mods_dir / filename).exists():
+                    self._track_mod_install(root, pid, record, version, filename)
+                    self._forget_incompatible_record(server_id, pid)
+                    restored += 1
+                    continue
+                deps = modrinth_client.resolve_required_dependencies(version.version_id, mc_version, loader)
+                for dep in deps or []:
+                    dep_name = Path(str(dep.filename or "")).name
+                    if not dep_name:
+                        continue
+                    if (mods_dir / dep_name).exists():
+                        continue
+                    modrinth_client.download_to(dep.download_url, mods_dir / dep_name, expected_hashes=dep.hashes)
+                modrinth_client.download_to(version.download_url, mods_dir / filename, expected_hashes=version.hashes)
+                self._track_mod_install(root, pid, record, version, filename)
+                self._forget_incompatible_record(server_id, pid)
+                restored += 1
+            except Exception:
+                logger.exception("failed to restore parked mod %s", pid)
+                failed += 1
+        return restored, failed
+
+    def _track_mod_install(self, root: Path, project_id: str, record: dict, version, filename: str) -> None:
+        """Write a restored mod into the tracked installs state."""
+        state = self._tracked_mod_state(root)
+        state[str(project_id)] = {
+            "title": str(record.get("title") or project_id),
+            "version_id": str(version.version_id or ""),
+            "version_number": str(version.version_number or ""),
+            "filename": str(filename),
+        }
+        self._write_json_file(root / ".hosty-mod-installs.json", {"mods": state})
+
+    def _forget_incompatible_record(self, server_id: str, project_id: str) -> None:
+        """Drop one parked record without touching any files."""
+        info = self._servers.get(server_id)
+        pid = str(project_id or "").strip().lower()
+        if not info or not pid:
+            return
+        data = self.get_incompatible_components(server_id)
+        kept = [r for r in data.get("mods", []) if str(r.get("project_id", "")).strip().lower() != pid]
+        if len(kept) == len(data.get("mods", [])):
+            return
+        data["mods"] = kept
+        self._write_json_file(info.server_dir / ".hosty-incompatible-components.json", data)
+
     def delete_incompatible_component(
         self,
         server_id: str,
@@ -1320,6 +1446,43 @@ class ServerManager(EventEmitter):
         """Return status snapshots for all servers in creation order."""
         return [self.server_status(s.id) for s in self.servers if self.server_status(s.id) is not None]
 
+    @staticmethod
+    def _wait_for_process_stop(process: ServerProcess, timeout: float = 40.0) -> bool:
+        """Block until a STOPPING process reaches STOPPED. Returns False on timeout."""
+        import time as _time
+
+        deadline = _time.monotonic() + max(0.0, float(timeout))
+        while process.status == ServerStatus.STOPPING:
+            if _time.monotonic() >= deadline:
+                return False
+            _time.sleep(0.2)
+        return True
+
+    def ensure_bedrock_transport(self, server_id: str) -> bool:
+        """Ensure ``transport=raknet`` in server.properties for Bedrock-tunnelled servers.
+
+        Playit's edges only support RakNet on Bedrock tunnels (newer Bedrock
+        defaults to NetherNet, which silently fails through the tunnel).
+        For Java servers the key is inert and ignored. Returns True when the
+        file was changed. Best-effort: never raises.
+        """
+        try:
+            if not self.has_bedrock_tunnel(server_id):
+                return False
+            cfg = self.get_config(server_id)
+            if not cfg:
+                return False
+            props = cfg.load()
+            if str(props.get("transport", "")).strip().lower() == "raknet":
+                return False
+            cfg.set_value("transport", "raknet")
+            cfg.save()
+            logger.info("set transport=raknet for Bedrock-tunnelled server %s", server_id)
+            return True
+        except Exception:
+            logger.exception("failed to enforce transport=raknet for %s", server_id)
+            return False
+
     def start_server(self, server_id: str) -> tuple[bool, dict | None]:
         """Start a server with the same guard checks the desktop UI performs.
 
@@ -1343,6 +1506,11 @@ class ServerManager(EventEmitter):
         process = self.get_process(server_id)
         if not process:
             return False, {"kind": "process"}
+        if process.status == ServerStatus.STOPPING:
+            # A stop is still in flight: launching now would orphan the old
+            # process and corrupt tracking. Wait for it (bounded), then start.
+            if not self._wait_for_process_stop(process):
+                return False, {"kind": "stop-timeout"}
         if process.is_running:
             return True, None
 
@@ -1377,6 +1545,13 @@ class ServerManager(EventEmitter):
             voicechat_port=self.get_voicechat_port(server_id),
             loader=info.loader_type,
         )
+
+        # Bedrock tunnels only support RakNet (NetherNet fails silently):
+        # enforce it before launch. Best-effort; never blocks the start.
+        try:
+            self.ensure_bedrock_transport(server_id)
+        except Exception:
+            pass
 
         # Ensure the multiplayer icon exists before launch: the MC server
         # only reads server-icon.png at startup, so a missing/legacy icon

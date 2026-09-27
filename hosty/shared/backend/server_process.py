@@ -34,6 +34,13 @@ class ServerProcess(EventEmitter):
         self._stderr_thread: threading.Thread | None = None
         self._pid: int | None = None
         self.log_history: list[str] = []
+        self._stop_thread: threading.Thread | None = None
+        # Generation counter: every start() bumps it. Stale background
+        # threads (stop waiters, output readers) captured an older epoch and
+        # must never mutate state belonging to a newer process. Without this,
+        # stopping then quickly starting could orphan a process Hosty no
+        # longer tracks, or kill the replacement.
+        self._epoch = 0
 
     @property
     def status(self) -> str:
@@ -55,7 +62,9 @@ class ServerProcess(EventEmitter):
 
     @property
     def is_running(self) -> bool:
-        return self._status in (ServerStatus.RUNNING, ServerStatus.STARTING)
+        # STOPPING counts as running: the process still holds its ports and
+        # must not be replaced or ignored until the stop completes.
+        return self._status in (ServerStatus.RUNNING, ServerStatus.STARTING, ServerStatus.STOPPING)
 
     def _find_args_file(self, lib_version_dir: Path) -> Path | None:
         """Find the platform-appropriate Java @argfile in a loader library dir."""
@@ -122,8 +131,14 @@ class ServerProcess(EventEmitter):
         )
 
     def start(self) -> bool:
-        """Start the Minecraft server."""
-        if self.is_running:
+        """Start the Minecraft server.
+
+        Only a fully stopped server can be started: launching while another
+        stop is still in flight would orphan the old process (its handle gets
+        overwritten) and corrupt state tracking. Callers must wait for
+        STOPPING to resolve first.
+        """
+        if self._status != ServerStatus.STOPPED:
             return False
 
         launch_args, launch_error = self._build_launch_command()
@@ -144,6 +159,8 @@ class ServerProcess(EventEmitter):
             cmd.extend(self.jvm_args.split())
         cmd.extend(launch_args)
 
+        self._epoch += 1
+        epoch = self._epoch
         self.status = ServerStatus.STARTING
         self.player_count = 0
         self._emit_players_changed()
@@ -165,7 +182,7 @@ class ServerProcess(EventEmitter):
             self._pid = self._process.pid
 
             # Start output reader thread
-            self._stdout_thread = threading.Thread(target=self._read_output, daemon=True)
+            self._stdout_thread = threading.Thread(target=self._read_output, args=(epoch, self._process), daemon=True)
             self._stdout_thread.start()
 
             return True
@@ -176,10 +193,17 @@ class ServerProcess(EventEmitter):
             return False
 
     def stop(self):
-        """Gracefully stop the server by sending /stop command."""
-        if not self.is_running or not self._process:
+        """Gracefully stop the server by sending /stop command.
+
+        Idempotent: stopping an already-stopping server is a no-op. The
+        background waiter operates on the captured process handle and epoch,
+        so a later start can never be clobbered by this stop completing.
+        """
+        if self._status in (ServerStatus.STOPPING, ServerStatus.STOPPED) or not self._process:
             return
 
+        proc = self._process
+        epoch = self._epoch
         self.status = ServerStatus.STOPPING
         self._emit_output("[Hosty] Sending stop command...\n")
         self.send_command("stop")
@@ -187,30 +211,43 @@ class ServerProcess(EventEmitter):
         # Wait for graceful shutdown in background
         def _wait_stop():
             try:
-                self._process.wait(timeout=30)
+                proc.wait(timeout=30)
             except subprocess.TimeoutExpired:
                 self._emit_output("[Hosty] Server did not stop gracefully, killing...\n")
-                self.kill()
+                self._kill_proc(proc)
 
+            if epoch != self._epoch or self._process is not proc:
+                # A newer start has taken over; its threads own the state now.
+                return
             self._pid = None
             self.status = ServerStatus.STOPPED
             self._emit_output("[Hosty] Server stopped.\n")
 
-        threading.Thread(target=_wait_stop, daemon=True).start()
+        self._stop_thread = threading.Thread(target=_wait_stop, daemon=True)
+        self._stop_thread.start()
+
+    def _kill_proc(self, proc: subprocess.Popen) -> None:
+        """Kill a captured process handle without touching tracked state."""
+        try:
+            proc.kill()
+            proc.wait(timeout=5)
+        except Exception:
+            pass
 
     def kill(self):
         """Force kill the server process."""
-        if self._process:
-            try:
-                self._process.kill()
-                self._process.wait(timeout=5)
-            except Exception:
-                pass
-            self._pid = None
-            self.status = ServerStatus.STOPPED
-            self.player_count = 0
-            self._emit_players_changed()
-            self._emit_output("[Hosty] Server killed.\n")
+        proc = self._process
+        if not proc:
+            return
+        epoch = self._epoch
+        self._kill_proc(proc)
+        if epoch != self._epoch or self._process is not proc:
+            return
+        self._pid = None
+        self.status = ServerStatus.STOPPED
+        self.player_count = 0
+        self._emit_players_changed()
+        self._emit_output("[Hosty] Server killed.\n")
 
     def send_command(self, command: str):
         """Send a command to the server via stdin."""
@@ -228,10 +265,13 @@ class ServerProcess(EventEmitter):
         except (BrokenPipeError, OSError):
             pass
 
-    def _read_output(self):
+    def _read_output(self, epoch: int, proc: subprocess.Popen):
         """Read stdout/stderr in a background thread."""
+        stdout = proc.stdout
+        if stdout is None:
+            return
         try:
-            for line in iter(self._process.stdout.readline, ""):
+            for line in iter(stdout.readline, ""):
                 if not line:
                     break
 
@@ -247,8 +287,10 @@ class ServerProcess(EventEmitter):
         except Exception:
             pass
         finally:
-            # Process ended
-            if self._status != ServerStatus.STOPPED:
+            # Process ended. Only reset state if no newer start has taken
+            # over since this reader was spawned.
+            current = epoch == self._epoch and self._process is proc
+            if current and self._status != ServerStatus.STOPPED:
                 self._pid = None
                 self.status = ServerStatus.STOPPED
                 self.player_count = 0
