@@ -231,3 +231,27 @@ def test_retry_skips_records_with_moved_aside_files(tmp_path):
     assert mgr.retry_incompatible_components("s1") == (0, 0)
     assert len(mgr.get_incompatible_components("s1")["mods"]) == 1
     assert (tmp_path / "mods_incompatible" / "old-mod.jar").exists()
+
+
+def test_sync_playit_tunnels_delegates_with_all_servers(tmp_path):
+
+    from hosty.shared.backend.server_manager import ServerInfo, ServerManager
+
+    mgr = ServerManager.__new__(ServerManager)
+    mgr._servers = {
+        "a": ServerInfo({"id": "a", "path": str(tmp_path / "srvA")}),
+        "b": ServerInfo({"id": "b", "path": str(tmp_path / "srvB")}),
+    }
+    seen = {}
+
+    class _StubPlayit:
+        def sync_account_tunnels(self, servers):
+            seen["servers"] = servers
+            return {"status": "ok"}
+
+    mgr.playit_manager = _StubPlayit()
+    assert mgr.sync_playit_tunnels() == {"status": "ok"}
+    assert sorted(seen["servers"]) == [
+        ("a", str(tmp_path / "srvA")),
+        ("b", str(tmp_path / "srvB")),
+    ]

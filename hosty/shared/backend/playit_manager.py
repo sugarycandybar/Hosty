@@ -76,7 +76,7 @@ class PlayitManager(EventEmitter):
 
         def _write_data(self):
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            self._path.write_text(json.dumps(self._data), encoding="utf-8")
+            self._path.write_text(json.dumps(self._data, indent=2) + "\n", encoding="utf-8")
 
         def clear_cache(self):
             if self._path.exists():
@@ -1367,17 +1367,40 @@ class PlayitManager(EventEmitter):
         except Exception:
             logger.exception("failed to record voice tunnel migration")
 
+    def _tunnel_suits_kind(self, tunnel: Tunnel, kind: str) -> bool:
+        """Whether a tunnel can actually serve a kind.
+
+        Guards against cross-kind corruption (e.g. a java endpoint pointing
+        at a voice tunnel): repair paths must never treat such references as
+        valid, or the corruption cements itself on every restart.
+        """
+        if kind == "java":
+            return tunnel.protocol == "tcp"
+        if kind == "bedrock":
+            return tunnel.protocol == "udp" and tunnel.raw_tunnel_type in (None, "minecraft-bedrock")
+        if kind == "voicechat":
+            return tunnel.protocol == "udp" and tunnel.raw_tunnel_type is None
+        return True
+
+    def _tunnel_matches_endpoint(self, tunnel: Tunnel, endpoint: str) -> bool:
+        """Whether a tunnel serves an endpoint (same matching as validation)."""
+        ep = (endpoint or "").strip().lower()
+        if not ep:
+            return False
+        if tunnel.hostname and tunnel.hostname.strip().lower() == ep:
+            return True
+        if tunnel.domain and tunnel.remote_port:
+            return f"{tunnel.domain}:{tunnel.remote_port}".lower() == ep
+        return False
+
     def _find_tunnel_for_endpoint(self, endpoint: str) -> Tunnel | None:
         """Return the tunnel serving an endpoint, or None (same matching as validation)."""
         ep = (endpoint or "").strip().lower()
         if not ep:
             return None
         for tunnel in self._return_single_list():
-            if tunnel.hostname and tunnel.hostname.strip().lower() == ep:
+            if self._tunnel_matches_endpoint(tunnel, ep):
                 return tunnel
-            if tunnel.domain and tunnel.remote_port:
-                if f"{tunnel.domain}:{tunnel.remote_port}".lower() == ep:
-                    return tunnel
         return None
 
     def _tunnel_endpoint(self, tunnel: Tunnel) -> str:
@@ -1387,6 +1410,12 @@ class PlayitManager(EventEmitter):
         if tunnel.domain:
             return str(tunnel.domain)
         return str(tunnel.hostname or "").strip()
+
+    def _kind_endpoint(self, tunnel: Tunnel, kind: str) -> str:
+        """Endpoint string as stored for a kind (java stays a bare domain)."""
+        if kind == "java":
+            return str(tunnel.hostname or tunnel.domain or "").strip()
+        return self._tunnel_endpoint(tunnel)
 
     def _voice_regen_is_safe(self, legacy: Tunnel, port: int) -> bool:
         """Whether auto-migration may use the regenerate flow.
@@ -2439,9 +2468,11 @@ class PlayitManager(EventEmitter):
         dirty = False
         try:
             java_ep = str(cfg.get("java_endpoint", "") or "").strip()
-            if java_ep and not self._tunnel_exists_for_endpoint(java_ep):
+            java_match = self._find_tunnel_for_endpoint(java_ep) if java_ep else None
+            if java_ep and (java_match is None or java_match.protocol != "tcp"):
                 # The Java endpoint had no validation path at all: a tunnel
-                # deleted via the dashboard stayed displayed forever.
+                # deleted via the dashboard stayed displayed forever. A live
+                # but non-TCP match (cross-kind corruption) is cleared too.
                 cfg["java_endpoint"] = ""
                 dirty = True
                 logger.warning("playit auto-create: cleared stale java endpoint for %s", server_dir)
@@ -2453,7 +2484,8 @@ class PlayitManager(EventEmitter):
         vc_id = str(cfg.get("voicechat_tunnel_id", "")).strip()
 
         try:
-            if bedrock_ep and not self._tunnel_exists_for_endpoint(bedrock_ep):
+            bedrock_match = self._find_tunnel_for_endpoint(bedrock_ep) if bedrock_ep else None
+            if bedrock_ep and (bedrock_match is None or bedrock_match.protocol != "udp"):
                 cfg["bedrock_endpoint"] = ""
                 bedrock_ep = ""
                 dirty = True
@@ -2497,7 +2529,8 @@ class PlayitManager(EventEmitter):
         except Exception:
             logger.exception("playit auto-create: voice migration heal failed")
         try:
-            if vc_ep and not self._tunnel_exists_for_endpoint(vc_ep):
+            vc_match = self._find_tunnel_for_endpoint(vc_ep) if vc_ep else None
+            if vc_ep and (vc_match is None or vc_match.protocol != "udp"):
                 cfg["voicechat_endpoint"] = ""
                 vc_ep = ""
                 dirty = True
@@ -2559,7 +2592,7 @@ class PlayitManager(EventEmitter):
         except Exception:
             logger.exception("playit auto-create: voice migration failed")
         try:
-            if not vc_ep and not vc_id and _mod_present("voice-chat", "simple-voice-chat"):
+            if not vc_ep and not vc_id and _mod_present("voice-chat", "simple-voice-chat", "voicechat"):
                 ok, _msg, endpoint = self.add_voicechat_tunnel(
                     server_id,
                     server_dir,
@@ -2581,6 +2614,263 @@ class PlayitManager(EventEmitter):
             self._emit_endpoint_changed(server_id)
 
         return result
+
+    def sync_account_tunnels(self, servers: list[tuple[str, str]]) -> dict:
+        """Reconcile every server's tunnel config against the live account state.
+
+        Single source of truth for "which tunnels exist and who uses them",
+        run at every agent start. For each server (server_id, server_dir):
+
+        - shared legacy bedrock-typed voice tunnels are migrated exactly once
+          (regenerate flow) and every referencing server is rewritten to the
+          replacement; unreferenced legacy voice tunnels are deleted;
+        - dead stored ids heal via the migration map, live endpoints backfill
+          missing ids, and servers with neither id nor endpoint adopt an
+          existing same-port tunnel (already-created tunnels show up
+          automatically instead of being duplicated);
+        - user-deleted (tombstoned) tunnels are never resurrected: a dead id
+          with no live match only clears a stale endpoint.
+
+        Returns a summary dict with "migrated", "cleaned", "healed",
+        "adopted" lists plus "status" ("ok" or "stale" when no fresh tunnel
+        list could be retrieved). Never raises.
+        """
+        summary: dict = {"status": "ok", "migrated": [], "cleaned": [], "healed": [], "adopted": []}
+        try:
+            with self._tunnel_op_lock:
+                return self._sync_account_tunnels_locked(servers, summary)
+        except Exception:
+            logger.exception("tunnel sync failed")
+            summary["status"] = "error"
+            return summary
+
+    def _sync_account_tunnels_locked(self, servers: list[tuple[str, str]], summary: dict) -> dict:
+        from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
+
+        refresh_mark = self.tunnels_refreshed_at
+        try:
+            self._retrieve_tunnels()
+        except Exception:
+            logger.exception("tunnel sync: refresh failed")
+        if self.tunnels_refreshed_at is None or self.tunnels_refreshed_at is refresh_mark:
+            logger.warning("tunnel sync: no fresh tunnel list; aborting")
+            summary["status"] = "stale"
+            return summary
+
+        kinds = (
+            ("java", "java_tunnel_id", "java_endpoint", "tcp"),
+            ("bedrock", "bedrock_tunnel_id", "bedrock_endpoint", "udp"),
+            ("voicechat", "voicechat_tunnel_id", "voicechat_endpoint", "udp"),
+        )
+        id_field = {kind: id_key for kind, id_key, _ep_key, _proto in kinds}
+        ep_field = {kind: ep_key for kind, _id_key, ep_key, _proto in kinds}
+
+        cfgs: dict[str, tuple[str, dict]] = {}
+        for sid, sdir in servers:
+            try:
+                cfgs[sid] = (str(sdir), load_playit_config(sdir))
+            except Exception:
+                continue
+
+        def live_tunnels() -> list[Tunnel]:
+            return self._return_single_list()
+
+        def by_id(tid: str) -> Tunnel | None:
+            return next((t for t in live_tunnels() if t.id == tid), None)
+
+        def references(sid: str, tunnel: Tunnel, kind: str) -> bool:
+            cfg = cfgs[sid][1]
+            if str(cfg.get(id_field[kind], "") or "").strip() == tunnel.id:
+                return True
+            return self._tunnel_matches_endpoint(tunnel, str(cfg.get(ep_field[kind], "") or ""))
+
+        # Log who uses what (per-port usage overview).
+        for tunnel in live_tunnels():
+            users = sorted(sid for sid in cfgs if any(references(sid, tunnel, kind) for kind, _i, _e, _p in kinds))
+            logger.info(
+                "tunnel %s (%s local %s:%s) referenced by %s",
+                tunnel.id[:8],
+                tunnel.protocol,
+                tunnel.host,
+                tunnel.port,
+                ",".join(users) if users else "nobody",
+            )
+
+        # --- legacy voice elimination (migrate shared ones once) ---
+        # Snapshot ids first: migration/deletion mutates the live buckets.
+        legacy_ids = [
+            t.id
+            for t in live_tunnels()
+            if t.protocol == "udp" and t.raw_tunnel_type == "minecraft-bedrock" and "voice" in str(t.name or "").lower()
+        ]
+        for legacy_id in legacy_ids:
+            tunnel = by_id(legacy_id)
+            if tunnel is None:
+                continue
+            users = [sid for sid in cfgs if references(sid, tunnel, "voicechat")]
+            if not users:
+                # Dead weight no server references (and bedrock-kind servers
+                # cannot adopt a voice-named tunnel): drop it, unless some
+                # server's bedrock endpoint points at it (manual wiring).
+                if any(
+                    self._tunnel_matches_endpoint(tunnel, str(cfg.get("bedrock_endpoint", "") or ""))
+                    for _sid, (_sdir, cfg) in cfgs.items()
+                ):
+                    continue
+                if self._delete_tunnel(tunnel):
+                    logger.warning("tunnel sync: deleted unreferenced legacy voice tunnel %s", tunnel.id)
+                    summary["cleaned"].append(tunnel.id)
+                continue
+            sid0 = users[0]
+            sdir0, cfg0 = cfgs[sid0]
+            try:
+                port = int(tunnel.port or 0) or int(cfg0.get("voicechat_port", 24454))
+            except Exception:
+                port = 24454
+            if not self._voice_regen_is_safe(tunnel, port):
+                logger.warning("tunnel sync: skipping unsafe voice migration for %s", tunnel.id[:8])
+                continue
+            try:
+                ok, _msg, endpoint = self._regenerate_tunnel_for_protocol(
+                    sid0,
+                    sdir0,
+                    "udp",
+                    secret=str(cfg0.get("secret", "")).strip(),
+                    auto_install=bool(cfg0.get("auto_install", True)),
+                    voicechat_port=port,
+                    tunnel_kind="voicechat",
+                )
+            except Exception:
+                logger.exception("tunnel sync: voice regenerate failed")
+                continue
+            if not (ok and endpoint):
+                logger.warning("tunnel sync: voice regenerate failed; keeping legacy tunnel %s", tunnel.id[:8])
+                continue
+            new_tunnel = self._find_tunnel_for_endpoint(endpoint)
+            if new_tunnel is None:
+                logger.warning("tunnel sync: regenerated endpoint not found: %s", endpoint)
+                continue
+            new_ep = self._tunnel_endpoint(new_tunnel)
+            self._record_voice_migration(tunnel.id, new_tunnel.id, new_ep)
+            for sid in users:
+                sdir, cfg = cfgs[sid]
+                cfg["voicechat_tunnel_id"] = new_tunnel.id
+                cfg["voicechat_endpoint"] = new_ep
+                save_playit_config(sdir, cfg)
+                self._emit_endpoint_changed(sid)
+            summary["migrated"].append({"from": tunnel.id, "to": new_tunnel.id, "servers": sorted(users)})
+
+        # --- healing + adoption per server ---
+        mmap = self._load_voice_migration_map()
+        for sid, (sdir, cfg) in cfgs.items():
+            dirty = False
+            try:
+                java_port = self._read_server_port(sdir)
+            except Exception:
+                java_port = 25565
+            want_port = {
+                "java": java_port,
+                "bedrock": self._cfg_port(cfg, "bedrock_port", 19132),
+                "voicechat": self._cfg_port(cfg, "voicechat_port", 24454),
+            }
+            bucket_proto = {"java": "tcp", "bedrock": "udp", "voicechat": "udp"}
+            for kind, _id_key, _ep_key, _proto in kinds:
+                tid = str(cfg.get(id_field[kind], "") or "").strip()
+                ep = str(cfg.get(ep_field[kind], "") or "").strip()
+                if tid:
+                    found = by_id(tid)
+                    if found is not None and self._tunnel_suits_kind(found, kind):
+                        continue
+                    if found is not None:
+                        # Live but wrong kind (e.g. a java ref pointing at a
+                        # voice tunnel): corrupt wiring, forget it entirely so
+                        # adoption below heals instead of cementing it.
+                        logger.warning(
+                            "tunnel sync: dropping %s ref to unsuitable %s tunnel %s for %s",
+                            kind,
+                            found.protocol,
+                            tid[:8],
+                            sid,
+                        )
+                        cfg[id_field[kind]] = ""
+                        cfg[ep_field[kind]] = ""
+                        tid = ""
+                        ep = ""
+                        dirty = True
+                    else:
+                        # Dead stored id: map-heal (voice), backfill from a
+                        # live suitable endpoint match, else clear a stale
+                        # endpoint (tombstone: the id stays so nothing is
+                        # resurrected). A migrated-away id referenced by a
+                        # non-voice kind is corruption too: forget it.
+                        if tid in mmap and kind != "voicechat":
+                            cfg[id_field[kind]] = ""
+                            cfg[ep_field[kind]] = ""
+                            tid = ""
+                            ep = ""
+                            dirty = True
+                        else:
+                            healed_here = False
+                            if kind == "voicechat":
+                                mapped = mmap.get(tid) or {}
+                                if mapped.get("id") and by_id(str(mapped.get("id"))) is not None:
+                                    cfg[id_field[kind]] = str(mapped.get("id"))
+                                    cfg[ep_field[kind]] = str(mapped.get("endpoint") or "")
+                                    dirty = True
+                                    healed_here = True
+                                    summary["healed"].append({"server": sid, "kind": kind})
+                            if not healed_here and ep:
+                                live_match = self._find_tunnel_for_endpoint(ep)
+                                if live_match is not None and self._tunnel_suits_kind(live_match, kind):
+                                    cfg[id_field[kind]] = live_match.id
+                                    dirty = True
+                                    healed_here = True
+                                    summary["healed"].append({"server": sid, "kind": kind})
+                            if not healed_here and ep and self._find_tunnel_for_endpoint(ep) is None:
+                                cfg[ep_field[kind]] = ""
+                                dirty = True
+                            continue
+                            continue
+                if ep:
+                    live_match = self._find_tunnel_for_endpoint(ep)
+                    if live_match is not None and self._tunnel_suits_kind(live_match, kind):
+                        cfg[id_field[kind]] = live_match.id
+                        dirty = True
+                        summary["healed"].append({"server": sid, "kind": kind})
+                    continue
+                if kind != "java":
+                    # Bedrock/voice tunnels need their setup process (mod
+                    # install + config); only java auto-adopts here.
+                    continue
+                adopted = self._adopt_same_port_tunnel(bucket_proto[kind], want_port[kind], kind)
+                if adopted is not None:
+                    cfg[id_field[kind]] = adopted.id
+                    cfg[ep_field[kind]] = self._kind_endpoint(adopted, kind)
+                    dirty = True
+                    summary["adopted"].append({"server": sid, "kind": kind, "tunnel": adopted.id})
+            if dirty:
+                save_playit_config(sdir, cfg)
+                self._emit_endpoint_changed(sid)
+        return summary
+
+    @staticmethod
+    def _cfg_port(cfg: dict, key: str, default: int) -> int:
+        try:
+            return int(cfg.get(key, default))
+        except Exception:
+            return default
+
+    def _adopt_same_port_tunnel(self, protocol: str, port: int, kind_key: str) -> Tunnel | None:
+        """Find an adoptable same-port tunnel (shared use, 1 tunnel per port)."""
+        for tunnel in self.tunnels.get(protocol, []):
+            try:
+                same_port = int(tunnel.port or 0) == int(port)
+            except Exception:
+                same_port = False
+            if same_port and self._is_adoptable_tunnel(tunnel, kind_key):
+                tunnel.in_use = True
+                return tunnel
+        return None
 
     def stop_server(self, server_id: str) -> tuple[bool, str]:
         """Stop playit for a specific server. Keeps agent running for other servers.
@@ -2727,7 +3017,10 @@ class PlayitManager(EventEmitter):
 
         candidates: list[str] = []
         candidates.extend(ENDPOINT_URL_RE.findall(text))
-        candidates.extend(ENDPOINT_HOSTPORT_RE.findall(text))
+        # HOSTPORT_RE has capture groups, so findall yields tuples: take the
+        # full match (without this, .strip() below raises and silently kills
+        # the agent-output reader thread on the first mapping line).
+        candidates.extend(full for full, _host in ENDPOINT_HOSTPORT_RE.findall(text))
 
         if not candidates:
             return
@@ -2752,11 +3045,41 @@ class PlayitManager(EventEmitter):
                             self._active_server_ids[server_id]["endpoint"] = tunnel.hostname.strip()
                             self._emit_endpoint_changed(server_id)
                             break
-                # If no tunnel_id match, update the first unmatched server
+                # If no tunnel_id match, update the first unmatched server —
+                # but only with a candidate that actually belongs to it: it
+                # must match a TCP tunnel on this server's java port. Agent
+                # logs also contain UDP (voice/bedrock) domain:port lines,
+                # which must never land in the java endpoint slot.
                 if not info.get("endpoint"):
-                    self._active_server_ids[server_id]["endpoint"] = candidate
-                    self._emit_endpoint_changed(server_id)
-                    break
+                    if self._candidate_is_java_tunnel_for(info, candidate_clean, all_tunnels):
+                        self._active_server_ids[server_id]["endpoint"] = candidate
+                        self._emit_endpoint_changed(server_id)
+                        break
+
+    def _candidate_is_java_tunnel_for(self, info: dict, candidate: str, all_tunnels: list[Tunnel]) -> bool:
+        """Whether a parsed endpoint candidate belongs to a server's java tunnel."""
+        try:
+            port = info.get("port")
+            if port is None:
+                port = self._read_server_port(str(info.get("server_dir", "") or ""))
+            want = int(port)
+        except Exception:
+            return False
+        for tunnel in all_tunnels:
+            if tunnel.protocol != "tcp":
+                continue
+            try:
+                same_port = int(tunnel.port or 0) == want
+            except Exception:
+                same_port = False
+            if not same_port:
+                continue
+            if tunnel.hostname and tunnel.hostname.strip().lower() == candidate:
+                return True
+            if tunnel.domain and tunnel.remote_port:
+                if f"{tunnel.domain}:{tunnel.remote_port}".lower() == candidate:
+                    return True
+        return False
 
     def _pick_best_endpoint(self, candidates: list[str]) -> str:
         best = ""

@@ -1016,7 +1016,7 @@ class PlayitMixin:
             dialog.present(self.get_root())
             return
 
-        if self._has_mod_installed(server_dir, "voice-chat", "simple-voice-chat"):
+        if self._has_mod_installed(server_dir, "voice-chat", "simple-voice-chat", "voicechat"):
             start_operation()
         else:
             self._confirm_required_mod_install(
@@ -1460,53 +1460,71 @@ class PlayitMixin:
             )
 
         def run():
-            ok, msg = worker()
-            if ok:
-                try:
-                    br_port_probe = int(self._cfg.get("bedrock_port", 19132))
-                except Exception:
-                    br_port_probe = 19132
-                try:
-                    vc_port_probe = int(self._cfg.get("voicechat_port", 24454))
-                except Exception:
-                    vc_port_probe = 24454
-                # Validate stored endpoints (clear ones deleted via the
-                # dashboard) and create missing tunnels for installed mods.
-                try:
-                    self._server_manager.playit_manager.auto_create_tunnel_mods(
-                        server_id,
-                        server_dir,
-                        secret=secret,
-                        bedrock_port=br_port_probe,
-                        voicechat_port=vc_port_probe,
-                        loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
-                    )
-                except Exception:
-                    logger.exception("playit auto-create/validate failed for server %s", server_id)
-                cfg = load_playit_config(server_dir)
-                br_port = int(cfg.get("bedrock_port", 19132))
-                vc_port = int(cfg.get("voicechat_port", 24454))
-                playit = self._server_manager.playit_manager
-                playit.verify_playit_mod_configs(
-                    server_dir,
-                    server_id,
-                    bedrock_endpoint=str(cfg.get("bedrock_endpoint", "")).strip(),
-                    voicechat_endpoint=str(cfg.get("voicechat_endpoint", "")).strip(),
-                    bedrock_port=br_port,
-                    voicechat_port=vc_port,
-                    loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
-                )
-
-            def ui_done():
-                self._start_in_progress = False
-                self._load_server_config()
-                self._refresh_status_row()
+            # try/finally: ui_done must always run so _start_in_progress
+            # clears even if the worker body raises (otherwise every later
+            # start attempt reports "already in progress" until relaunch).
+            ok, msg = False, ""
+            try:
+                ok, msg = worker()
                 if ok:
-                    self._toast(_("Playit agent started"))
-                else:
-                    self._alert(_("Could not start playit"), msg)
+                    # Account-wide tunnel sync first (single source of truth),
+                    # then per-server validation/creation.
+                    try:
+                        self._server_manager.sync_playit_tunnels()
+                    except Exception:
+                        logger.exception("playit tunnel sync failed for server %s", server_id)
+                    try:
+                        br_port_probe = int(self._cfg.get("bedrock_port", 19132))
+                    except Exception:
+                        br_port_probe = 19132
+                    try:
+                        vc_port_probe = int(self._cfg.get("voicechat_port", 24454))
+                    except Exception:
+                        vc_port_probe = 24454
+                    # Validate stored endpoints (clear ones deleted via the
+                    # dashboard) and create missing tunnels for installed mods.
+                    try:
+                        self._server_manager.playit_manager.auto_create_tunnel_mods(
+                            server_id,
+                            server_dir,
+                            secret=secret,
+                            bedrock_port=br_port_probe,
+                            voicechat_port=vc_port_probe,
+                            loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                        )
+                    except Exception:
+                        logger.exception("playit auto-create/validate failed for server %s", server_id)
+                    try:
+                        cfg = load_playit_config(server_dir)
+                        br_port = int(cfg.get("bedrock_port", 19132))
+                        vc_port = int(cfg.get("voicechat_port", 24454))
+                        playit = self._server_manager.playit_manager
+                        playit.verify_playit_mod_configs(
+                            server_dir,
+                            server_id,
+                            bedrock_endpoint=str(cfg.get("bedrock_endpoint", "")).strip(),
+                            voicechat_endpoint=str(cfg.get("voicechat_endpoint", "")).strip(),
+                            bedrock_port=br_port,
+                            voicechat_port=vc_port,
+                            loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                        )
+                    except Exception:
+                        logger.exception("playit mod config verify failed for server %s", server_id)
+            except Exception:
+                logger.exception("playit start worker failed for server %s", server_id)
+                ok, msg = False, _("Playit start failed unexpectedly; please try again.")
+            finally:
 
-            GLib.idle_add(ui_done)
+                def ui_done():
+                    self._start_in_progress = False
+                    self._load_server_config()
+                    self._refresh_status_row()
+                    if ok:
+                        self._toast(_("Playit agent started"))
+                    else:
+                        self._alert(_("Could not start playit"), msg)
+
+                GLib.idle_add(ui_done)
 
         threading.Thread(target=run, daemon=True).start()
 

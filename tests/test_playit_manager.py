@@ -1744,3 +1744,475 @@ def test_shared_legacy_voice_tunnel_migrates_once_for_both_servers(tmp_path):
         cfg = load_playit_config(d)
         assert cfg["voicechat_tunnel_id"] == "t-new-1"
         assert cfg["voicechat_endpoint"] == "new.tun.ply.gg:7800"
+
+
+def _sync_pm(tmp_path):
+
+    pm = _auto_create_pm(tmp_path)
+    return pm
+
+
+def _sync_cfg(tmp_path, name, **overrides):
+    d = tmp_path / name
+    d.mkdir(exist_ok=True)
+    cfg = {
+        "voicechat_port": 24454,
+        "bedrock_port": 19132,
+        "java_endpoint": "",
+        "bedrock_endpoint": "",
+        "voicechat_endpoint": "",
+        "java_tunnel_id": "",
+        "bedrock_tunnel_id": "",
+        "voicechat_tunnel_id": "",
+    }
+    cfg.update(overrides)
+    _save_voice_cfg(d, **cfg)
+    return d
+
+
+def _sync_run(pm, api, servers):
+    from contextlib import ExitStack
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        return pm.sync_account_tunnels(servers)
+
+
+def test_sync_migrates_shared_legacy_once(tmp_path):
+    """Two servers sharing one legacy voice tunnel: single replacement,
+    both configs rewritten, map recorded."""
+    import json
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(tmp_path, "srvA", voicechat_tunnel_id="t-legacy", voicechat_endpoint="old.tun.ply.gg:1111")
+    dir_b = _sync_cfg(tmp_path, "srvB", voicechat_tunnel_id="t-legacy", voicechat_endpoint="old.tun.ply.gg:1111")
+
+    summary = _sync_run(pm, api, [("a", str(dir_a)), ("b", str(dir_b))])
+
+    assert summary["status"] == "ok"
+    assert api.created == 1
+    assert "t-legacy" not in store
+    assert store["t-new-1"]["tunnel_type"] is None
+    assert len(summary["migrated"]) == 1
+    assert sorted(summary["migrated"][0]["servers"]) == ["a", "b"]
+    for d in (dir_a, dir_b):
+        cfg = load_playit_config(d)
+        assert cfg["voicechat_tunnel_id"] == "t-new-1"
+        assert cfg["voicechat_endpoint"] == "new.tun.ply.gg:7800"
+    mmap = json.loads((tmp_path / "playit" / ".voice-migrated.json").read_text(encoding="utf-8"))
+    assert mmap["t-legacy"]["id"] == "t-new-1"
+
+
+def test_sync_deletes_unreferenced_legacy_voice_tunnel(tmp_path):
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(tmp_path, "srvA")
+
+    summary = _sync_run(pm, api, [("a", str(dir_a))])
+
+    assert summary["cleaned"] == ["t-legacy"]
+    assert "t-legacy" not in store
+    assert api.created == 0
+
+
+def test_sync_keeps_bedrock_wired_tunnel(tmp_path):
+    """A voice-named tunnel referenced as a bedrock endpoint is manual
+    wiring, not migration material: hands off."""
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-weird": _tunnel_data(
+            "t-weird",
+            local_port=19132,
+            name="hosty-voicechat-udp-19132-1",
+            tunnel_type="minecraft-bedrock",
+            domain="w.tun.ply.gg",
+            remote_port=2222,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(tmp_path, "srvA", bedrock_endpoint="w.tun.ply.gg:2222", bedrock_port=19132)
+
+    summary = _sync_run(pm, api, [("a", str(dir_a))])
+
+    assert summary["migrated"] == []
+    assert summary["cleaned"] == []
+    assert "t-weird" in store
+    assert api.created == 0
+
+
+def test_sync_adopts_empty_refs_onto_existing_tunnels(tmp_path):
+    """A new server with no tunnel config automatically shows an
+    already-created same-port Java tunnel instead of duplicating it.
+    Bedrock/voice need their setup process, so they are left alone."""
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-java": _tunnel_data(
+            "t-java",
+            proto="tcp",
+            tunnel_type="minecraft-java",
+            local_port=25565,
+            domain="j.tun.ply.gg",
+            remote_port=3333,
+            name="hosty-srv-tcp-25565-1",
+        ),
+        "t-bed": _tunnel_data(
+            "t-bed",
+            local_port=19132,
+            name="hosty-bedrock-udp-19132-1",
+            tunnel_type="minecraft-bedrock",
+            domain="b.tun.ply.gg",
+            remote_port=4444,
+        ),
+        "t-voice": _tunnel_data(
+            "t-voice",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type=None,
+            domain="v.tun.ply.gg",
+            remote_port=5555,
+        ),
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(tmp_path, "srvA")
+    (dir_a / "server.properties").write_text("server-port=25565\n", encoding="utf-8")
+
+    summary = _sync_run(pm, api, [("a", str(dir_a))])
+
+    assert api.created == 0
+    cfg = load_playit_config(dir_a)
+    assert cfg["java_tunnel_id"] == "t-java"
+    assert cfg["java_endpoint"] == "j.tun.ply.gg"
+    assert cfg["bedrock_tunnel_id"] == ""
+    assert cfg["bedrock_endpoint"] == ""
+    assert cfg["voicechat_tunnel_id"] == ""
+    assert cfg["voicechat_endpoint"] == ""
+    assert len(summary["adopted"]) == 1
+    assert summary["adopted"][0]["kind"] == "java"
+
+
+def test_sync_backfills_id_from_live_endpoint(tmp_path):
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-voice": _tunnel_data(
+            "t-voice",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type=None,
+            domain="v.tun.ply.gg",
+            remote_port=5555,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(tmp_path, "srvA", voicechat_endpoint="v.tun.ply.gg:5555")
+
+    summary = _sync_run(pm, api, [("a", str(dir_a))])
+
+    assert load_playit_config(dir_a)["voicechat_tunnel_id"] == "t-voice"
+    assert api.created == 0
+    assert len(summary["healed"]) == 1
+
+
+def test_sync_respects_tombstone(tmp_path):
+    """A dead stored id with no live match only clears a stale endpoint;
+    nothing is adopted or created in its place."""
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-other": _tunnel_data(
+            "t-other",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-9",
+            tunnel_type=None,
+            domain="o.tun.ply.gg",
+            remote_port=6666,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(
+        tmp_path,
+        "srvA",
+        voicechat_tunnel_id="t-deleted",
+        voicechat_endpoint="gone.tun.ply.gg:7777",
+    )
+
+    summary = _sync_run(pm, api, [("a", str(dir_a))])
+
+    cfg = load_playit_config(dir_a)
+    assert cfg["voicechat_endpoint"] == ""
+    assert cfg["voicechat_tunnel_id"] == "t-deleted"
+    assert api.created == 0
+    assert summary["adopted"] == []
+
+
+def test_sync_aborts_on_stale_list(tmp_path):
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = _sync_pm(tmp_path)
+    dir_a = _sync_cfg(tmp_path, "srvA", voicechat_endpoint="v.tun.ply.gg:5555")
+
+    with patch.object(PlayitManager, "_request", side_effect=RuntimeError("offline")):
+        summary = pm.sync_account_tunnels([("a", str(dir_a))])
+
+    assert summary["status"] == "stale"
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    assert load_playit_config(dir_a)["voicechat_endpoint"] == "v.tun.ply.gg:5555"
+
+
+def test_sync_repairs_java_ref_pointing_at_voice_tunnel(tmp_path):
+    """The reported corruption: java id+endpoint point at the live raw voice
+    tunnel while a valid java tunnel exists. Sync must forget the corrupt
+    ref and adopt the real java tunnel."""
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-java": _tunnel_data(
+            "t-java",
+            proto="tcp",
+            tunnel_type="minecraft-java",
+            local_port=25565,
+            domain="j.tun.ply.gg",
+            remote_port=3333,
+            name="hosty-server-tcp-25565-1",
+        ),
+        "t-voice": _tunnel_data(
+            "t-voice",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type=None,
+            domain="v.tun.ply.gg",
+            remote_port=5555,
+        ),
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(
+        tmp_path,
+        "srvA",
+        java_tunnel_id="t-voice",
+        java_endpoint="v.tun.ply.gg:5555",
+        voicechat_tunnel_id="t-voice",
+        voicechat_endpoint="v.tun.ply.gg:5555",
+    )
+    (dir_a / "server.properties").write_text("server-port=25565\n", encoding="utf-8")
+
+    _sync_run(pm, api, [("a", str(dir_a))])
+
+    cfg = load_playit_config(dir_a)
+    assert cfg["java_tunnel_id"] == "t-java"
+    assert cfg["java_endpoint"] == "j.tun.ply.gg"
+    assert cfg["voicechat_tunnel_id"] == "t-voice"
+    assert cfg["voicechat_endpoint"] == "v.tun.ply.gg:5555"
+    assert api.created == 0
+
+
+def test_sync_forgets_bedrock_ref_pointing_at_tcp_tunnel(tmp_path):
+    """Same class of corruption for bedrock: the ref is dropped, and with no
+    setup-process adoption the fields stay empty for the normal flows."""
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-java": _tunnel_data(
+            "t-java",
+            proto="tcp",
+            tunnel_type="minecraft-java",
+            local_port=25565,
+            domain="j.tun.ply.gg",
+            remote_port=3333,
+            name="hosty-server-tcp-25565-1",
+        ),
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(
+        tmp_path,
+        "srvA",
+        bedrock_tunnel_id="t-java",
+        bedrock_endpoint="j.tun.ply.gg:3333",
+    )
+
+    _sync_run(pm, api, [("a", str(dir_a))])
+
+    cfg = load_playit_config(dir_a)
+    assert cfg["bedrock_tunnel_id"] == ""
+    assert cfg["bedrock_endpoint"] == ""
+
+
+def test_auto_create_clears_java_endpoint_on_udp_tunnel(tmp_path):
+    """Validation must not treat a live-but-wrong-protocol match as valid."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+
+    pm = _auto_create_pm(tmp_path)
+    store = {
+        "t-voice": _tunnel_data(
+            "t-voice",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type=None,
+            domain="v.tun.ply.gg",
+            remote_port=5555,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        java_endpoint="v.tun.ply.gg:5555",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454)
+
+    assert load_playit_config(tmp_path)["java_endpoint"] == ""
+
+
+def test_tunnel_cache_file_is_human_readable(tmp_path):
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    cache = PlayitManager.TunnelCacheHelper(tmp_path)
+    cache.add_tunnel("t-1", {"name": "hosty-x", "origin": {"data": {"local_port": 1}}})
+    content = (tmp_path / "tunnel-cache.json").read_text(encoding="utf-8")
+    assert "\n" in content
+    assert '"t-1": {' in content
+
+
+def _parser_pm(tmp_path):
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    pm.emit_on_main_thread = lambda *args, **kwargs: None
+    return pm
+
+
+def _prime_tunnels(pm, store):
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm.tunnels = {"tcp": [], "udp": [], "both": []}
+    for tunnel_id, data in store.items():
+        pm.tunnels["udp" if data.get("port_type") == "udp" else "tcp"].append(PlayitManager.Tunnel(pm, data))
+    pm.tunnels_refreshed_at = 1.0
+
+
+def test_log_parser_never_assigns_voice_candidate_to_java_slot(tmp_path):
+    """Agent logs contain UDP voice domain:port lines; the fallback must not
+    put them into a server's (java) active endpoint."""
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = _parser_pm(tmp_path)
+    _prime_tunnels(
+        pm,
+        {
+            "t-voice": _tunnel_data(
+                "t-voice",
+                local_port=24454,
+                name="hosty-voicechat-udp-24454-1",
+                tunnel_type=None,
+                domain="v.tun.ply.gg",
+                remote_port=5555,
+            ),
+        },
+    )
+    pm._active_server_ids = {"s1": {"tunnel_id": None, "endpoint": "", "port": None, "server_dir": str(tmp_path)}}
+
+    with patch.object(PlayitManager, "_retrieve_tunnels", lambda self: self.tunnels):
+        pm._parse_line_for_endpoints("tunnel running v.tun.ply.gg:5555 -> 127.0.0.1:24454")
+
+    assert pm._active_server_ids["s1"]["endpoint"] == ""
+
+
+def test_log_parser_assigns_matching_tcp_candidate(tmp_path):
+    """A TCP candidate on the server's java port still fills the slot."""
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = _parser_pm(tmp_path)
+    _prime_tunnels(
+        pm,
+        {
+            "t-java": _tunnel_data(
+                "t-java",
+                proto="tcp",
+                tunnel_type="minecraft-java",
+                local_port=25565,
+                domain="j.tun.ply.gg",
+                remote_port=3333,
+                name="hosty-srv-tcp-25565-1",
+            ),
+        },
+    )
+    pm._active_server_ids = {"s1": {"tunnel_id": None, "endpoint": "", "port": None, "server_dir": str(tmp_path)}}
+    (tmp_path / "server.properties").write_text("server-port=25565\n", encoding="utf-8")
+
+    with patch.object(PlayitManager, "_retrieve_tunnels", lambda self: self.tunnels):
+        pm._parse_line_for_endpoints("tunnel running j.tun.ply.gg:3333 -> 127.0.0.1:25565")
+
+    assert pm._active_server_ids["s1"]["endpoint"] == "j.tun.ply.gg:3333"
+
+
+def test_sync_migration_leaves_active_java_slot_alone(tmp_path):
+    """Voice migration must never touch _active_server_ids (the java slot):
+    previously it wrote the voice endpoint there, and the UI then copied it
+    over the server's java_endpoint on every refresh."""
+
+    pm = _sync_pm(tmp_path)
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=24454,
+            name="hosty-voicechat-udp-24454-1",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=1111,
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    dir_a = _sync_cfg(
+        tmp_path,
+        "srvA",
+        voicechat_tunnel_id="t-legacy",
+        voicechat_endpoint="old.tun.ply.gg:1111",
+    )
+    pm._active_server_ids = {"a": {"tunnel_id": None, "endpoint": "", "port": None, "server_dir": str(dir_a)}}
+
+    _sync_run(pm, api, [("a", str(dir_a))])
+
+    assert pm._active_server_ids["a"]["endpoint"] == ""
+    assert pm._active_server_ids["a"]["tunnel_id"] is None

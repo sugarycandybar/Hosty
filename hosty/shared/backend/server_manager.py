@@ -1458,6 +1458,19 @@ class ServerManager(EventEmitter):
             _time.sleep(0.2)
         return True
 
+    def sync_playit_tunnels(self) -> dict:
+        """Reconcile all servers' tunnel configs against the live account state.
+
+        See PlayitManager.sync_account_tunnels: shared legacy voice tunnels
+        migrate once, references heal, and already-created same-port tunnels
+        show up automatically instead of being duplicated.
+        """
+        try:
+            servers = [(sid, str(info.server_dir)) for sid, info in self._servers.items()]
+        except Exception:
+            return {"status": "error", "migrated": [], "cleaned": [], "healed": [], "adopted": []}
+        return self.playit_manager.sync_account_tunnels(servers)
+
     def ensure_bedrock_transport(self, server_id: str) -> bool:
         """Ensure ``transport=raknet`` in server.properties for Bedrock-tunnelled servers.
 

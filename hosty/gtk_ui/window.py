@@ -325,16 +325,24 @@ class HostyWindow(Adw.ApplicationWindow):
             self._playit_starting_server_ids.discard(server_id)
             return
 
-        # Handle explicit start action or keep-alive check
-        if self._playit_agent_manual_stop:
-            return
-        if server_id in self._playit_autostart_paused_ids:
-            return
-
         cfg = self._load_playit_config(server_id)
         if not cfg.get("enabled", False):
             return
         if not cfg.get("auto_start", True):
+            return
+
+        if action == "start":
+            # A (re)started Minecraft server is fresh intent: resume the
+            # agent keep-alive so playit autostart works, but only when this
+            # server actually wants it (starting a playit-disabled server
+            # must not resume the agent for everyone else). Passive
+            # keep-alive (action None) still respects an explicit manual stop.
+            self.clear_playit_auto_start_pause(server_id)
+
+        # Handle explicit start action or keep-alive check
+        if self._playit_agent_manual_stop:
+            return
+        if server_id in self._playit_autostart_paused_ids:
             return
 
         if playit.is_running_for(server_id):
@@ -350,43 +358,60 @@ class HostyWindow(Adw.ApplicationWindow):
         self._playit_starting_server_ids.add(server_id)
 
         def worker():
-            ok, _msg = playit.start(
-                server_id,
-                str(info.server_dir),
-                secret=str(cfg.get("secret", "")).strip(),
-                auto_install=bool(cfg.get("auto_install", True)),
-            )
-            if ok:
-                # Validate stored endpoints (clear ones deleted via the
-                # dashboard) and create missing tunnels for installed mods.
-                try:
-                    playit.auto_create_tunnel_mods(
-                        server_id,
-                        str(info.server_dir),
-                        secret=str(cfg.get("secret", "")).strip(),
-                        bedrock_port=int(cfg.get("bedrock_port", 19132)),
-                        voicechat_port=int(cfg.get("voicechat_port", 24454)),
-                        loader=info.loader_type,
-                    )
-                except Exception:
-                    logger.exception("playit auto-create/validate failed for server %s", server_id)
-                fresh_cfg = self._load_playit_config(server_id)
-                br_port = int(fresh_cfg.get("bedrock_port", 19132))
-                vc_port = int(fresh_cfg.get("voicechat_port", 24454))
-                playit.verify_playit_mod_configs(
-                    str(info.server_dir),
+            # try/finally: any exception below must still clear the starting
+            # flag, otherwise autostart stays bricked for this server until
+            # the app restarts (silent failure, no toast, no retry).
+            try:
+                ok, _msg = playit.start(
                     server_id,
-                    bedrock_endpoint=str(fresh_cfg.get("bedrock_endpoint", "")).strip(),
-                    voicechat_endpoint=str(fresh_cfg.get("voicechat_endpoint", "")).strip(),
-                    bedrock_port=br_port,
-                    voicechat_port=vc_port,
-                    loader=info.loader_type,
+                    str(info.server_dir),
+                    secret=str(cfg.get("secret", "")).strip(),
+                    auto_install=bool(cfg.get("auto_install", True)),
                 )
+                if ok:
+                    # Account-wide tunnel sync first (single source of truth for
+                    # which tunnels exist and who uses them), then per-server
+                    # validation/creation.
+                    try:
+                        self._server_manager.sync_playit_tunnels()
+                    except Exception:
+                        logger.exception("playit tunnel sync failed for server %s", server_id)
+                    # Validate stored endpoints (clear ones deleted via the
+                    # dashboard) and create missing tunnels for installed mods.
+                    try:
+                        playit.auto_create_tunnel_mods(
+                            server_id,
+                            str(info.server_dir),
+                            secret=str(cfg.get("secret", "")).strip(),
+                            bedrock_port=int(cfg.get("bedrock_port", 19132)),
+                            voicechat_port=int(cfg.get("voicechat_port", 24454)),
+                            loader=info.loader_type,
+                        )
+                    except Exception:
+                        logger.exception("playit auto-create/validate failed for server %s", server_id)
+                    try:
+                        fresh_cfg = self._load_playit_config(server_id)
+                        br_port = int(fresh_cfg.get("bedrock_port", 19132))
+                        vc_port = int(fresh_cfg.get("voicechat_port", 24454))
+                        playit.verify_playit_mod_configs(
+                            str(info.server_dir),
+                            server_id,
+                            bedrock_endpoint=str(fresh_cfg.get("bedrock_endpoint", "")).strip(),
+                            voicechat_endpoint=str(fresh_cfg.get("voicechat_endpoint", "")).strip(),
+                            bedrock_port=br_port,
+                            voicechat_port=vc_port,
+                            loader=info.loader_type,
+                        )
+                    except Exception:
+                        logger.exception("playit mod config verify failed for server %s", server_id)
+            except Exception:
+                logger.exception("playit start worker failed for server %s", server_id)
+            finally:
 
-            def clear_starting_flag():
-                self._playit_starting_server_ids.discard(server_id)
+                def clear_starting_flag():
+                    self._playit_starting_server_ids.discard(server_id)
 
-            GLib.idle_add(clear_starting_flag)
+                GLib.idle_add(clear_starting_flag)
 
         threading.Thread(target=worker, daemon=True).start()
 
