@@ -72,6 +72,18 @@ Conda is also supported if the environment includes `pygobject` and `gtk4`.
 
 </details>
 
+<details>
+<summary>Try the beta (Flathub Beta)</summary>
+
+```bash
+flatpak remote-add --if-not-exists flathub-beta https://flathub.org/beta-repo/flathub-beta.flatpakrepo
+flatpak install flathub-beta io.github.sugarycandybar.Hosty
+```
+
+Beta installs alongside stable under the same app ID (Devel icon) and shares your servers. Switch the launcher entry with `flatpak make-current io.github.sugarycandybar.Hosty [beta|stable]`, or run a branch directly with `flatpak run --branch=beta io.github.sugarycandybar.Hosty`.
+
+</details>
+
 ## Demo
 
 
