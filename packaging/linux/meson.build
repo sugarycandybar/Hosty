@@ -8,10 +8,18 @@ install_data(
   install_dir: get_option('datadir') / 'metainfo'
 )
 
-install_data(
-  'io.github.sugarycandybar.Hosty.svg',
-  install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps'
-)
+if get_option('beta')
+  install_data(
+    'io.github.sugarycandybar.Hosty.Devel.svg',
+    install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps',
+    rename: 'io.github.sugarycandybar.Hosty.svg',
+  )
+else
+  install_data(
+    'io.github.sugarycandybar.Hosty.svg',
+    install_dir: get_option('datadir') / 'icons/hicolor/scalable/apps'
+  )
+endif
 
 install_data(
   'io.github.sugarycandybar.Hosty-symbolic.svg',

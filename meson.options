@@ -1,0 +1,5 @@
+option('beta',
+  type : 'boolean',
+  value : false,
+  description : 'Build the Flathub beta channel: installs the Devel app icon',
+)
