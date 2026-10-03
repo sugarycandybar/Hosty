@@ -100,6 +100,11 @@ class ServerProcess(EventEmitter):
         if paper_jar.exists():
             return ["-jar", "paper-server.jar", "nogui"], ""
 
+        # Arclight: hybrid Bukkit + mods server, launched directly like Paper
+        arclight_jar = self.server_dir / "arclight-server.jar"
+        if arclight_jar.exists():
+            return ["-jar", "arclight-server.jar", "nogui"], ""
+
         # Forge / NeoForge: launch via the installer-generated Java argfile
         # under libraries/, e.g. libraries/net/neoforged/neoforge/<ver>/
         libs_root = self.server_dir / "libraries" / "net"
@@ -127,6 +132,7 @@ class ServerProcess(EventEmitter):
         return None, (
             "[Hosty] Error: No server launch configuration found "
             "(expected fabric-server-launch.jar (Fabric), paper-server.jar (Paper), "
+            "arclight-server.jar (Arclight), "
             "or a run configuration under libraries/ (Forge/NeoForge))\n"
         )
 

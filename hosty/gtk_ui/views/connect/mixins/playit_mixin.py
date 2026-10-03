@@ -777,7 +777,12 @@ class PlayitMixin:
                 self._server_manager.set_bedrock_port(server_id, new_port)
                 self._cfg["bedrock_port"] = new_port
                 self._save_server_config()
-                self._server_manager.playit_manager.configure_geyser_mod(server_dir, new_port)
+                self._server_manager.playit_manager.configure_geyser_mod(
+                    server_dir,
+                    new_port,
+                    loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                    platform=getattr(self._server_info, "arclight_platform", "") if self._server_info else "",
+                )
                 self._toast(_("Bedrock port changed to {}").format(new_port))
                 self._bedrock_in_progress = True
                 self._refresh_status_row()
@@ -812,7 +817,14 @@ class PlayitMixin:
                             self._server_manager.set_bedrock_port(server_id, old_port)
                             self._cfg["bedrock_port"] = old_port
                             self._save_server_config()
-                            self._server_manager.playit_manager.configure_geyser_mod(server_dir, old_port)
+                            self._server_manager.playit_manager.configure_geyser_mod(
+                                server_dir,
+                                old_port,
+                                loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                                platform=getattr(self._server_info, "arclight_platform", "")
+                                if self._server_info
+                                else "",
+                            )
                             self._alert(
                                 _("Could not create Bedrock tunnel"),
                                 _("{} Bedrock port restored to {}.").format(msg, old_port),
@@ -904,6 +916,7 @@ class PlayitMixin:
                             endpoint=endpoint,
                             voicechat_port=vc_port,
                             loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                            platform=getattr(self._server_info, "arclight_platform", "") if self._server_info else "",
                         )
                     except Exception:
                         pass
@@ -944,6 +957,7 @@ class PlayitMixin:
                     server_id,
                     voicechat_port=new_port,
                     loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                    platform=getattr(self._server_info, "arclight_platform", "") if self._server_info else "",
                 )
                 self._toast(_("Voice Chat port changed to {}").format(new_port))
                 self._voicechat_in_progress = True
@@ -978,6 +992,9 @@ class PlayitMixin:
                                 endpoint=endpoint,
                                 voicechat_port=new_port,
                                 loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                                platform=getattr(self._server_info, "arclight_platform", "")
+                                if self._server_info
+                                else "",
                             )
                         except Exception:
                             pass
@@ -1182,16 +1199,20 @@ class PlayitMixin:
         Returns:
             True if any mod matching the patterns is found, False otherwise
         """
-        from hosty.shared.utils.constants import content_dir_name
+        from hosty.shared.utils.constants import content_dir_names
 
-        mods_dir = Path(server_dir) / content_dir_name(
-            getattr(self._server_info, "loader_type", None) if self._server_info else None
-        )
-        if not mods_dir.exists():
+        loader = getattr(self._server_info, "loader_type", None) if self._server_info else None
+        installed_mods: set[str] = set()
+        found_any_dir = False
+        for dirname in content_dir_names(loader):
+            mods_dir = Path(server_dir) / dirname
+            if not mods_dir.exists():
+                continue
+            found_any_dir = True
+            # Get all jar files in mods directory
+            installed_mods.update(f.stem.lower() for f in mods_dir.glob("*.jar"))
+        if not found_any_dir:
             return False
-
-        # Get all jar files in mods directory
-        installed_mods = {f.stem.lower() for f in mods_dir.glob("*.jar")}
 
         # Check if any of the patterns match an installed mod
         for pattern in mod_patterns:
@@ -1214,12 +1235,15 @@ class PlayitMixin:
         if not self._server_info:
             return None
         from hosty.shared.backend import modrinth_client
-        from hosty.shared.utils.constants import normalize_loader_type
+        from hosty.shared.utils.constants import effective_mod_loader
 
         mc_version = str(self._server_info.mc_version or "").strip()
         if not mc_version:
             return None
-        loader = normalize_loader_type(getattr(self._server_info, "loader_type", None))
+        loader = effective_mod_loader(
+            getattr(self._server_info, "loader_type", None),
+            getattr(self._server_info, "arclight_platform", ""),
+        )
         versions = modrinth_client.get_project_versions(project_id)
         for version in versions:
             loaders = [str(loader_name).lower() for loader_name in (version.loaders or [])]
@@ -1281,9 +1305,11 @@ class PlayitMixin:
         if not self._server_info:
             return False, _("No server selected")
         from hosty.shared.backend import modrinth_client
-        from hosty.shared.utils.constants import content_dir_name, normalize_loader_type
+        from hosty.shared.utils.constants import content_dir_name, effective_mod_loader
 
-        loader = normalize_loader_type(getattr(self._server_info, "loader_type", None))
+        raw_loader = getattr(self._server_info, "loader_type", None)
+        platform = getattr(self._server_info, "arclight_platform", "")
+        loader = effective_mod_loader(raw_loader, platform)
 
         version = self._exact_compatible_modrinth_version(project_id)
         if not version:
@@ -1329,9 +1355,9 @@ class PlayitMixin:
 
         playit = self._server_manager.playit_manager
         if project_id == "geyser":
-            playit.configure_geyser_mod(str(self._server_info.server_dir), loader=loader)
+            playit.configure_geyser_mod(str(self._server_info.server_dir), loader=raw_loader, platform=platform)
         elif project_id == "floodgate":
-            playit.configure_floodgate_mod(str(self._server_info.server_dir), loader=loader)
+            playit.configure_floodgate_mod(str(self._server_info.server_dir), loader=raw_loader, platform=platform)
         elif project_id == "simple-voice-chat":
             from hosty.shared.backend.playit_config import load_playit_config
 
@@ -1342,7 +1368,8 @@ class PlayitMixin:
                 self._server_info.id,
                 endpoint=str(vc_cfg.get("voicechat_endpoint", "")).strip(),
                 voicechat_port=vc_port,
-                loader=loader,
+                loader=raw_loader,
+                platform=platform,
             )
 
         return True, _("Installed {}").format(title)
@@ -1507,6 +1534,7 @@ class PlayitMixin:
                             bedrock_port=br_port,
                             voicechat_port=vc_port,
                             loader=getattr(self._server_info, "loader_type", "") if self._server_info else "",
+                            platform=getattr(self._server_info, "arclight_platform", "") if self._server_info else "",
                         )
                     except Exception:
                         logger.exception("playit mod config verify failed for server %s", server_id)

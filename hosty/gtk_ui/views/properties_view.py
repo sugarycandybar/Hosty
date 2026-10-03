@@ -18,12 +18,14 @@ from hosty.shared.utils.constants import (
     DEFAULT_SERVER_PROPERTIES,
     DIFFICULTIES,
     GAMEMODES,
+    LOADER_ARCLIGHT,
     LOADER_FABRIC,
     LOADER_PAPER,
     MAX_RAM_MB,
     MIN_RAM_MB,
     get_required_java_version,
     mod_loader_name,
+    normalize_arclight_platform,
     normalize_loader_type,
 )
 
@@ -424,6 +426,9 @@ class PropertiesView(Gtk.Box):
             version_text = self._server_info.mc_version or _("Unknown")
             if self._server_info.loader_type != LOADER_FABRIC or self._server_info.loader_version:
                 version_text += f" ({mod_loader_name(self._server_info.loader_type)}"
+                if normalize_loader_type(self._server_info.loader_type) == LOADER_ARCLIGHT:
+                    if self._server_info.arclight_platform:
+                        version_text += f" {mod_loader_name(self._server_info.arclight_platform)}"
                 if self._server_info.loader_version:
                     version_text += f" {self._server_info.loader_version}"
                 version_text += ")"
@@ -512,6 +517,19 @@ class PropertiesView(Gtk.Box):
         loader_type_row.set_tooltip_text(_("The mod loader can't be changed after creation"))
         runtime_group.add(loader_type_row)
 
+        is_arclight_server = normalize_loader_type(self._server_info.loader_type) == LOADER_ARCLIGHT
+        if is_arclight_server:
+            platform_row = Adw.ActionRow(
+                title=_("Base platform"),
+                subtitle=mod_loader_name(
+                    normalize_arclight_platform(getattr(self._server_info, "arclight_platform", ""))
+                ),
+            )
+            platform_row.set_activatable(False)
+            platform_row.add_suffix(Gtk.Image.new_from_icon_name("changes-prevent-symbolic"))
+            platform_row.set_tooltip_text(_("The base platform can't be changed after creation"))
+            runtime_group.add(platform_row)
+
         loader_version_values: list[str] = []
         loader_version_row = Adw.ComboRow(
             title=_("Loader version"),
@@ -593,6 +611,11 @@ class PropertiesView(Gtk.Box):
                 return loader_version_values[idx]
             return selected_loader["value"]
 
+        def selected_platform() -> str:
+            if not is_arclight_server or not self._server_info:
+                return ""
+            return normalize_arclight_platform(getattr(self._server_info, "arclight_platform", ""))
+
         def refresh_loader_build() -> None:
             """Fetch selectable loader builds; default to newest/recommended."""
             if not self._server_info:
@@ -601,6 +624,7 @@ class PropertiesView(Gtk.Box):
             token = loader_fetch_token["count"]
             loader_type = normalize_loader_type(self._server_info.loader_type)
             mc_version = selected_mc_version()
+            platform = selected_platform() if loader_type == LOADER_ARCLIGHT else None
 
             selected_loader["value"] = ""
             loader_version_values.clear()
@@ -608,9 +632,11 @@ class PropertiesView(Gtk.Box):
             loader_version_row.set_sensitive(False)
 
             def worker():
-                builds = self._server_manager.download_manager.fetch_loader_builds(loader_type, mc_version)
+                builds = self._server_manager.download_manager.fetch_loader_builds(loader_type, mc_version, platform)
                 try:
-                    default = self._server_manager.download_manager.resolve_loader_build(loader_type, mc_version)
+                    default = self._server_manager.download_manager.resolve_loader_build(
+                        loader_type, mc_version, platform=platform
+                    )
                 except Exception:
                     default = ""
                 if not default and builds:
@@ -628,21 +654,24 @@ class PropertiesView(Gtk.Box):
             # a newer MC still hides older Fabric builds (same-or-newer
             # shown, keeping the loader is fine). Other loaders are
             # branch-specific, so a different MC allows any of its builds.
+            # (Arclight builds are unordered snapshots: "newer" means earlier
+            # in the API's newest-first listing.)
             loader_type = normalize_loader_type(self._server_info.loader_type)
             if selected_mc_version() == current_mc_at_open:
-                builds = [b for b in builds if ServerManager.is_loader_version_newer(b, current_loader_at_open)]
-                if default and not ServerManager.is_loader_version_newer(default, current_loader_at_open):
+                builds = ServerManager.filter_upgrade_builds(builds, current_loader_at_open, loader_type)
+                if default and default not in builds:
                     default = builds[0] if builds else ""
             elif loader_type == LOADER_FABRIC:
                 builds = [
                     b
                     for b in builds
-                    if b == current_loader_at_open or ServerManager.is_loader_version_newer(b, current_loader_at_open)
+                    if b == current_loader_at_open
+                    or ServerManager.is_loader_version_newer(b, current_loader_at_open, loader_type)
                 ]
                 if (
                     default
                     and default != current_loader_at_open
-                    and not ServerManager.is_loader_version_newer(default, current_loader_at_open)
+                    and not ServerManager.is_loader_version_newer(default, current_loader_at_open, loader_type)
                 ):
                     default = builds[0] if builds else ""
             loader_version_values.clear()
@@ -683,10 +712,14 @@ class PropertiesView(Gtk.Box):
                 return False
             if normalize_loader_type(self._server_info.loader_type) == LOADER_FABRIC:
                 # Fabric versions are global: older is a downgrade on any MC.
-                return ServerManager.is_loader_version_newer(sel_loader, current_loader_at_open)
+                return ServerManager.is_loader_version_newer(
+                    sel_loader, current_loader_at_open, self._server_info.loader_type
+                )
             if sel_mc != current_mc_at_open:
                 return True
-            return ServerManager.is_loader_version_newer(sel_loader, current_loader_at_open)
+            return ServerManager.is_loader_version_newer(
+                sel_loader, current_loader_at_open, self._server_info.loader_type
+            )
 
         def validate(*_args):
             # Keep dict in sync when user picks a different loader build
@@ -746,7 +779,13 @@ class PropertiesView(Gtk.Box):
             add_review_row(expander)
 
         def versions_worker():
-            games = self._server_manager.download_manager.fetch_game_versions()
+            if is_arclight_server:
+                try:
+                    games = self._server_manager.download_manager.fetch_arclight_mc_versions()
+                except Exception:
+                    games = []
+            else:
+                games = self._server_manager.download_manager.fetch_game_versions()
 
             def loaded():
                 if not self._server_info:
@@ -757,7 +796,9 @@ class PropertiesView(Gtk.Box):
                 mc_row.set_model(Gtk.StringList.new(mc_values or [_("No versions found")]))
                 if mc_values:
                     mc_row.set_selected(0)
-                    # set_selected triggers the refresh of the loader build
+                    # set_selected usually triggers the refresh, but not when
+                    # the selection is unchanged: refresh explicitly.
+                    on_mc_changed()
                 else:
                     loader_version_values.clear()
                     loader_version_row.set_model(Gtk.StringList.new([_("No updates available")]))
@@ -805,6 +846,7 @@ class PropertiesView(Gtk.Box):
                         [
                             *compatible.get("modpacks", []),
                             *compatible.get("mods", []),
+                            *compatible.get("plugins", []),
                             *compatible.get("datapacks", []),
                         ],
                         _("No tracked compatible items found"),
@@ -814,6 +856,7 @@ class PropertiesView(Gtk.Box):
                         [
                             *incompatible.get("modpacks", []),
                             *incompatible.get("mods", []),
+                            *incompatible.get("plugins", []),
                             *incompatible.get("datapacks", []),
                         ],
                         _("No incompatible items found"),
@@ -821,6 +864,7 @@ class PropertiesView(Gtk.Box):
                     unknown_items = [
                         *unknown.get("modpacks", []),
                         *unknown.get("mods", []),
+                        *unknown.get("plugins", []),
                         *unknown.get("datapacks", []),
                     ]
                     if unknown_items:
@@ -857,6 +901,7 @@ class PropertiesView(Gtk.Box):
                 GLib.idle_add(update_progress)
 
             def worker():
+                # The base platform is locked at creation and never changes here.
                 ok, msg = self._server_manager.update_server_runtime(
                     self._server_info.id,
                     mc_version,
@@ -870,7 +915,20 @@ class PropertiesView(Gtk.Box):
                         self._server_info.mc_version = mc_version
                         self._server_info.loader_version = loader_version
                         loader_name = mod_loader_name(self._server_info.loader_type)
-                        version_suffix = f" ({loader_name} {loader_version})" if loader_version else f" ({loader_name})"
+                        if (
+                            normalize_loader_type(self._server_info.loader_type) == LOADER_ARCLIGHT
+                            and self._server_info.arclight_platform
+                        ):
+                            version_suffix = (
+                                f" ({loader_name} {mod_loader_name(self._server_info.arclight_platform)}"
+                                f" {loader_version})"
+                                if loader_version
+                                else f" ({loader_name})"
+                            )
+                        else:
+                            version_suffix = (
+                                f" ({loader_name} {loader_version})" if loader_version else f" ({loader_name})"
+                            )
                         self._version_row.set_subtitle(f"{mc_version}{version_suffix}")
                         self._refresh_java_item_state()
                         self._refresh_upgrade_button()

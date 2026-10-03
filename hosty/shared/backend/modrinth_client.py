@@ -215,12 +215,17 @@ def search_mods(
     if qtext:
         base["query"] = qtext
     ptype = (project_type or "mod").strip().lower()
-    if ptype not in {"mod", "modpack", "datapack"}:
+    if ptype not in {"mod", "modpack", "datapack", "plugin"}:
         ptype = "mod"
 
     if ptype == "datapack":
         # Datapacks are a first-class project_type on Modrinth -- no loader facet needed.
         facets_raw: list[list[str]] = [["project_type:datapack"]]
+    elif ptype == "plugin":
+        # Bukkit-family plugins: don't narrow by loader category (a plugin
+        # may list paper, spigot, bukkit, purpur, ...). Compatibility is
+        # checked per-version instead (see find_compatible_plugin_version).
+        facets_raw = [["project_type:plugin"]]
     else:
         project_types = [f"project_type:{ptype}"]
         if ptype == "mod" and str(loader or "").strip().lower() == "paper":
@@ -230,9 +235,9 @@ def search_mods(
 
     if ptype == "modpack":
         facets_raw.append(["server_side:required", "server_side:optional", "server_side:unknown"])
-    elif server_side_only and ptype == "mod":
+    elif server_side_only and ptype in ("mod", "plugin"):
         facets_raw.append(["server_side:required", "server_side:optional"])
-    if category and ptype != "datapack":
+    if category and ptype not in ("datapack", "plugin"):
         facets_raw.append([f"categories:{category}"])
     if game_version:
         facets_raw.append([f"versions:{game_version}"])
@@ -244,7 +249,7 @@ def search_mods(
         url = f"{API}/search?{urllib.parse.urlencode(base)}"
         data = _request_json(url)
     raw_hits = data.get("hits", [])
-    if server_side_only and ptype == "mod":
+    if server_side_only and ptype in ("mod", "plugin"):
         allowed = {"required", "optional"}
         filtered = []
         for h in raw_hits:
@@ -427,6 +432,50 @@ def find_compatible_version_file(project_id: str, game_version: str, loader: str
     if not chosen:
         return None
     return (chosen.download_url, chosen.filename)
+
+
+# Bukkit-family loaders accepted when resolving plugin versions (e.g. for
+# Arclight's plugins/ directory, where Paper/Spigot/Bukkit builds all run).
+BUKKIT_FAMILY_LOADERS = ("paper", "spigot", "bukkit", "purpur", "folia")
+
+
+def find_compatible_plugin_versions(
+    project_id: str,
+    game_version: str,
+    limit: int = 8,
+) -> list[ModrinthVersion]:
+    """Return plugin versions compatible with a Minecraft version, newest first.
+
+    A version matches when it supports the game version and targets any
+    Bukkit-family loader. Falls back to any game-version match, then to the
+    newest version overall.
+    """
+    all_versions = get_project_versions(project_id)
+    if not all_versions:
+        return []
+
+    def _is_plugin(version: ModrinthVersion) -> bool:
+        loaders = [str(x).lower() for x in (version.loaders or [])]
+        if not loaders:
+            return True
+        return any(x in BUKKIT_FAMILY_LOADERS for x in loaders)
+
+    plugins = [v for v in all_versions if _is_plugin(v)] or all_versions
+    exact = [v for v in plugins if game_version in (v.game_versions or [])]
+    if exact:
+        return exact[:limit]
+    if plugins:
+        return plugins[:1]
+    return all_versions[:1]
+
+
+def find_compatible_plugin_version(
+    project_id: str,
+    game_version: str,
+) -> ModrinthVersion | None:
+    """Return the best single plugin version for install, or None."""
+    versions = find_compatible_plugin_versions(project_id, game_version, limit=1)
+    return versions[0] if versions else None
 
 
 def download_to(

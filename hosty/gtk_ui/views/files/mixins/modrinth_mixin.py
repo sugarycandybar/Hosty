@@ -20,12 +20,32 @@ from ..utils import *
 
 class ModrinthMixin:
     def _server_loader(self) -> str:
-        """Return the selected server's loader type (defaults to fabric)."""
-        from hosty.shared.utils.constants import LOADER_FABRIC, normalize_loader_type
+        """Return the Modrinth loader id for *mod* queries (defaults to fabric).
+
+        Arclight mods target the underlying base platform, so the platform
+        is returned instead of ``arclight`` (which Modrinth does not know).
+        """
+        from hosty.shared.utils.constants import LOADER_FABRIC, effective_mod_loader
 
         if self._server_info is None:
             return LOADER_FABRIC
-        return normalize_loader_type(getattr(self._server_info, "loader_type", None))
+        return effective_mod_loader(
+            getattr(self._server_info, "loader_type", None),
+            getattr(self._server_info, "arclight_platform", ""),
+        )
+
+    def _is_plugin_search_available(self) -> bool:
+        """True when the server runs Bukkit plugins alongside mods (Arclight)."""
+        from hosty.shared.utils.constants import LOADER_ARCLIGHT, normalize_loader_type
+
+        return bool(
+            self._server_info
+            and normalize_loader_type(getattr(self._server_info, "loader_type", None)) == LOADER_ARCLIGHT
+        )
+
+    @staticmethod
+    def _is_plugin_hit(hit) -> bool:
+        return str(getattr(hit, "project_type", "") or "").strip().lower() == "plugin"
 
     def _content_dir(self, root) -> Path | None:
         """Return the loader-appropriate jar directory (mods/, or plugins/ for Paper)."""
@@ -106,6 +126,9 @@ class ModrinthMixin:
             (_("Modpacks"), "modpack"),
             (_("Datapacks"), "datapack"),
         ]
+        if self._is_plugin_search_available():
+            # Arclight runs mods and Bukkit plugins side by side.
+            project_type_items.insert(1, (_("Plugins"), "plugin"))
         category_items = [
             (_("Any category"), ""),
             (_("Optimization"), "optimization"),
@@ -240,6 +263,8 @@ class ModrinthMixin:
                 entry.set_placeholder_text(_("Search modpacks…"))
             elif ptype == "datapack":
                 entry.set_placeholder_text(_("Search datapacks…"))
+            elif ptype == "plugin":
+                entry.set_placeholder_text(_("Search plugins…"))
             else:
                 entry.set_placeholder_text(_("Search mods…"))
 
@@ -255,6 +280,12 @@ class ModrinthMixin:
             if not mods_dir or not Path(mods_dir).is_dir():
                 return set()
             return {p.name.lower() for p in mods_dir.glob("*.jar")}
+
+        def installed_plugin_names() -> set[str]:
+            plugins_dir = self._plugins_dir()
+            if not plugins_dir or not plugins_dir.is_dir():
+                return set()
+            return {p.name.lower() for p in plugins_dir.glob("*.jar")}
 
         def finish_search(hits, total, err, version, qtxt, appending: bool):
             set_busy(False)
@@ -275,8 +306,12 @@ class ModrinthMixin:
                 state["all_loaded"] = True
 
             installed = installed_mod_names()
+            installed_plugins = installed_plugin_names()
             for h in hits:
-                results.append(self._make_modrinth_row(h, version, installed))
+                if self._is_plugin_hit(h):
+                    results.append(self._make_modrinth_row(h, version, installed_plugins))
+                else:
+                    results.append(self._make_modrinth_row(h, version, installed))
 
         def do_search(reset: bool = False):
             if reset:
@@ -405,10 +440,17 @@ class ModrinthMixin:
             return set()
         return {p.name.lower() for p in mods_dir.glob("*.jar")}
 
+    def _installed_plugin_names(self) -> set[str]:
+        plugins_dir = self._plugins_dir()
+        if not plugins_dir or not plugins_dir.is_dir():
+            return set()
+        return {p.name.lower() for p in plugins_dir.glob("*.jar")}
+
     def _refresh_modrinth_rows_install_state(self) -> None:
         if not hasattr(self, "_modrinth_results_list"):
             return
         installed_names = self._installed_mod_names()
+        installed_plugin_names = self._installed_plugin_names()
         i = 0
         while True:
             row = self._modrinth_results_list.get_row_at_index(i)
@@ -422,6 +464,7 @@ class ModrinthMixin:
                     continue
                 is_modpack = getattr(row, "_is_modpack", False)
                 is_datapack = getattr(row, "_is_datapack", False)
+                is_plugin = bool(getattr(row, "_is_plugin", False)) or self._is_plugin_hit(hit)
                 btn_label = getattr(row, "_install_btn_label", _("Install"))
                 best_version = getattr(row, "_best_version", [None])
 
@@ -429,6 +472,14 @@ class ModrinthMixin:
                     _set_row_btn(_("Installed"), False)
                 elif is_datapack and self._is_datapack_installed(hit.project_id):
                     _set_row_btn(_("Installed"), False)
+                elif is_plugin and self._is_plugin_installed(hit.project_id):
+                    _set_row_btn(_("Installed"), False)
+                elif is_plugin:
+                    first = best_version[0]
+                    if first and first.filename.lower() in installed_plugin_names:
+                        _set_row_btn(_("Installed"), False)
+                    else:
+                        _set_row_btn(btn_label, True)
                 elif not is_modpack and not is_datapack:
                     if self._looks_installed(hit, installed_names):
                         _set_row_btn(_("Installed"), False)
@@ -441,7 +492,7 @@ class ModrinthMixin:
                             _set_row_btn(btn_label, True)
             i += 1
 
-    def _configure_known_mod_after_download(self, hit) -> None:
+    def _configure_known_mod_after_download(self, hit, as_plugin: bool = False) -> None:
         if not self._server_manager or not self._server_info:
             return
         slug = str(getattr(hit, "slug", "") or "").strip().lower()
@@ -450,13 +501,19 @@ class ModrinthMixin:
         identifiers = {slug, title.replace(" ", "-"), project_id}
         playit = self._server_manager.playit_manager
         server_dir = str(self._server_info.server_dir)
+        # Plugin installs (plugins/) use Bukkit-style config paths; mod
+        # installs use the loader-specific paths (with Arclight probing so a
+        # plugin-style config keeps working when present).
+        raw_loader = getattr(self._server_info, "loader_type", "")
+        platform = getattr(self._server_info, "arclight_platform", "")
+        loader = "paper" if as_plugin else raw_loader
 
         if "geyser" in identifiers:
-            playit.configure_geyser_mod(server_dir, loader=self._server_loader())
+            playit.configure_geyser_mod(server_dir, loader=loader, platform=platform)
             return
 
         if "floodgate" in identifiers:
-            playit.configure_floodgate_mod(server_dir, loader=self._server_loader())
+            playit.configure_floodgate_mod(server_dir, loader=loader, platform=platform)
             return
 
         if "simple-voice-chat" in identifiers or "voice-chat" in identifiers:
@@ -472,6 +529,8 @@ class ModrinthMixin:
                 self._server_info.id,
                 endpoint=endpoint,
                 voicechat_port=int(cfg.get("voicechat_port", 24454)),
+                loader="paper" if as_plugin else raw_loader,
+                platform=platform,
             )
 
     def _load_icon_async(self, image: Gtk.Image, url: str, size: int = 44) -> None:
@@ -516,6 +575,7 @@ class ModrinthMixin:
         ptype = str(getattr(hit, "project_type", "mod")).lower()
         is_modpack = ptype == "modpack"
         is_datapack = ptype == "datapack"
+        is_plugin = ptype == "plugin"
 
         row = Gtk.ListBoxRow()
         row.set_activatable(True)
@@ -544,7 +604,9 @@ class ModrinthMixin:
             _set_row_btn(_("Installed"), False)
         elif is_datapack and self._is_datapack_installed(hit.project_id):
             _set_row_btn(_("Installed"), False)
-        elif (not is_modpack) and (not is_datapack) and self._looks_installed(hit, installed_names):
+        elif is_plugin and self._is_plugin_installed(hit.project_id):
+            _set_row_btn(_("Installed"), False)
+        elif (not is_modpack) and (not is_datapack) and (not is_plugin) and self._looks_installed(hit, installed_names):
             _set_row_btn(_("Installed"), False)
 
         def _mk_text_col():
@@ -659,20 +721,34 @@ class ModrinthMixin:
                 return
 
             _set_row_btn(_("Installing…"), False)
-            self._perform_install(hit, chosen, mc_version, row_btns, btn_label, is_modpack, is_datapack, op_token)
+            self._perform_install(
+                hit, chosen, mc_version, row_btns, btn_label, is_modpack, is_datapack, op_token, is_plugin
+            )
 
         def load_best_version():
             if not mc_version and not is_datapack:
                 _set_row_btn(sensitive=False)
                 return
             try:
-                loader_for_query = "datapack" if is_datapack else self._server_loader()
-                versions = modrinth_client.find_compatible_versions(
-                    hit.project_id,
-                    mc_version,
-                    loader=loader_for_query,
-                    limit=1,
-                )
+                if is_datapack:
+                    loader_for_query = "datapack"
+                elif is_plugin:
+                    loader_for_query = "plugin"
+                else:
+                    loader_for_query = self._server_loader()
+                if is_plugin:
+                    versions = modrinth_client.find_compatible_plugin_versions(
+                        hit.project_id,
+                        mc_version,
+                        limit=1,
+                    )
+                else:
+                    versions = modrinth_client.find_compatible_versions(
+                        hit.project_id,
+                        mc_version,
+                        loader=loader_for_query,
+                        limit=1,
+                    )
                 if not versions:
                     _set_row_btn(sensitive=False)
                     return
@@ -689,6 +765,8 @@ class ModrinthMixin:
                     if is_modpack and self._is_modpack_installed(hit.project_id):
                         is_installed = True
                     elif is_datapack and self._is_datapack_installed(hit.project_id):
+                        is_installed = True
+                    elif is_plugin and self._is_plugin_installed(hit.project_id):
                         is_installed = True
                     elif (not is_modpack) and (not is_datapack) and first.filename.lower() in installed_names:
                         is_installed = True
@@ -711,6 +789,7 @@ class ModrinthMixin:
         row._hit = hit
         row._is_modpack = is_modpack
         row._is_datapack = is_datapack
+        row._is_plugin = is_plugin
         row._install_btn_label = btn_label
         row._set_row_btn = _set_row_btn
         row._best_version = best_version
@@ -727,6 +806,7 @@ class ModrinthMixin:
         is_modpack: bool,
         is_datapack: bool,
         op_token: str,
+        is_plugin: bool = False,
     ) -> None:
         from hosty.shared.backend import modrinth_client
 
@@ -736,6 +816,54 @@ class ModrinthMixin:
                     b.set_label(label)
                 if sensitive is not None:
                     b.set_sensitive(sensitive)
+
+        if is_plugin:
+
+            def ui_ok_plugin(fname: str):
+                _set_btns(_("Installed"), False)
+                self._record_plugin_install(
+                    hit.project_id,
+                    hit.title,
+                    chosen.version_id,
+                    chosen.filename,
+                    version_number=chosen.version_number,
+                )
+                self._toast(_("Installed plugin {}").format(fname))
+                self._end_mod_operation(op_token)
+                self._rebuild_lists()
+
+            def ui_err_plugin(msg: str):
+                _set_btns(_("Install"), True)
+                self._end_mod_operation(op_token)
+                self._alert(_("Install failed"), msg)
+
+            def install_plugin_thread():
+                try:
+                    root = self._server_dir()
+                    if not root:
+                        raise RuntimeError("No server selected.")
+                    plugins_dir = self._plugins_dir()
+                    if not plugins_dir:
+                        raise RuntimeError("This server does not support plugins.")
+                    plugins_dir.mkdir(parents=True, exist_ok=True)
+
+                    old_state = self._read_plugin_state().get("plugins", {}).get(hit.project_id, None)
+                    if old_state:
+                        old_filename = str(old_state.get("filename", "")).strip()
+                        if old_filename and old_filename.lower() != chosen.filename.lower():
+                            old_path = plugins_dir / old_filename
+                            if old_path.exists():
+                                old_path.unlink(missing_ok=True)
+
+                    dest = plugins_dir / chosen.filename
+                    modrinth_client.download_to(chosen.download_url, dest, expected_hashes=chosen.hashes)
+                    self._configure_known_mod_after_download(hit, as_plugin=True)
+                    GLib.idle_add(lambda f=chosen.filename: ui_ok_plugin(f))
+                except Exception as e:
+                    GLib.idle_add(lambda m=str(e): ui_err_plugin(m))
+
+            threading.Thread(target=install_plugin_thread, daemon=True).start()
+            return
 
         if is_datapack:
 
@@ -1044,6 +1172,7 @@ class ModrinthMixin:
         ptype = str(getattr(hit, "project_type", "mod")).lower()
         is_modpack = ptype == "modpack"
         is_datapack = ptype == "datapack"
+        is_plugin = ptype == "plugin"
 
         btn_label = _("Install")
 
@@ -1182,6 +1311,8 @@ class ModrinthMixin:
                 route = "modpack"
             elif is_datapack:
                 route = "datapack"
+            elif is_plugin:
+                route = "plugin"
             else:
                 route = "mod"
             if not _open_uri(f"https://modrinth.com/{route}/{slug}"):
@@ -1217,7 +1348,7 @@ class ModrinthMixin:
 
         version_objs: list = []
         selected_index = [0]
-        installed_names: set[str] = self._installed_mod_names()
+        installed_names: set[str] = self._installed_plugin_names() if is_plugin else self._installed_mod_names()
 
         def selected_version():
             if not version_objs:
@@ -1259,6 +1390,15 @@ class ModrinthMixin:
                 is_installed = True
             elif is_datapack and self._is_datapack_installed(hit.project_id):
                 is_installed = True
+            elif is_plugin:
+                installed_state = self._read_plugin_state().get("plugins", {}).get(hit.project_id, None)
+                if installed_state:
+                    if installed_state.get("version_id", "") == chosen.version_id:
+                        is_installed = True
+                    else:
+                        label = _("Replace")
+                elif chosen.filename.lower() in installed_names:
+                    is_installed = True
             elif not is_modpack and not is_datapack:
                 installed_state = self._read_individual_mod_state().get("mods", {}).get(hit.project_id, None)
                 if installed_state:
@@ -1270,7 +1410,9 @@ class ModrinthMixin:
                     is_installed = True
 
             if is_installed:
-                dependents = self._dependency_dependents(chosen.filename) if not (is_modpack or is_datapack) else []
+                dependents = (
+                    self._dependency_dependents(chosen.filename) if not (is_modpack or is_datapack or is_plugin) else []
+                )
                 _set_dbtn(_("Dependency") if dependents else _("Installed"), False)
             else:
                 _set_dbtn(label, sensitive)
@@ -1299,7 +1441,9 @@ class ModrinthMixin:
                 return
 
             _set_dbtn(_("Installing…"), False)
-            self._perform_install(hit, chosen, mc_version, _detail_btns, btn_label, is_modpack, is_datapack, op_token)
+            self._perform_install(
+                hit, chosen, mc_version, _detail_btns, btn_label, is_modpack, is_datapack, op_token, is_plugin
+            )
 
         install_btn_wide.connect("clicked", on_install)
         install_btn_narrow.connect("clicked", on_install)
@@ -1323,13 +1467,25 @@ class ModrinthMixin:
                             )
                         )
 
-                loader_for_query = "datapack" if is_datapack else self._server_loader()
-                all_versions = modrinth_client.find_compatible_versions(
-                    hit.project_id,
-                    mc_version,
-                    loader=loader_for_query,
-                    limit=20,
-                )
+                if is_datapack:
+                    loader_for_query = "datapack"
+                elif is_plugin:
+                    loader_for_query = "plugin"
+                else:
+                    loader_for_query = self._server_loader()
+                if is_plugin:
+                    all_versions = modrinth_client.find_compatible_plugin_versions(
+                        hit.project_id,
+                        mc_version,
+                        limit=20,
+                    )
+                else:
+                    all_versions = modrinth_client.find_compatible_versions(
+                        hit.project_id,
+                        mc_version,
+                        loader=loader_for_query,
+                        limit=20,
+                    )
 
                 GLib.idle_add(
                     lambda: self._populate_detail_versions(
@@ -1344,6 +1500,7 @@ class ModrinthMixin:
                         is_datapack,
                         installed_names,
                         loading_row,
+                        is_plugin,
                     )
                 )
             except Exception:
@@ -1367,6 +1524,7 @@ class ModrinthMixin:
         is_datapack: bool,
         installed_names: set[str],
         loading_row: Gtk.ListBoxRow | None = None,
+        is_plugin: bool = False,
     ) -> None:
         def _set_btn(label=None, sensitive=None):
             for b in install_btns:
@@ -1445,6 +1603,15 @@ class ModrinthMixin:
             is_installed = True
         elif is_datapack and self._is_datapack_installed(hit.project_id):
             is_installed = True
+        elif is_plugin:
+            installed_state = self._read_plugin_state().get("plugins", {}).get(hit.project_id, None)
+            if installed_state:
+                if installed_state.get("version_id", "") == first.version_id:
+                    is_installed = True
+                else:
+                    label = _("Replace")
+            elif first.filename.lower() in installed_names:
+                is_installed = True
         elif not is_modpack and not is_datapack:
             installed_state = self._read_individual_mod_state().get("mods", {}).get(hit.project_id, None)
             if installed_state:
@@ -1456,7 +1623,9 @@ class ModrinthMixin:
                 is_installed = True
 
         if is_installed:
-            dependents = self._dependency_dependents(first.filename) if not (is_modpack or is_datapack) else []
+            dependents = (
+                self._dependency_dependents(first.filename) if not (is_modpack or is_datapack or is_plugin) else []
+            )
             _set_btn(_("Dependency") if dependents else _("Installed"), False)
         else:
             _set_btn(label, sensitive)

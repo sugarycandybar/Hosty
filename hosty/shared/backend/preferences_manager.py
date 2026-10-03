@@ -19,11 +19,18 @@ DEFAULT_SETTINGS = {
     "remote_management_enabled": False,
     "prevent_sleep_while_running": False,
     "auto_backup_on_stop": True,
-    "auto_delete_old_backups": True,
+    "backup_retention_days": 30,
+    "max_backups": 0,
     "auto_resolve_mod_dependencies": True,
     "theme": "system",
     "language": "system",
 }
+
+#: Selectable backup age limits in days (0 = keep forever).
+BACKUP_RETENTION_OPTIONS = (0, 7, 14, 30, 60, 90)
+
+#: Upper bound for the "maximum backups" setting (0 = unlimited).
+MAX_BACKUPS_LIMIT = 1000
 
 
 class PreferencesManager:
@@ -42,9 +49,22 @@ class PreferencesManager:
                 data = json.load(f)
             if isinstance(data, dict):
                 self._settings.update(data)
+                self._migrate_legacy_backup_toggle(data)
         except Exception:
             # Fall back to defaults on malformed settings.
             self._settings = dict(DEFAULT_SETTINGS)
+
+    def _migrate_legacy_backup_toggle(self, file_data: dict) -> None:
+        """One-time upgrade of the old on/off toggle (True was 30 days)."""
+        if "backup_retention_days" in file_data or "auto_delete_old_backups" not in file_data:
+            return
+        legacy = file_data.get("auto_delete_old_backups", True)
+        if legacy is False or str(legacy).strip().lower() in ("false", "no", "off", ""):
+            self._settings["backup_retention_days"] = 0
+        else:
+            self._settings["backup_retention_days"] = 30
+        self._settings.pop("auto_delete_old_backups", None)
+        self._save()
 
     def _save(self) -> None:
         try:
@@ -109,12 +129,38 @@ class PreferencesManager:
         self._save()
 
     @property
-    def auto_delete_old_backups(self) -> bool:
-        return bool(self._settings.get("auto_delete_old_backups", True))
+    def backup_retention_days(self) -> int:
+        """Max backup age in days (0 = keep forever)."""
+        try:
+            return max(0, int(self._settings.get("backup_retention_days", 30)))
+        except (TypeError, ValueError):
+            return 30
 
-    @auto_delete_old_backups.setter
-    def auto_delete_old_backups(self, value: bool) -> None:
-        self._settings["auto_delete_old_backups"] = bool(value)
+    @backup_retention_days.setter
+    def backup_retention_days(self, value: int) -> None:
+        try:
+            days = max(0, int(value))
+        except (TypeError, ValueError):
+            days = 30
+        self._settings["backup_retention_days"] = days
+        self._settings.pop("auto_delete_old_backups", None)
+        self._save()
+
+    @property
+    def max_backups(self) -> int:
+        """Max backups kept per server (0 = unlimited, oldest deleted first)."""
+        try:
+            return max(0, int(self._settings.get("max_backups", 0)))
+        except (TypeError, ValueError):
+            return 0
+
+    @max_backups.setter
+    def max_backups(self, value: int) -> None:
+        try:
+            count = max(0, min(MAX_BACKUPS_LIMIT, int(value)))
+        except (TypeError, ValueError):
+            count = 0
+        self._settings["max_backups"] = count
         self._save()
 
     @property

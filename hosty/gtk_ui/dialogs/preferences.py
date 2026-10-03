@@ -202,16 +202,44 @@ def show_preferences_window(
     autobackup_row.connect("notify::active", on_autobackup_toggled)
     backups_group.add(autobackup_row)
 
-    autodelete_row = Adw.SwitchRow(
-        title=_("Auto-delete backups older than 30 days"),
+    from hosty.shared.backend.preferences_manager import BACKUP_RETENTION_OPTIONS
+
+    retention_values = list(BACKUP_RETENTION_OPTIONS)
+    retention_labels = [_("Never") if days == 0 else _("{} days").format(days) for days in retention_values]
+    retention_row = Adw.ComboRow(
+        title=_("Delete backups older than"),
+        model=Gtk.StringList.new(retention_labels),
     )
-    autodelete_row.set_active(preferences.auto_delete_old_backups)
+    current_retention = preferences.backup_retention_days
+    retention_row.set_selected(
+        retention_values.index(current_retention) if current_retention in retention_values else 0
+    )
 
-    def on_autodelete_toggled(row, _pspec):
-        preferences.auto_delete_old_backups = row.get_active()
+    def on_retention_changed(row, _pspec):
+        preferences.backup_retention_days = retention_values[row.get_selected()]
 
-    autodelete_row.connect("notify::active", on_autodelete_toggled)
-    backups_group.add(autodelete_row)
+    retention_row.connect("notify::selected", on_retention_changed)
+    backups_group.add(retention_row)
+
+    from hosty.shared.backend.preferences_manager import MAX_BACKUPS_LIMIT
+
+    max_backups_row = Adw.SpinRow(
+        title=_("Maximum backups per server"),
+        subtitle=_("Oldest are deleted first (0 keeps all)"),
+        adjustment=Gtk.Adjustment(
+            value=preferences.max_backups,
+            lower=0,
+            upper=MAX_BACKUPS_LIMIT,
+            step_increment=1,
+            page_increment=10,
+        ),
+    )
+
+    def on_max_backups_changed(row, _pspec):
+        preferences.max_backups = int(row.get_value())
+
+    max_backups_row.connect("notify::value", on_max_backups_changed)
+    backups_group.add(max_backups_row)
 
     page.add(backups_group)
 

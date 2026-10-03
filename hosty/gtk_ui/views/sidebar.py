@@ -228,6 +228,7 @@ class Sidebar(Gtk.Box):
         server_manager.connect("server-added", self._on_server_added)
         server_manager.connect("server-removed", self._on_server_removed)
         server_manager.connect("server-changed", self._on_server_changed)
+        server_manager.connect("servers-reordered", self._on_servers_reordered)
 
         # Populate initial servers
         self._populate()
@@ -239,6 +240,23 @@ class Sidebar(Gtk.Box):
         """Populate the list with existing servers."""
         for server in self._server_manager.servers:
             self._add_row(server)
+
+    def _rebuild(self):
+        """Rebuild rows in manager order, preserving the selection."""
+        selected_id = None
+        selected = self._listbox.get_selected_row()
+        if isinstance(selected, ServerRow):
+            selected_id = selected.server_info.id
+        for row in list(self._rows.values()):
+            row.cleanup()
+            try:
+                self._listbox.remove(row)
+            except Exception:
+                pass
+        self._rows.clear()
+        self._populate()
+        if selected_id and selected_id in self._rows:
+            self._listbox.select_row(self._rows[selected_id])
 
     def _add_row(self, server_info: ServerInfo):
         """Add a server row to the list."""
@@ -285,6 +303,10 @@ class Sidebar(Gtk.Box):
         if row and info:
             row.update_info(info)
 
+    def _on_servers_reordered(self, manager):
+        """Handle manual sidebar reorder."""
+        self._rebuild()
+
     def select_server(self, server_id: str):
         """Programmatically select a server."""
         row = self._rows.get(server_id)
@@ -310,6 +332,38 @@ class Sidebar(Gtk.Box):
         if row:
             row.grab_focus()
 
+    def _server_menu(self, server_id: str) -> Gio.Menu:
+        """Build the server context menu and refresh move-item sensitivity."""
+        self._update_move_actions(server_id)
+        menu = Gio.Menu()
+        menu.append(_("Move up"), f"app.move-server-up::{server_id}")
+        menu.append(_("Move down"), f"app.move-server-down::{server_id}")
+        menu.append(_("Change Icon"), f"app.change-icon::{server_id}")
+        menu.append(_("Rename…"), f"app.rename-server::{server_id}")
+        menu.append(_("Delete"), f"app.delete-server::{server_id}")
+        return menu
+
+    def _update_move_actions(self, server_id: str) -> None:
+        """Enable/disable the move actions based on the server's position."""
+        try:
+            ordered_ids = [s.id for s in self._server_manager.servers]
+            index = ordered_ids.index(server_id)
+        except ValueError:
+            index = -1
+        app = Gio.Application.get_default()
+        if app is None:
+            return
+        for name, ok in (
+            ("move-server-up", index > 0),
+            ("move-server-down", 0 <= index < len(ordered_ids) - 1),
+        ):
+            try:
+                action = app.lookup_action(name)
+                if action is not None:
+                    action.set_enabled(bool(ok))
+            except Exception:
+                continue
+
     def popup_selected_server_menu(self):
         """Open the context menu for the selected server row."""
         row = self._listbox.get_selected_row()
@@ -318,10 +372,7 @@ class Sidebar(Gtk.Box):
 
         row.grab_focus()
 
-        menu = Gio.Menu()
-        menu.append(_("Change Icon"), f"app.change-icon::{row.server_info.id}")
-        menu.append(_("Rename…"), f"app.rename-server::{row.server_info.id}")
-        menu.append(_("Delete"), f"app.delete-server::{row.server_info.id}")
+        menu = self._server_menu(row.server_info.id)
 
         popover = Gtk.PopoverMenu(menu_model=menu)
         popover.set_parent(row)
@@ -401,11 +452,8 @@ class Sidebar(Gtk.Box):
 
         server_info = row.server_info
 
-        # Build popup menu -- Rename not first (reduces mis-taps on first item)
-        menu = Gio.Menu()
-        menu.append(_("Change Icon"), f"app.change-icon::{server_info.id}")
-        menu.append(_("Rename…"), f"app.rename-server::{server_info.id}")
-        menu.append(_("Delete"), f"app.delete-server::{server_info.id}")
+        # Move actions come first; destructive Delete stays last.
+        menu = self._server_menu(server_info.id)
 
         popover = Gtk.PopoverMenu(menu_model=menu)
         # Parent must match coordinate space of the gesture (listbox), not the row

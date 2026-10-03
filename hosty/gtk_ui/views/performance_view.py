@@ -390,22 +390,22 @@ class PerformanceView(Gtk.Box):
         """Ease TPS back toward 20 after lag warnings stop (console has no all-clear)."""
         import time
 
-        from hosty.shared.utils.constants import LOADER_PAPER, normalize_loader_type
+        from hosty.shared.utils.constants import LOADER_ARCLIGHT, LOADER_PAPER, normalize_loader_type
 
         if self._tps_value >= 20.0:
             return
-        # Paper's polled readings are authoritative; don't fight them
-        if normalize_loader_type(self._loader_type) == LOADER_PAPER:
+        # Paper/Arclight polled readings are authoritative; don't fight them
+        if normalize_loader_type(self._loader_type) in (LOADER_PAPER, LOADER_ARCLIGHT):
             return
         if time.monotonic() - self._tps_last_event < self.TPS_RECOVER_AFTER_SECONDS:
             return
         self._tps_value = min(20.0, self._tps_value + self.TPS_RECOVERY_RATE)
 
     def _poll_paper_tps(self) -> None:
-        """Periodically ask Paper for real TPS via its console command."""
-        from hosty.shared.utils.constants import LOADER_PAPER, ServerStatus, normalize_loader_type
+        """Periodically ask Paper/Arclight for real TPS via the console command."""
+        from hosty.shared.utils.constants import LOADER_ARCLIGHT, LOADER_PAPER, ServerStatus, normalize_loader_type
 
-        if not self._process or normalize_loader_type(self._loader_type) != LOADER_PAPER:
+        if not self._process or normalize_loader_type(self._loader_type) not in (LOADER_PAPER, LOADER_ARCLIGHT):
             return
         if self._process.status != ServerStatus.RUNNING:
             return

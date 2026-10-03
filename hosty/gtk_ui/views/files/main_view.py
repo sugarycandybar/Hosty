@@ -40,6 +40,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._worlds_group: Adw.PreferencesGroup | None = None
         self._mods_group: Adw.PreferencesGroup | None = None
         self._open_mods_row: Adw.ActionRow | None = None
+        self._open_plugins_row: Adw.ActionRow | None = None
         self._check_updates_row: Adw.ActionRow | None = None
         self._mods_update_busy = False
         self._modpack_version_enrich_busy = False
@@ -48,9 +49,11 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._players_group: Adw.PreferencesGroup | None = None
         self._world_rows: list[Gtk.Widget] = []
         self._mod_rows: list[Gtk.Widget] = []
+        self._plugin_rows: list[Gtk.Widget] = []
         self._datapack_rows: list[Gtk.Widget] = []
         self._disabled_rows: list[Gtk.Widget] = []
         self._mods_expander: Adw.ExpanderRow | None = None
+        self._plugins_expander: Adw.ExpanderRow | None = None
         self._datapacks_expander: Adw.ExpanderRow | None = None
         self._disabled_expander: Adw.ExpanderRow | None = None
         self._worlds_snapshot: tuple[tuple[str, tuple[str, ...]], ...] = tuple()
@@ -114,6 +117,13 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._open_mods_row.connect("activated", self._on_open_mods_folder)
         self._mods_group.add(self._open_mods_row)
 
+        self._open_plugins_row = Adw.ActionRow(title=_("Open plugins folder"))
+        self._open_plugins_row.add_prefix(Gtk.Image.new_from_icon_name("plug-symbolic"))
+        self._open_plugins_row.set_activatable(True)
+        self._open_plugins_row.connect("activated", self._on_open_plugins_folder)
+        self._open_plugins_row.set_visible(False)
+        self._mods_group.add(self._open_plugins_row)
+
         modrinth_row = Adw.ActionRow(
             title=_("Modrinth"),
         )
@@ -136,6 +146,13 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         mods_expander.set_expanded(False)
         self._mods_expander = mods_expander
         self._mods_group.add(mods_expander)
+
+        # "Installed Plugins" collapsible section (Arclight hybrid servers)
+        plugins_expander = Adw.ExpanderRow(title=_("Installed Plugins"))
+        plugins_expander.set_expanded(False)
+        plugins_expander.set_visible(False)
+        self._plugins_expander = plugins_expander
+        self._mods_group.add(plugins_expander)
 
         # "Installed Datapacks" collapsible section
         datapacks_expander = Adw.ExpanderRow(title=_("Installed Datapacks"))
@@ -160,18 +177,36 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         return bool(self._server_info and normalize_loader_type(self._server_info.loader_type) == LOADER_PAPER)
 
+    def _is_arclight(self) -> bool:
+        from hosty.shared.utils.constants import LOADER_ARCLIGHT, normalize_loader_type
+
+        return bool(self._server_info and normalize_loader_type(self._server_info.loader_type) == LOADER_ARCLIGHT)
+
     def _update_mods_titles(self) -> None:
         is_paper = self._is_paper()
-        group_title = _("Plugins") if is_paper else _("Mods")
+        is_arclight = self._is_arclight()
+        if is_arclight:
+            group_title = _("Mods & Plugins")
+        elif is_paper:
+            group_title = _("Plugins")
+        else:
+            group_title = _("Mods")
         open_title = _("Open plugins folder") if is_paper else _("Open mods folder")
         installed_title = _("Installed Plugins") if is_paper else _("Installed Mods")
         empty_title = _("No plugins installed") if is_paper else _("No mods installed")
         if self._mods_group:
-            self._mods_group.set_title(group_title)
+            # Group titles are parsed as Pango markup: escape "&" etc.
+            self._mods_group.set_title(GLib.markup_escape_text(group_title))
         if self._open_mods_row:
             self._open_mods_row.set_title(open_title)
+        if self._open_plugins_row:
+            self._open_plugins_row.set_visible(is_arclight)
+        if self._plugins_expander:
+            self._plugins_expander.set_visible(is_arclight)
         if self._mods_expander:
             self._mods_expander.set_title(installed_title)
+            if not is_arclight:
+                self._mods_expander.set_visible(True)
             # Update empty-state row if present
             for row in list(self._mod_rows):
                 if row.get_title() in (_("No mods installed"), _("No plugins installed")):
@@ -250,6 +285,15 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                     pass
         self._mod_rows.clear()
 
+        # Clear installed plugins expander (Arclight hybrid servers)
+        if self._plugins_expander:
+            for row in list(self._plugin_rows):
+                try:
+                    self._plugins_expander.remove(row)
+                except Exception:
+                    pass
+        self._plugin_rows.clear()
+
         # Clear installed datapacks expander
         if self._datapacks_expander:
             for row in list(self._datapack_rows):
@@ -273,6 +317,9 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             if self._mods_expander:
                 info = self._add_info_row_to_expander(self._mods_expander, _("No server folder"))
                 self._mod_rows.append(info)
+            if self._plugins_expander:
+                info = self._add_info_row_to_expander(self._plugins_expander, _("No server folder"))
+                self._plugin_rows.append(info)
             if self._datapacks_expander:
                 info = self._add_info_row_to_expander(self._datapacks_expander, _("No server folder"))
                 self._datapack_rows.append(info)
@@ -325,6 +372,40 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             # Update expander subtitle with count
             total_mods = len(entries) + len([j for j in jars if j.name.lower() not in managed_set])
             self._mods_expander.set_subtitle(_("{} item(s)").format(total_mods) if total_mods else _("None installed"))
+
+        # ---- Installed Plugins expander (Arclight hybrid servers) ----
+        if self._plugins_expander and self._is_arclight():
+            plugins_dir = self._plugins_dir() or (root / "plugins")
+            plugins_dir.mkdir(parents=True, exist_ok=True)
+            plugin_state = self._read_plugin_state().get("plugins", {})
+
+            tracked_plugin_files = {str(m.get("filename", "")).strip().lower() for m in plugin_state.values()}
+            plugin_count = 0
+            for project_id, meta in sorted(
+                plugin_state.items(),
+                key=lambda item: (str(item[1].get("title", "")).strip() or item[0]).lower(),
+            ):
+                row = self._make_plugin_row_from_meta(project_id, meta, plugins_dir)
+                if row is not None:
+                    self._plugins_expander.add_row(row)
+                    self._plugin_rows.append(row)
+                    plugin_count += 1
+
+            for jar in sorted(plugins_dir.glob("*.jar"), key=lambda p: p.name.lower()):
+                if jar.name.lower() in tracked_plugin_files:
+                    continue
+                row = self._make_plugin_row(jar)
+                self._plugins_expander.add_row(row)
+                self._plugin_rows.append(row)
+                plugin_count += 1
+
+            if not self._plugin_rows:
+                info = self._add_info_row_to_expander(self._plugins_expander, _("No plugins installed"))
+                self._plugin_rows.append(info)
+
+            self._plugins_expander.set_subtitle(
+                _("{} item(s)").format(plugin_count) if plugin_count else _("None installed")
+            )
 
         # ---- Installed Datapacks expander ----
         if self._datapacks_expander:
@@ -381,7 +462,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         if self._disabled_expander and self._server_manager and self._server_info:
             disabled = self._server_manager.get_incompatible_components(self._server_info.id)
             disabled_items: list[dict[str, str]] = []
-            for key in ("modpacks", "mods", "datapacks"):
+            for key in ("modpacks", "mods", "plugins", "datapacks"):
                 for item in disabled.get(key, []):
                     payload = dict(item)
                     payload["_kind"] = key[:-1] if key.endswith("s") else key
@@ -401,6 +482,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                         "mod": "mod",
                         "modpack": "modpack",
                         "datapack": "datapack",
+                        "plugin": "plugin",
                     }.get(kind, "mod")
                     open_btn = self._icon_button(
                         "web-browser-symbolic",
@@ -466,7 +548,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             return tuple()
         data = self._server_manager.get_incompatible_components(self._server_info.id)
         items: list[tuple[str, str, str]] = []
-        for key in ("modpacks", "mods", "datapacks"):
+        for key in ("modpacks", "mods", "plugins", "datapacks"):
             for item in data.get(key, []):
                 items.append(
                     (
@@ -528,6 +610,13 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         root = self._server_dir()
         if root:
             d = self._content_dir(root) or (root / "mods")
+            d.mkdir(parents=True, exist_ok=True)
+            self._open_target(d)
+
+    def _on_open_plugins_folder(self, *_):
+        root = self._server_dir()
+        if root:
+            d = self._plugins_dir() or (root / "plugins")
             d.mkdir(parents=True, exist_ok=True)
             self._open_target(d)
 

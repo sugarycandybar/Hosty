@@ -40,3 +40,8 @@ install_data(
   'sliders-horizontal-symbolic.svg',
   install_dir: get_option('datadir') / 'icons/hicolor/scalable/actions'
 )
+
+install_data(
+  'plug-symbolic.svg',
+  install_dir: get_option('datadir') / 'icons/hicolor/scalable/actions'
+)

@@ -9,11 +9,14 @@ import logging
 import re
 import threading
 from collections.abc import Callable
+from datetime import UTC
 from pathlib import Path
 
 import requests
 
 from hosty.shared.utils.constants import (
+    ARCLIGHT_MINECRAFT_PATH,
+    ARCLIGHT_PLATFORMS,
     CACHE_DIR,
     FABRIC_GAME_VERSIONS_URL,
     FABRIC_INSTALLER_VERSIONS_URL,
@@ -21,6 +24,7 @@ from hosty.shared.utils.constants import (
     FORGE_MAVEN_INSTALLER_URL,
     FORGE_PROMOTIONS_URL,
     HOSTY_USER_AGENT,
+    LOADER_ARCLIGHT,
     LOADER_FABRIC,
     LOADER_FORGE,
     LOADER_NEOFORGE,
@@ -30,7 +34,11 @@ from hosty.shared.utils.constants import (
     PAPER_BUILD_URL,
     PAPER_FILL_API_BASE,
     PAPER_LATEST_BUILD_URL,
+    arclight_api_urls,
+    arclight_builds_path,
+    arclight_loaders_path,
     mod_loader_name,
+    normalize_arclight_platform,
     normalize_loader_type,
 )
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
@@ -61,7 +69,7 @@ class DownloadManager:
         self._installer_url: str | None = None
         self._installer_version: str | None = None
         self._mojang_manifest: dict | None = None
-        self._loader_build_cache: dict[tuple[str, str, bool], str] = {}
+        self._loader_build_cache: dict[tuple[str, str, bool, str], str] = {}
 
     def fetch_game_versions(self, include_snapshots: bool = False) -> list[str]:
         """
@@ -178,10 +186,153 @@ class DownloadManager:
             logger.warning("Failed to fetch Paper builds: %s", e)
             return []
 
-    def fetch_loader_builds(self, loader_type: str, mc_version: str | None = None) -> list[str]:
+    # ----- Arclight (Bukkit + mods hybrid) -----
+
+    def _arclight_get(self, path: str) -> dict | None:
+        """GET an Arclight files-API path, trying each mirror base in order."""
+        last_error: Exception | None = None
+        for url in arclight_api_urls(path):
+            try:
+                resp = requests.get(url, headers={"User-Agent": HOSTY_USER_AGENT}, timeout=15)
+                resp.raise_for_status()
+                data = resp.json()
+                if isinstance(data, dict):
+                    return data
+                return None
+            except Exception as e:
+                last_error = e
+                continue
+        logger.warning("Failed to fetch Arclight path %s: %s", path, last_error)
+        return None
+
+    @staticmethod
+    def _arclight_entry_names(data: dict | None) -> list[str]:
+        if not isinstance(data, dict):
+            return []
+        names = []
+        for entry in data.get("files") or []:
+            if isinstance(entry, dict) and str(entry.get("name") or "").strip():
+                names.append(str(entry["name"]).strip())
+        return names
+
+    @staticmethod
+    def _mc_sort_key(value: str) -> tuple:
+        """Sort key for Minecraft version strings (numeric segments, newest last)."""
+        parts: list[tuple[int, object]] = []
+        for token in re.findall(r"\d+|[a-z]+", str(value or "").lower()):
+            if token.isdigit():
+                parts.append((0, int(token)))
+            else:
+                parts.append((1, token))
+        return tuple(parts)
+
+    def fetch_arclight_mc_versions(self) -> list[str]:
+        """Fetch Minecraft versions Arclight publishes builds for, newest first."""
+        data = self._arclight_get(ARCLIGHT_MINECRAFT_PATH)
+        names = self._arclight_entry_names(data)
+        names.sort(key=self._mc_sort_key, reverse=True)
+        return names
+
+    def _arclight_platform_or_default(self, mc_version: str, platform: str | None) -> str:
+        """Return the requested platform, or the preferred available one."""
+        mc_version = str(mc_version or "").strip()
+        if platform and str(platform).strip():
+            return normalize_arclight_platform(platform)
+        try:
+            available = self.fetch_arclight_platforms(mc_version)
+        except Exception:
+            available = []
+        if available:
+            return available[0]
+        return normalize_arclight_platform(platform)
+
+    def fetch_arclight_platforms(self, mc_version: str) -> list[str]:
+        """Fetch base platforms (forge/fabric/neoforge) for an Arclight MC version.
+
+        Returned in Hosty's preference order (NeoForge, Forge, Fabric) filtered
+        to what the API actually offers for this version.
+        """
+        mc_version = str(mc_version or "").strip()
+        if not mc_version:
+            return []
+        data = self._arclight_get(arclight_loaders_path(mc_version))
+        available = {name.lower() for name in self._arclight_entry_names(data)}
+        return [p for p in ARCLIGHT_PLATFORMS if p in available]
+
+    def fetch_arclight_builds(self, mc_version: str, platform: str | None = None) -> list[dict]:
+        """Fetch Arclight builds for an MC version + base platform, newest first.
+
+        Each entry is a dict with ``name`` (e.g. ``1.0.2-SNAPSHOT-d27101f``),
+        ``permlink`` (direct jar download URL), ``link``, ``last_modified``
+        and ``stable`` (True when the name carries no ``-SNAPSHOT`` suffix).
+        """
+        from datetime import datetime
+
+        mc_version = str(mc_version or "").strip()
+        if not mc_version:
+            return []
+        platform = normalize_arclight_platform(platform)
+        data = self._arclight_get(arclight_builds_path(mc_version, platform))
+        if not isinstance(data, dict):
+            return []
+
+        def _modified(entry: dict) -> float:
+            raw = str(entry.get("last-modified") or entry.get("last_modified") or "")
+            try:
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=UTC)
+                return parsed.timestamp()
+            except Exception:
+                return 0.0
+
+        raw_entries = [e for e in (data.get("files") or []) if isinstance(e, dict)]
+        raw_entries.sort(key=_modified, reverse=True)
+
+        builds = []
+        for entry in raw_entries:
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            builds.append(
+                {
+                    "name": name,
+                    "permlink": str(entry.get("permlink") or "").strip(),
+                    "link": str(entry.get("link") or "").strip(),
+                    "last_modified": str(entry.get("last-modified") or ""),
+                    "stable": "-snapshot" not in name.lower(),
+                }
+            )
+        return builds
+
+    def fetch_arclight_loader_versions(self, mc_version: str, platform: str | None = None) -> list[str]:
+        """Fetch selectable Arclight build names for an MC version + platform."""
+        return [b["name"] for b in self.fetch_arclight_builds(mc_version, platform)]
+
+    def _resolve_arclight_build(self, mc_version: str, platform: str | None) -> str:
+        """Return the newest Arclight build name (what ``latest-snapshot`` serves)."""
+        builds = self.fetch_arclight_builds(mc_version, platform)
+        return builds[0]["name"] if builds else ""
+
+    def _arclight_download_url(self, mc_version: str, platform: str | None, build: str) -> str | None:
+        """Resolve the direct jar URL for an Arclight build (permlink preferred)."""
+        build = str(build or "").strip()
+        if not build:
+            return None
+        for entry in self.fetch_arclight_builds(mc_version, platform):
+            if entry["name"] == build:
+                return entry["permlink"] or entry["link"] or None
+        return None
+
+    def fetch_loader_builds(
+        self, loader_type: str, mc_version: str | None = None, platform: str | None = None
+    ) -> list[str]:
         """Fetch all selectable loader builds for a loader type + MC version.
 
         Newest/default first. Fabric ignores ``mc_version`` (global list).
+        Arclight additionally needs the base ``platform``
+        (forge/fabric/neoforge); when omitted, the preferred available
+        platform for that MC version is used.
         """
         loader_type = normalize_loader_type(loader_type)
         mc_version = str(mc_version or "").strip()
@@ -193,6 +344,10 @@ class DownloadManager:
             return self.fetch_neoforge_loader_versions(mc_version)
         if loader_type == LOADER_PAPER:
             return self.fetch_paper_loader_versions(mc_version)
+        if loader_type == LOADER_ARCLIGHT:
+            return self.fetch_arclight_loader_versions(
+                mc_version, self._arclight_platform_or_default(mc_version, platform)
+            )
         return []
 
     @staticmethod
@@ -237,19 +392,24 @@ class DownloadManager:
         loader_type: str,
         mc_version: str | None = None,
         include_snapshots: bool = False,
+        platform: str | None = None,
     ) -> str:
         """Return the preferred loader build for a loader type.
 
         For Fabric this is the newest global loader version. For Forge the
         recommended promotion is preferred over latest. For NeoForge the
         newest build on the selected Minecraft version's branch is returned.
+        For Arclight the newest build for the MC version + base platform
+        (forge/fabric/neoforge) is returned.
 
         Returns "" when no suitable build can be resolved.
         """
         loader_type = normalize_loader_type(loader_type)
         mc_version = str(mc_version or "").strip()
+        if loader_type == LOADER_ARCLIGHT:
+            platform = self._arclight_platform_or_default(mc_version, platform)
 
-        cache_key = (loader_type, mc_version, bool(include_snapshots))
+        cache_key = (loader_type, mc_version, bool(include_snapshots), str(platform or ""))
         if cache_key in self._loader_build_cache:
             return self._loader_build_cache[cache_key]
 
@@ -349,6 +509,18 @@ class DownloadManager:
                 logger.warning("Failed to fetch Paper builds: %s", e)
                 return ""
 
+        if loader_type == LOADER_ARCLIGHT:
+            if not mc_version:
+                return ""
+            try:
+                result = self._resolve_arclight_build(mc_version, platform)
+            except Exception as e:
+                logger.warning("Failed to fetch Arclight builds: %s", e)
+                return ""
+            if result:
+                self._loader_build_cache[cache_key] = result
+            return result
+
         return ""
 
     def resolve_loader_build_async(
@@ -356,10 +528,11 @@ class DownloadManager:
         loader_type: str,
         mc_version: str | None,
         callback: Callable[[str], None],
+        platform: str | None = None,
     ):
         """Resolve a loader build in a background thread; calls callback(build) when done."""
         thread = threading.Thread(
-            target=lambda: callback(self.resolve_loader_build(loader_type, mc_version)),
+            target=lambda: callback(self.resolve_loader_build(loader_type, mc_version, platform=platform)),
             daemon=True,
         )
         thread.start()
@@ -391,6 +564,7 @@ class DownloadManager:
         loader_type: str = LOADER_FABRIC,
         mc_version: str = "",
         loader_version: str | None = None,
+        platform: str | None = None,
     ) -> str | None:
         """
         Download a mod-loader installer JAR. Returns path to the downloaded file.
@@ -399,7 +573,10 @@ class DownloadManager:
         For Fabric the newest installer is fetched from Fabric Meta (the
         installer tool itself can install any loader version). For Forge and
         NeoForge the version-specific installer is downloaded from the
-        respective maven.
+        respective maven. Paper and Arclight ship ready-to-run server jars,
+        so the "installer" is the server jar itself (no installer step).
+        Arclight additionally needs the base ``platform``
+        (forge/fabric/neoforge).
         """
         loader_type = normalize_loader_type(loader_type)
         cached_jar: Path | None
@@ -435,6 +612,26 @@ class DownloadManager:
             except Exception as e:
                 logger.warning("Failed to resolve Paper jar: %s", e)
                 return None
+        elif loader_type == LOADER_ARCLIGHT:
+            # Arclight ships a ready-to-run hybrid server jar per MC version
+            # + base platform (no installer step, like Paper).
+            if not mc_version:
+                return None
+            platform = self._arclight_platform_or_default(mc_version, platform)
+            arclight_build = str(loader_version or "").strip() or self._resolve_arclight_build(mc_version, platform)
+            if not arclight_build:
+                return None
+            url = self._arclight_download_url(mc_version, platform, arclight_build)
+            if not url:
+                logger.warning(
+                    "No Arclight download for MC %s platform %s build %s",
+                    mc_version,
+                    platform,
+                    arclight_build,
+                )
+                return None
+            safe_build = re.sub(r"[^A-Za-z0-9._-]+", "_", arclight_build)
+            cached_jar = CACHE_DIR / f"arclight-{mc_version}-{platform}-{safe_build}.jar"
         else:
             return None
 
@@ -453,7 +650,7 @@ class DownloadManager:
 
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-            resp = requests.get(url, stream=True, timeout=60)
+            resp = requests.get(url, stream=True, timeout=60, headers={"User-Agent": HOSTY_USER_AGENT})
             resp.raise_for_status()
 
             total = int(resp.headers.get("content-length", 0))
@@ -616,6 +813,7 @@ class DownloadManager:
         server_dir: str,
         loader_version: str | None = None,
         progress_callback: Callable[[float, str], None] | None = None,
+        platform: str | None = None,
     ) -> tuple[bool, str]:
         """Install the selected mod loader into server_dir. Dispatches per loader."""
         loader_type = normalize_loader_type(loader_type)
@@ -630,6 +828,12 @@ class DownloadManager:
             )
         if loader_type == LOADER_PAPER:
             return self._install_paper_server(
+                installer_jar=installer_jar,
+                server_dir=server_dir,
+                progress_callback=progress_callback,
+            )
+        if loader_type == LOADER_ARCLIGHT:
+            return self._install_arclight_server(
                 installer_jar=installer_jar,
                 server_dir=server_dir,
                 progress_callback=progress_callback,
@@ -677,6 +881,47 @@ class DownloadManager:
 
         if progress_callback:
             progress_callback(1.0, _("Paper server installed successfully"))
+        return True, _("Installation successful")
+
+    def _install_arclight_server(
+        self,
+        installer_jar: str,
+        server_dir: str,
+        progress_callback: Callable[[float, str], None] | None = None,
+    ) -> tuple[bool, str]:
+        """
+        Install Arclight by placing the downloaded hybrid server jar as
+        arclight-server.jar (no installer step, like Paper).
+
+        The jar is launched directly (``java -jar arclight-server.jar
+        nogui``); it fetches its remaining runtime files on first start, so
+        the first launch needs network access and may take a while.
+
+        Args:
+            installer_jar: Path to the cached Arclight server jar.
+            server_dir: Directory to install the server into.
+            progress_callback: Progress callback.
+
+        Returns:
+            (success, message) tuple.
+        """
+        import shutil
+
+        Path(server_dir).mkdir(parents=True, exist_ok=True)
+
+        if progress_callback:
+            progress_callback(0.5, _("Installing Arclight server..."))
+
+        try:
+            source = Path(installer_jar)
+            if not source.is_file() or source.stat().st_size < 1000:
+                return False, _("Arclight server jar is missing or corrupted")
+            shutil.copyfile(source, Path(server_dir) / "arclight-server.jar")
+        except Exception as e:
+            return False, _("Installation error: {}").format(e)
+
+        if progress_callback:
+            progress_callback(1.0, _("Arclight server installed successfully"))
         return True, _("Installation successful")
 
     def _install_maven_loader_server(

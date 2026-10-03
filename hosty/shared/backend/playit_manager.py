@@ -2175,17 +2175,57 @@ class PlayitManager(EventEmitter):
         return Path(server_dir) / content_dir_name(normalize_loader_type(loader))
 
     @staticmethod
-    def _geyser_config_dir(server_dir: str, loader: str = "") -> Path:
+    def _content_jar_dirs(server_dir: str, loader: str = "") -> list[Path]:
+        """All directories where runnable jars live (Arclight: mods/ + plugins/)."""
+        from hosty.shared.utils.constants import content_dir_names, normalize_loader_type
+
+        return [Path(server_dir) / name for name in content_dir_names(normalize_loader_type(loader))]
+
+    @staticmethod
+    def _jar_present(directories: list[Path], *needles: str) -> bool:
+        """True when any jar stem in any directory contains any needle."""
+        for directory in directories:
+            try:
+                stems = [jar.stem.lower() for jar in directory.glob("*.jar")]
+            except Exception:
+                continue
+            if any(needle in stem for stem in stems for needle in needles):
+                return True
+        return False
+
+    @staticmethod
+    def _geyser_config_dir(server_dir: str, loader: str = "", platform: str = "") -> Path:
         """Return the loader-specific Geyser config directory (e.g. config/Geyser-Fabric)."""
-        from hosty.shared.utils.constants import LOADER_PAPER, mod_loader_name, normalize_loader_type
+        from hosty.shared.utils.constants import (
+            LOADER_ARCLIGHT,
+            LOADER_PAPER,
+            mod_loader_name,
+            normalize_arclight_platform,
+            normalize_loader_type,
+        )
 
         loader = normalize_loader_type(loader)
         if loader == LOADER_PAPER:
             # Geyser runs as a Bukkit plugin on Paper (Geyser-Spigot.jar)
             return Path(server_dir) / "plugins" / "Geyser-Spigot"
+        if loader == LOADER_ARCLIGHT:
+            # Arclight can run Geyser either as a platform mod
+            # (config/Geyser-<Platform>) or as a Bukkit plugin
+            # (plugins/Geyser-Spigot). Prefer whichever already exists so a
+            # manually installed variant keeps working.
+            plugin_dir = Path(server_dir) / "plugins" / "Geyser-Spigot"
+            try:
+                if (plugin_dir / "config.yml").exists():
+                    return plugin_dir
+            except Exception:
+                pass
+            platform_name = mod_loader_name(normalize_arclight_platform(platform))
+            return Path(server_dir) / "config" / f"Geyser-{platform_name}"
         return Path(server_dir) / "config" / f"Geyser-{mod_loader_name(loader)}"
 
-    def configure_geyser_mod(self, server_dir: str, bedrock_port: int = 19132, loader: str = "") -> bool:
+    def configure_geyser_mod(
+        self, server_dir: str, bedrock_port: int = 19132, loader: str = "", platform: str = ""
+    ) -> bool:
         """Ensure Geyser's per-loader config listens on the Bedrock UDP port."""
         try:
             port = int(bedrock_port)
@@ -2194,7 +2234,7 @@ class PlayitManager(EventEmitter):
         if port < 1024 or port > 65535:
             port = 19132
 
-        config_dir = self._geyser_config_dir(server_dir, loader)
+        config_dir = self._geyser_config_dir(server_dir, loader, platform)
         config_file = config_dir / "config.yml"
         try:
             config_dir.mkdir(parents=True, exist_ok=True)
@@ -2204,9 +2244,9 @@ class PlayitManager(EventEmitter):
         except Exception:
             return False
 
-    def configure_floodgate_mod(self, server_dir: str, loader: str = "") -> bool:
+    def configure_floodgate_mod(self, server_dir: str, loader: str = "", platform: str = "") -> bool:
         """Ensure Geyser is configured to use Floodgate authentication."""
-        config_dir = self._geyser_config_dir(server_dir, loader)
+        config_dir = self._geyser_config_dir(server_dir, loader, platform)
         config_file = config_dir / "config.yml"
         try:
             config_dir.mkdir(parents=True, exist_ok=True)
@@ -2267,6 +2307,7 @@ class PlayitManager(EventEmitter):
         endpoint: str = "",
         voicechat_port: int = 0,
         loader: str = "",
+        platform: str = "",
     ) -> bool:
         """Auto-configure Simple Voice Chat to use the playit tunnel.
 
@@ -2275,7 +2316,7 @@ class PlayitManager(EventEmitter):
         3) Overwrite port, voice_host, and bind_address.
         4) Save the file, clean up any stale .toml sibling.
         """
-        from hosty.shared.utils.constants import LOADER_PAPER, normalize_loader_type
+        from hosty.shared.utils.constants import LOADER_ARCLIGHT, LOADER_PAPER, normalize_loader_type
 
         domain, remote_port = _split_endpoint(endpoint)
         voice_tunnel = None
@@ -2355,6 +2396,17 @@ class PlayitManager(EventEmitter):
 
         if normalize_loader_type(loader) == LOADER_PAPER:
             config_dir = Path(server_dir) / "plugins" / "voicechat"
+        elif normalize_loader_type(loader) == LOADER_ARCLIGHT:
+            # Arclight: Simple Voice Chat may live in plugins/ (Bukkit) or
+            # config/ (platform mod). Prefer whichever already exists.
+            plugin_dir = Path(server_dir) / "plugins" / "voicechat"
+            try:
+                if (plugin_dir / "voicechat-server.properties").exists():
+                    config_dir = plugin_dir
+                else:
+                    config_dir = Path(server_dir) / "config" / "voicechat"
+            except Exception:
+                config_dir = Path(server_dir) / "config" / "voicechat"
         else:
             config_dir = Path(server_dir) / "config" / "voicechat"
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -2379,19 +2431,15 @@ class PlayitManager(EventEmitter):
         bedrock_port: int = 19132,
         voicechat_port: int = 24454,
         loader: str = "",
+        platform: str = "",
     ) -> dict[str, bool]:
         """Best-effort background repair for playit-backed mod config files."""
         result = {"geyser": False, "voicechat": False}
         if str(bedrock_endpoint or "").strip():
-            result["geyser"] = self.configure_geyser_mod(server_dir, bedrock_port, loader=loader)
-            mods_dir = self._content_jar_dir(server_dir, loader)
-            has_floodgate = False
-            try:
-                has_floodgate = any("floodgate" in jar.stem.lower() for jar in mods_dir.glob("*.jar"))
-            except Exception:
-                has_floodgate = False
+            result["geyser"] = self.configure_geyser_mod(server_dir, bedrock_port, loader=loader, platform=platform)
+            has_floodgate = self._jar_present(self._content_jar_dirs(server_dir, loader), "floodgate")
             if has_floodgate:
-                self.configure_floodgate_mod(server_dir, loader=loader)
+                self.configure_floodgate_mod(server_dir, loader=loader, platform=platform)
         if str(voicechat_endpoint or "").strip():
             result["voicechat"] = self.configure_voicechat_mod(
                 server_dir,
@@ -2399,6 +2447,7 @@ class PlayitManager(EventEmitter):
                 endpoint=voicechat_endpoint,
                 voicechat_port=voicechat_port,
                 loader=loader,
+                platform=platform,
             )
         return result
 
@@ -2441,19 +2490,15 @@ class PlayitManager(EventEmitter):
             logger.exception("playit auto-create: cannot load config for %s", server_dir)
             return result
         try:
-            mods_dir = self._content_jar_dir(server_dir, loader)
+            jar_dirs = self._content_jar_dirs(server_dir, loader)
         except Exception:
             logger.exception("playit auto-create: cannot resolve mod dir for %s", server_dir)
-            mods_dir = None
+            jar_dirs = []
 
         def _mod_present(*needles: str) -> bool:
-            if mods_dir is None:
+            if not jar_dirs:
                 return False
-            try:
-                stems = [jar.stem.lower() for jar in mods_dir.glob("*.jar")]
-            except Exception:
-                return False
-            return any(needle in stem for stem in stems for needle in needles)
+            return self._jar_present(jar_dirs, *[n.lower() for n in needles])
 
         refresh_mark = self.tunnels_refreshed_at
         try:

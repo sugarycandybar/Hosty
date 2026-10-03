@@ -18,12 +18,14 @@ from hosty.shared.utils.constants import (
     GAMEMODES,
     LEVEL_TYPE_NAMES,
     LEVEL_TYPES,
+    LOADER_ARCLIGHT,
     LOADER_FABRIC,
     LOADER_NAMES,
     MAX_RAM_MB,
     MIN_RAM_MB,
     SUPPORTED_LOADERS,
     get_required_java_version,
+    normalize_arclight_platform,
 )
 from hosty.shared.utils.image_utils import prepare_server_icon
 
@@ -55,10 +57,13 @@ class CreateServerDialog(Adw.Dialog):
         super().__init__()
         self._server_manager = server_manager
         self._game_versions: list[str] = []
+        self._arclight_games: list[str] = []
         self._loader_versions: list[str] = []
         self._loader_version_values: list[str] = []
         self._loader_build: str = ""
         self._loader_fetch_token: int = 0
+        self._platform_values: list[str] = []
+        self._platform_fetch_token: int = 0
         self._icon_source_path: str = ""
         self._world_import_source_path: str = ""
         self._java_item_rows: list[dict] = []
@@ -237,6 +242,15 @@ class CreateServerDialog(Adw.Dialog):
         self._loader_row.connect("notify::selected", self._on_loader_changed)
         version_group.add(self._loader_row)
 
+        self._platform_row = Adw.ComboRow(
+            title=_("Base platform"),
+            subtitle=_("Mod loader Arclight runs on"),
+            model=Gtk.StringList.new([_("Loading...")]),
+        )
+        self._platform_row.set_visible(False)
+        self._platform_row.connect("notify::selected", self._on_platform_changed)
+        version_group.add(self._platform_row)
+
         self._mc_version_list = Gtk.StringList.new([_("Loading...")])
         self._mc_version_row = Adw.ComboRow(
             title=_("Minecraft version"),
@@ -348,19 +362,53 @@ class CreateServerDialog(Adw.Dialog):
             self._loader_versions = loader_vers
             GLib.idle_add(self._populate_versions)
 
-        self._server_manager.download_manager.fetch_all_versions_async(on_versions)
+        def on_arclight_games(game_vers):
+            self._arclight_games = game_vers
+            GLib.idle_add(self._maybe_populate_arclight_versions)
 
-    def _populate_versions(self):
-        """Populate version dropdowns (called on main thread)."""
-        if self._game_versions:
-            new_list = Gtk.StringList.new(self._game_versions)
+        self._server_manager.download_manager.fetch_all_versions_async(on_versions)
+        threading.Thread(
+            target=lambda: on_arclight_games(self._server_manager.download_manager.fetch_arclight_mc_versions()),
+            daemon=True,
+        ).start()
+
+    def _maybe_populate_arclight_versions(self):
+        """Swap in Arclight MC versions if Arclight is currently selected."""
+        if self._selected_loader_type() == LOADER_ARCLIGHT and self._arclight_games:
+            self._populate_mc_versions()
+        return False
+
+    def _mc_versions_for_loader(self) -> list[str]:
+        if self._selected_loader_type() == LOADER_ARCLIGHT:
+            return self._arclight_games
+        return self._game_versions
+
+    def _populate_mc_versions(self):
+        """Populate the Minecraft version dropdown for the active loader."""
+        versions = self._mc_versions_for_loader()
+        previous = self._selected_mc_version()
+        if versions:
+            new_list = Gtk.StringList.new(versions)
             self._mc_version_row.set_model(new_list)
             self._mc_version_row.set_sensitive(True)
-            self._mc_version_row.set_selected(0)
+            try:
+                selected = versions.index(previous) if previous in versions else 0
+            except Exception:
+                selected = 0
+            self._mc_version_row.set_selected(selected)
             self._on_mc_version_changed(self._mc_version_row, None)
         else:
             self._mc_version_list = Gtk.StringList.new([_("No versions found")])
             self._mc_version_row.set_model(self._mc_version_list)
+            self._mc_version_row.set_sensitive(False)
+
+    def _populate_versions(self):
+        """Populate version dropdowns (called on main thread)."""
+        if self._selected_loader_type() == LOADER_ARCLIGHT:
+            if self._arclight_games:
+                self._populate_mc_versions()
+        elif self._game_versions:
+            self._populate_mc_versions()
 
         self._validate()
 
@@ -369,15 +417,24 @@ class CreateServerDialog(Adw.Dialog):
         return SUPPORTED_LOADERS[idx] if 0 <= idx < len(SUPPORTED_LOADERS) else LOADER_FABRIC
 
     def _selected_mc_version(self) -> str:
+        versions = self._mc_versions_for_loader()
         idx = self._mc_version_row.get_selected()
-        return self._game_versions[idx] if idx < len(self._game_versions) else ""
+        return versions[idx] if 0 <= idx < len(versions) else ""
+
+    def _selected_platform(self) -> str:
+        idx = self._platform_row.get_selected()
+        if 0 <= idx < len(self._platform_values):
+            return self._platform_values[idx]
+        return ""
 
     def _on_loader_changed(self, *_args):
         """Handle mod loader selection change."""
         loader_type = self._selected_loader_type()
         # Optimising-mod presets are Fabric-only today
         self._mods_group.set_visible(loader_type == LOADER_FABRIC)
-        self._refresh_loader_build()
+        self._platform_row.set_visible(loader_type == LOADER_ARCLIGHT)
+        # Repopulating the MC list triggers the platform/build refresh chain.
+        self._populate_mc_versions()
         self._validate()
 
     def _selected_loader_version(self) -> str:
@@ -391,17 +448,79 @@ class CreateServerDialog(Adw.Dialog):
         self._loader_build = self._selected_loader_version()
         self._validate()
 
+    def _on_platform_changed(self, *_args) -> None:
+        """Handle Arclight base platform selection change."""
+        if self._selected_loader_type() != LOADER_ARCLIGHT:
+            return
+        self._refresh_loader_build()
+        self._validate()
+
+    def _refresh_platforms(self):
+        """Fetch base platforms for the selected Arclight MC version."""
+        self._platform_fetch_token += 1
+        token = self._platform_fetch_token
+        mc_version = self._selected_mc_version()
+        previous = self._selected_platform()
+
+        self._platform_values = []
+        self._platform_row.set_model(Gtk.StringList.new([_("Loading...")]))
+        self._platform_row.set_sensitive(False)
+
+        def worker():
+            builds = []
+            try:
+                builds = self._server_manager.download_manager.fetch_arclight_platforms(mc_version)
+            except Exception:
+                builds = []
+            GLib.idle_add(lambda: self._on_platforms_resolved(token, builds, previous))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_platforms_resolved(self, token: int, platforms: list[str], previous: str) -> bool:
+        if token != self._platform_fetch_token:
+            return False
+        platforms = [normalize_arclight_platform(p) for p in (platforms or []) if str(p).strip()]
+        # De-duplicate while preserving preference order
+        seen: set[str] = set()
+        ordered = []
+        for p in platforms:
+            if p not in seen:
+                seen.add(p)
+                ordered.append(p)
+        self._platform_values = ordered
+        if ordered:
+            labels = [LOADER_NAMES.get(p, p) for p in ordered]
+            self._platform_row.set_model(Gtk.StringList.new(labels))
+            self._platform_row.set_sensitive(True)
+            try:
+                selected = ordered.index(previous) if previous in ordered else 0
+            except Exception:
+                selected = 0
+            self._platform_row.set_selected(selected)
+        else:
+            self._platform_row.set_model(Gtk.StringList.new([_("No platforms available")]))
+            self._platform_row.set_sensitive(False)
+        self._refresh_loader_build()
+        self._validate()
+        return False
+
     def _refresh_loader_build(self):
         """Fetch selectable loader builds; default to newest/recommended."""
         self._loader_fetch_token += 1
         token = self._loader_fetch_token
         loader_type = self._selected_loader_type()
         mc_version = self._selected_mc_version()
+        platform = self._selected_platform() if loader_type == LOADER_ARCLIGHT else None
 
         self._loader_build = ""
         self._loader_version_values = []
         if not mc_version:
             self._loader_version_row.set_model(Gtk.StringList.new([_("Select a Minecraft version first")]))
+            self._loader_version_row.set_sensitive(False)
+            return
+        if loader_type == LOADER_ARCLIGHT and not platform:
+            # Platforms still loading; _on_platforms_resolved refreshes builds.
+            self._loader_version_row.set_model(Gtk.StringList.new([_("Loading...")]))
             self._loader_version_row.set_sensitive(False)
             return
 
@@ -414,9 +533,11 @@ class CreateServerDialog(Adw.Dialog):
                 builds = list(self._loader_versions)
                 default = builds[0] if builds else ""
             else:
-                builds = self._server_manager.download_manager.fetch_loader_builds(loader_type, mc_version)
+                builds = self._server_manager.download_manager.fetch_loader_builds(loader_type, mc_version, platform)
                 try:
-                    default = self._server_manager.download_manager.resolve_loader_build(loader_type, mc_version)
+                    default = self._server_manager.download_manager.resolve_loader_build(
+                        loader_type, mc_version, platform=platform
+                    )
                 except Exception:
                     default = ""
                 if not default and builds:
@@ -454,14 +575,18 @@ class CreateServerDialog(Adw.Dialog):
     def _on_mc_version_changed(self, row, _pspec):
         """Handle MC version selection change."""
         idx = row.get_selected()
-        if idx < len(self._game_versions):
-            mc_ver = self._game_versions[idx]
+        versions = self._mc_versions_for_loader()
+        if 0 <= idx < len(versions):
+            mc_ver = versions[idx]
             java_ver = get_required_java_version(mc_ver)
             self._select_java_version(java_ver)
 
         # Requirement/selection may have changed; re-tint items and move checkmark
         self._refresh_java_item_state()
-        self._refresh_loader_build()
+        if self._selected_loader_type() == LOADER_ARCLIGHT:
+            self._refresh_platforms()
+        else:
+            self._refresh_loader_build()
         self._validate()
 
     def _select_java_version(self, java_ver: int) -> None:
@@ -658,7 +783,7 @@ class CreateServerDialog(Adw.Dialog):
     def _validate(self, *args):
         """Validate current step and update primary action state."""
         name = self._name_entry.get_text().strip()
-        has_versions = len(self._game_versions) > 0
+        has_versions = len(self._mc_versions_for_loader()) > 0
         page = self._stack.get_visible_child_name()
 
         if page == "details":
@@ -672,7 +797,8 @@ class CreateServerDialog(Adw.Dialog):
             self._cancel_btn.set_label(_("Back"))
             self._cancel_btn.set_sensitive(True)
             self._create_btn.set_label(_("Create"))
-            self._create_btn.set_sensitive(bool(name) and has_versions and bool(self._loader_build))
+            arclight_ok = self._selected_loader_type() != LOADER_ARCLIGHT or bool(self._selected_platform())
+            self._create_btn.set_sensitive(bool(name) and has_versions and bool(self._loader_build) and arclight_ok)
             return
 
         self._cancel_btn.set_label(_("Cancel"))
@@ -698,6 +824,7 @@ class CreateServerDialog(Adw.Dialog):
         mc_version = self._selected_mc_version()
         loader_type = self._selected_loader_type()
         loader_version = self._selected_loader_version() or self._loader_build
+        platform = self._selected_platform() if loader_type == LOADER_ARCLIGHT else ""
         ram_mb = int(self._ram_row.get_value())
         seed = self._seed_entry.get_text().strip()
         difficulty_idx = self._difficulty_row.get_selected()
@@ -726,6 +853,8 @@ class CreateServerDialog(Adw.Dialog):
 
         if not name or not mc_version or not loader_version:
             return
+        if loader_type == LOADER_ARCLIGHT and not platform:
+            return
 
         # Switch to progress page
         self._stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT)
@@ -750,6 +879,7 @@ class CreateServerDialog(Adw.Dialog):
                 self._icon_source_path,
                 self._world_import_source_path,
                 install_optimisations,
+                platform,
             ),
             daemon=True,
         )
@@ -771,6 +901,7 @@ class CreateServerDialog(Adw.Dialog):
         icon_source_path,
         world_import_source_path,
         install_optimisations,
+        platform="",
     ):
         """Background installation thread."""
         from hosty.shared.utils.constants import mod_loader_name
@@ -806,6 +937,7 @@ class CreateServerDialog(Adw.Dialog):
                 loader_type=loader_type,
                 mc_version=mc_version,
                 loader_version=loader_version or None,
+                platform=platform or None,
             )
 
             if not installer_path:
@@ -821,6 +953,7 @@ class CreateServerDialog(Adw.Dialog):
                 ram_mb=ram_mb,
                 java_version=java_ver,
                 loader_type=loader_type,
+                arclight_platform=platform,
             )
 
             # Step 3.5: Download vanilla server.jar from Mojang (Fabric only;
@@ -854,6 +987,7 @@ class CreateServerDialog(Adw.Dialog):
                 server_dir=str(server_info.server_dir),
                 loader_version=loader_version if loader_version else None,
                 progress_callback=lambda frac, msg: self._update_progress(0.62 + frac * 0.24, msg, ""),
+                platform=platform or None,
             )
 
             if not success:

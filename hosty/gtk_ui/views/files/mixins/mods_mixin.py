@@ -910,6 +910,7 @@ class ModsMixin:
             managed_mods = set(self._modpack_managed_mod_map().keys())
             individual_state = self._read_individual_mod_state().get("mods", {})
             datapack_state = self._read_datapack_state().get("datapacks", {})
+            plugin_state = self._read_plugin_state().get("plugins", {})
 
             refresh_needed = False
             modpack_updates = []
@@ -1021,11 +1022,43 @@ class ModsMixin:
                     continue
                 datapack_updates.append((project_id, meta, latest))
 
+            # Check plugin updates (Arclight servers; Bukkit-family loaders)
+            plugin_updates = []
+            for project_id, meta in plugin_state.items():
+                current_version = str((meta or {}).get("version_id", "")).strip()
+                latest = modrinth_client.find_compatible_plugin_version(project_id, mc_version)
+                if not latest:
+                    continue
+
+                if not (meta or {}).get("version_number") or not (meta or {}).get("title"):
+                    title_to_record = (meta or {}).get("title")
+                    if not title_to_record:
+                        p_data = modrinth_client.get_project(project_id)
+                        if p_data:
+                            title_to_record = p_data.get("title")
+
+                    self._record_plugin_install(
+                        project_id,
+                        title_to_record or project_id,
+                        current_version,
+                        (meta or {}).get("filename"),
+                        version_number=(meta or {}).get("version_number") or latest.version_number
+                        if latest.version_id == current_version
+                        else (meta or {}).get("version_number"),
+                    )
+                    refresh_needed = True
+
+                if str(latest.version_id).strip() == current_version:
+                    continue
+                plugin_updates.append((project_id, meta, latest))
+
             if refresh_needed:
                 GLib.idle_add(self._rebuild_lists)
 
             def show_result():
-                total_updates = len(modpack_updates) + len(standalone_updates) + len(datapack_updates)
+                total_updates = (
+                    len(modpack_updates) + len(standalone_updates) + len(datapack_updates) + len(plugin_updates)
+                )
                 if total_updates == 0:
                     self._mods_update_busy = False
                     self._set_mod_update_row_subtitle(_("Update check complete"))
@@ -1034,7 +1067,7 @@ class ModsMixin:
                             _("No safe updates found ({} blocked by modpack-managed dependencies)").format(blocked)
                         )
                     else:
-                        self._toast(_("All tracked mods and datapacks are up to date"))
+                        self._toast(_("All tracked mods, plugins and datapacks are up to date"))
                     return False
 
                 lines: list[str] = []
@@ -1069,6 +1102,17 @@ class ModsMixin:
                     if len(datapack_updates) > 14:
                         lines.append(_("- and {} more datapacks").format(len(datapack_updates) - 14))
 
+                if plugin_updates:
+                    if lines:
+                        lines.append("")
+                    lines.append(_("Plugins:"))
+                    for pid, meta, newer in plugin_updates[:14]:
+                        title = str((meta or {}).get("title", "")).strip() or pid
+                        vn = str(newer.version_number or newer.version_id)
+                        lines.append(_("- {} -> {}").format(title, vn))
+                    if len(plugin_updates) > 14:
+                        lines.append(_("- and {} more plugins").format(len(plugin_updates) - 14))
+
                 listing = "\n".join(lines)
 
                 body_parts = []
@@ -1080,6 +1124,8 @@ class ModsMixin:
                     )
                 if datapack_updates:
                     body_parts.append(_("Found {} datapack update(s).").format(len(datapack_updates)))
+                if plugin_updates:
+                    body_parts.append(_("Found {} plugin update(s).").format(len(plugin_updates)))
                 if blocked > 0:
                     body_parts.append(
                         _("{} standalone update(s) were skipped because dependencies are managed by a modpack.").format(
@@ -1113,13 +1159,13 @@ class ModsMixin:
 
                     self._set_mod_update_row_subtitle(_("Updating mods..."))
                     self._toast(
-                        _("Updating {} modpack(s), {} mod(s), and {} datapack(s)").format(
-                            len(modpack_updates), len(standalone_updates), len(datapack_updates)
+                        _("Updating {} modpack(s), {} mod(s), {} datapack(s) and {} plugin(s)").format(
+                            len(modpack_updates), len(standalone_updates), len(datapack_updates), len(plugin_updates)
                         )
                     )
                     threading.Thread(
                         target=self._apply_mod_updates,
-                        args=(modpack_updates, standalone_updates, op_token, datapack_updates),
+                        args=(modpack_updates, standalone_updates, op_token, datapack_updates, plugin_updates),
                         daemon=True,
                     ).start()
 
@@ -1137,6 +1183,7 @@ class ModsMixin:
         standalone_updates: list,
         mod_operation_token: str | None = None,
         datapack_updates: list | None = None,
+        plugin_updates: list | None = None,
     ) -> None:
         from hosty.shared.backend import modrinth_client
 
@@ -1306,6 +1353,37 @@ class ModsMixin:
             except Exception:
                 failed += 1
 
+        # Apply plugin updates.
+        for index, (project_id, meta, latest) in enumerate(plugin_updates or [], start=1):
+            plugin_title = str((meta or {}).get("title", "")).strip() or project_id
+            GLib.idle_add(
+                lambda i=index, total=len(plugin_updates or []), t=plugin_title: self._set_mod_update_row_subtitle(
+                    _("Updating plugin {}/{}: {}").format(i, total, t)
+                )
+            )
+            try:
+                plugins_dir = self._plugins_dir()
+                if not plugins_dir:
+                    raise RuntimeError("This server does not support plugins.")
+                plugins_dir.mkdir(parents=True, exist_ok=True)
+                old_filename = str((meta or {}).get("filename", "")).strip()
+                dest = plugins_dir / latest.filename
+                modrinth_client.download_to(latest.download_url, dest, expected_hashes=latest.hashes)
+                if old_filename and old_filename.lower() != latest.filename.lower():
+                    old_path = plugins_dir / old_filename
+                    if old_path.exists():
+                        old_path.unlink(missing_ok=True)
+                self._record_plugin_install(
+                    project_id,
+                    plugin_title,
+                    latest.version_id,
+                    latest.filename,
+                    version_number=latest.version_number,
+                )
+                applied += 1
+            except Exception:
+                failed += 1
+
         def finish_ui():
             self._mods_update_busy = False
             self._set_mod_update_row_subtitle(_("Update check complete"))
@@ -1372,6 +1450,203 @@ class ModsMixin:
         def on_response(_d, response):
             if response == "delete":
                 do_delete()
+
+        dialog.connect("response", on_response)
+        dialog.present(self.get_root())
+
+    # ----- Bukkit plugins (Arclight servers, plugins/ directory) -----
+
+    def _plugin_state_path(self) -> Path | None:
+        root = self._server_dir()
+        if not root:
+            return None
+        return root / ".hosty-plugin-installs.json"
+
+    def _read_plugin_state(self) -> dict:
+        path = self._plugin_state_path()
+        if not path or not path.exists():
+            return {"plugins": {}}
+        try:
+            with open(path, encoding="utf-8") as f:
+                raw = json.load(f)
+            if not isinstance(raw, dict):
+                return {"plugins": {}}
+            plugins_raw = raw.get("plugins") if isinstance(raw.get("plugins"), dict) else {}
+            cleaned: dict[str, dict[str, str]] = {}
+            for project_id, item in plugins_raw.items():
+                pid = str(project_id).strip()
+                if not pid or not isinstance(item, dict):
+                    continue
+                filename = str(item.get("filename", "")).strip()
+                if not filename:
+                    continue
+                cleaned[pid] = {
+                    "title": str(item.get("title", "")).strip(),
+                    "version_id": str(item.get("version_id", "")).strip(),
+                    "version_number": str(item.get("version_number", "")).strip(),
+                    "filename": filename,
+                }
+            return {"plugins": cleaned}
+        except Exception:
+            return {"plugins": {}}
+
+    def _write_plugin_state(self, state: dict) -> bool:
+        path = self._plugin_state_path()
+        if not path:
+            return False
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def _record_plugin_install(
+        self,
+        project_id: str,
+        title: str,
+        version_id: str,
+        filename: str,
+        version_number: str = "",
+    ) -> None:
+        pid = str(project_id).strip()
+        if not pid:
+            return
+        state = self._read_plugin_state()
+        plugins = state.setdefault("plugins", {})
+        plugins[pid] = {
+            "title": str(title or "").strip(),
+            "version_id": str(version_id or "").strip(),
+            "version_number": str(version_number or "").strip(),
+            "filename": str(filename or "").strip(),
+        }
+        self._write_plugin_state(state)
+
+    def _is_plugin_installed(self, project_id: str) -> bool:
+        pid = str(project_id).strip()
+        if not pid:
+            return False
+        return pid in self._read_plugin_state().get("plugins", {})
+
+    def _remove_plugin_from_state(self, removed_filename: str) -> None:
+        key = str(removed_filename).strip().lower()
+        if not key:
+            return
+        state = self._read_plugin_state()
+        plugins = dict(state.get("plugins", {}))
+        kept = {
+            pid: meta for pid, meta in plugins.items() if str((meta or {}).get("filename", "")).strip().lower() != key
+        }
+        if kept != plugins:
+            self._write_plugin_state({"plugins": kept})
+
+    def _plugins_dir(self) -> Path | None:
+        """Return the server's plugins/ directory (Arclight hybrid servers)."""
+        from hosty.shared.utils.constants import supports_plugins
+
+        root = self._server_dir()
+        if not root:
+            return None
+        if self._server_info is not None and not supports_plugins(getattr(self._server_info, "loader_type", None)):
+            return None
+        return root / "plugins"
+
+    def _make_plugin_row(self, jar: Path) -> Adw.ActionRow:
+        filename_lower = jar.name.lower()
+        plugin_state = self._read_plugin_state().get("plugins", {})
+
+        project_id = None
+        version_id = None
+        version_number = None
+        plugin_title = None
+        for pid, meta in plugin_state.items():
+            if str(meta.get("filename", "")).lower() == filename_lower:
+                project_id = pid
+                version_id = meta.get("version_id")
+                version_number = meta.get("version_number")
+                plugin_title = meta.get("title")
+                break
+
+        row = Adw.ActionRow(title=plugin_title or jar.name)
+        subtitle_bits = [_format_size(jar.stat().st_size)]
+        if version_number:
+            subtitle_bits.append(_("version {}").format(version_number))
+        elif version_id:
+            subtitle_bits.append(_("version {}").format(version_id[:8]))
+        row.set_subtitle(" · ".join(subtitle_bits))
+        row.set_activatable(False)
+
+        if project_id:
+            open_btn = self._icon_button(
+                "web-browser-symbolic",
+                _("Open plugin page"),
+                lambda *_p, pid=project_id: _open_uri(f"https://modrinth.com/plugin/{pid}"),
+            )
+            row.add_suffix(open_btn)
+
+        del_btn = self._icon_button(
+            "user-trash-symbolic",
+            _("Delete plugin"),
+            lambda *_p, p=jar, n=jar.name: self._confirm_delete_plugin(p, n),
+            destructive=True,
+        )
+        row.add_suffix(del_btn)
+        return row
+
+    def _make_plugin_row_from_meta(self, project_id: str, meta: dict, plugins_dir: Path) -> Adw.ActionRow | None:
+        """Row for a tracked plugin; falls back to a missing-file row."""
+        filename = str((meta or {}).get("filename", "")).strip()
+        if filename:
+            direct = plugins_dir / filename
+            if direct.is_file():
+                return self._make_plugin_row(direct)
+            lowered = filename.lower()
+            for jar in plugins_dir.glob("*.jar"):
+                if jar.name.lower() == lowered:
+                    return self._make_plugin_row(jar)
+        title = str((meta or {}).get("title", "")).strip() or project_id
+        row = Adw.ActionRow(title=title, subtitle=_("File missing"))
+        row.set_activatable(False)
+        forget_btn = self._icon_button(
+            "user-trash-symbolic",
+            _("Remove plugin record"),
+            lambda *_p, pid=project_id, fn=filename: self._forget_plugin_record(pid, fn),
+            destructive=True,
+        )
+        row.add_suffix(forget_btn)
+        return row
+
+    def _forget_plugin_record(self, project_id: str, filename: str) -> None:
+        state = self._read_plugin_state()
+        plugins = dict(state.get("plugins", {}))
+        plugins.pop(str(project_id).strip(), None)
+        self._write_plugin_state({"plugins": plugins})
+        self._rebuild_lists()
+        self._toast(_("Removed {}").format(str(filename).strip() or project_id))
+
+    def _confirm_delete_plugin(self, path: Path, name: str):
+        if self._is_running():
+            self._alert(_("Server is running"), _("Stop the server before removing plugins."))
+            return
+
+        dialog = Adw.AlertDialog()
+        dialog.set_heading(_("Delete plugin?"))
+        dialog.set_body(_("Remove \u201c{}\u201d?").format(name))
+        dialog.add_response("cancel", _("Cancel"))
+        dialog.add_response("delete", _("Delete"))
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+
+        def on_response(_d, response):
+            if response == "delete":
+                self._soft_delete_with_undo(
+                    path,
+                    _('plugin "{}"').format(name),
+                    on_refresh=self._rebuild_lists,
+                    on_finalize=lambda: self._remove_plugin_from_state(name),
+                )
 
         dialog.connect("response", on_response)
         dialog.present(self.get_root())

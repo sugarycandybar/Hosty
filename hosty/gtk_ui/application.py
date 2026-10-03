@@ -259,6 +259,15 @@ class HostyApplication(Adw.Application):
         action_delete.connect("activate", self._on_delete_server)
         self.add_action(action_delete)
 
+        # Reorder servers in the sidebar (parameterized)
+        action_move_up = Gio.SimpleAction.new("move-server-up", GLib.VariantType.new("s"))
+        action_move_up.connect("activate", self._on_move_server_up)
+        self.add_action(action_move_up)
+
+        action_move_down = Gio.SimpleAction.new("move-server-down", GLib.VariantType.new("s"))
+        action_move_down.connect("activate", self._on_move_server_down)
+        self.add_action(action_move_down)
+
         # Keyboard shortcuts
         self.set_accels_for_action("app.new-server", ["<Primary>n"])
         self.set_accels_for_action("app.preferences", ["<Primary>comma"])
@@ -472,6 +481,14 @@ class HostyApplication(Adw.Application):
 
         dialog.connect("response", on_response)
         dialog.present(self._window)
+
+    def _on_move_server_up(self, action, param):
+        """Move a server one slot up in the sidebar."""
+        self._server_manager.move_server_up(param.get_string())
+
+    def _on_move_server_down(self, action, param):
+        """Move a server one slot down in the sidebar."""
+        self._server_manager.move_server_down(param.get_string())
 
     def _on_instance_show_requested(self):
         """Bring the window to front when signalled by a second instance."""

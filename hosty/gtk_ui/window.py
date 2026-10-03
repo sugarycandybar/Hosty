@@ -401,6 +401,7 @@ class HostyWindow(Adw.ApplicationWindow):
                             bedrock_port=br_port,
                             voicechat_port=vc_port,
                             loader=info.loader_type,
+                            platform=getattr(info, "arclight_platform", ""),
                         )
                     except Exception:
                         logger.exception("playit mod config verify failed for server %s", server_id)

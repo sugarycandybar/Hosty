@@ -23,12 +23,15 @@ from hosty.shared.core.events import EventEmitter
 from hosty.shared.utils.constants import (
     CONFIG_FILE,
     DEFAULT_RAM_MB,
+    LOADER_ARCLIGHT,
     LOADER_FABRIC,
     SERVERS_DIR,
     ServerStatus,
     content_dir_name,
+    effective_mod_loader,
     get_required_java_version,
     mod_loader_name,
+    normalize_arclight_platform,
     normalize_loader_type,
 )
 from hosty.shared.utils.file_utils import atomic_write_json
@@ -45,6 +48,7 @@ class ServerInfo:
         self.mc_version: str = data.get("mc_version", "")
         self.loader_type: str = normalize_loader_type(data.get("loader_type"))
         self.loader_version: str = data.get("loader_version", "")
+        self.arclight_platform: str = str(data.get("arclight_platform", "") or "").strip().lower()
         self.ram_mb: int = data.get("ram_mb", DEFAULT_RAM_MB)
         self.java_version: int = data.get("java_version", 21)
         self.jvm_args: str = data.get("jvm_args", "")
@@ -52,6 +56,10 @@ class ServerInfo:
         self.created_at: str = data.get("created_at", datetime.now().isoformat())
         self.path: str = data.get("path", "")
         self.autostart: bool = data.get("autostart", False)
+        try:
+            self.position: int = int(data.get("position", 0))
+        except (TypeError, ValueError):
+            self.position = 0
 
     @property
     def server_dir(self) -> Path:
@@ -67,6 +75,7 @@ class ServerInfo:
             "mc_version": self.mc_version,
             "loader_type": self.loader_type,
             "loader_version": self.loader_version,
+            "arclight_platform": self.arclight_platform,
             "ram_mb": self.ram_mb,
             "java_version": self.java_version,
             "jvm_args": self.jvm_args,
@@ -74,6 +83,7 @@ class ServerInfo:
             "created_at": self.created_at,
             "path": str(self.server_dir),
             "autostart": self.autostart,
+            "position": self.position,
         }
 
 
@@ -162,8 +172,8 @@ class ServerManager(EventEmitter):
 
     @property
     def servers(self) -> list[ServerInfo]:
-        """Get all servers sorted by creation date."""
-        return sorted(self._servers.values(), key=lambda s: s.created_at)
+        """Get all servers in sidebar order (manual position, then creation date)."""
+        return sorted(self._servers.values(), key=lambda s: (s.position, s.created_at))
 
     def get_server(self, server_id: str) -> ServerInfo | None:
         """Get a server by ID."""
@@ -177,6 +187,7 @@ class ServerManager(EventEmitter):
         ram_mb: int = DEFAULT_RAM_MB,
         java_version: int | None = None,
         loader_type: str = LOADER_FABRIC,
+        arclight_platform: str = "",
     ) -> ServerInfo:
         """
         Create and register a new server.
@@ -184,17 +195,23 @@ class ServerManager(EventEmitter):
         """
         server_id = str(uuid.uuid4())
         java_ver = java_version if java_version is not None else get_required_java_version(mc_version)
+        normalized_loader = normalize_loader_type(loader_type)
+        existing_positions = [s.position for s in self._servers.values()]
 
         info = ServerInfo(
             {
                 "id": server_id,
                 "name": name,
                 "mc_version": mc_version,
-                "loader_type": normalize_loader_type(loader_type),
+                "loader_type": normalized_loader,
                 "loader_version": loader_version,
+                "arclight_platform": (
+                    normalize_arclight_platform(arclight_platform) if normalized_loader == LOADER_ARCLIGHT else ""
+                ),
                 "ram_mb": ram_mb,
                 "java_version": java_ver,
                 "path": str(SERVERS_DIR / server_id),
+                "position": (max(existing_positions) + 1) if existing_positions else 0,
             }
         )
 
@@ -214,6 +231,46 @@ class ServerManager(EventEmitter):
             info.name = new_name
             self._save()
             self.emit_on_main_thread("server-changed", server_id)
+
+    def _normalize_positions(self) -> list[ServerInfo]:
+        """Assign dense 0..n positions following the current order.
+
+        Used before manual reordering so legacy servers (all position 0)
+        keep their relative order instead of collapsing onto one slot.
+        """
+        ordered = self.servers
+        for index, info in enumerate(ordered):
+            info.position = index
+        return ordered
+
+    def move_server(self, server_id: str, direction: int) -> bool:
+        """Move a server up (direction=-1) or down (+1) in sidebar order.
+
+        Returns True when the order changed.
+        """
+        if direction == 0 or server_id not in self._servers:
+            return False
+        ordered = self._normalize_positions()
+        index = next((i for i, s in enumerate(ordered) if s.id == server_id), None)
+        if index is None:
+            return False
+        neighbor = index - 1 if direction < 0 else index + 1
+        if neighbor < 0 or neighbor >= len(ordered):
+            # Persist the normalization so legacy 0-positions become dense.
+            self._save()
+            return False
+        ordered[index].position, ordered[neighbor].position = ordered[neighbor].position, ordered[index].position
+        self._save()
+        self.emit_on_main_thread("servers-reordered")
+        return True
+
+    def move_server_up(self, server_id: str) -> bool:
+        """Move a server one slot up. Returns True when the order changed."""
+        return self.move_server(server_id, -1)
+
+    def move_server_down(self, server_id: str) -> bool:
+        """Move a server one slot down. Returns True when the order changed."""
+        return self.move_server(server_id, 1)
 
     def set_server_icon(self, server_id: str, icon_path: str):
         """Set the icon for a server.
@@ -340,6 +397,7 @@ class ServerManager(EventEmitter):
         loader_version: str | None = None,
         progress_callback=None,
         compatibility_plan: dict | None = None,
+        arclight_platform: str | None = None,
     ) -> tuple[bool, str]:
         """Install a new runtime for the server's loader and update/isolate content."""
         from hosty.shared.utils.constants import get_required_java_version
@@ -361,18 +419,22 @@ class ServerManager(EventEmitter):
 
         loader_type = normalize_loader_type(info.loader_type)
         loader_name = mod_loader_name(loader_type)
+        if loader_type == LOADER_ARCLIGHT and arclight_platform:
+            info.arclight_platform = normalize_arclight_platform(arclight_platform)
+        platform = normalize_arclight_platform(info.arclight_platform) if loader_type == LOADER_ARCLIGHT else ""
         installed_loader = str(info.loader_version or "").strip()
         target_loader = str(loader_version or "").strip()
         if (
             installed_loader
             and target_loader
             and target_loader != installed_loader
-            and not self.is_loader_version_newer(target_loader, installed_loader)
+            and not self.is_loader_version_newer(target_loader, installed_loader, loader_type)
         ):
             # Fabric versions are global, so an older Fabric build is a
             # downgrade regardless of MC version. Other loaders are
             # branch-specific (NeoForge/Paper/Forge per-MC builds), so only
-            # the same-MC case is a comparable downgrade.
+            # the same-MC case is a comparable downgrade. (Arclight builds
+            # are unordered snapshots, so any different build is allowed.)
             if loader_type == LOADER_FABRIC or mc_version == info.mc_version:
                 return False, _("Selected loader version is older than the installed version")
 
@@ -407,18 +469,20 @@ class ServerManager(EventEmitter):
             loader_type=loader_type,
             mc_version=mc_version,
             loader_version=loader_version or None,
+            platform=platform or None,
         )
         if not installer_path:
             return False, _("Failed to download {} installer").format(loader_name)
 
-        for filename in ("server.jar", "fabric-server-launch.jar", "paper-server.jar"):
+        for filename in ("server.jar", "fabric-server-launch.jar", "paper-server.jar", "arclight-server.jar"):
             try:
                 (root / filename).unlink(missing_ok=True)
             except Exception:
                 pass
 
         # Fabric needs the vanilla server.jar pre-placed; Forge/NeoForge
-        # installers fetch their own Minecraft files.
+        # installers fetch their own Minecraft files, and Paper/Arclight jars
+        # are ready to run.
         if loader_type == LOADER_FABRIC:
             progress(0.42, _("Downloading Minecraft {} server").format(mc_version))
             ok, msg = self.download_manager.download_server_jar(
@@ -441,6 +505,7 @@ class ServerManager(EventEmitter):
             server_dir=str(root),
             loader_version=loader_version or None,
             progress_callback=lambda f, text: progress(0.66 + f * 0.30, text),
+            platform=platform or None,
         )
         if not ok:
             return False, msg
@@ -555,12 +620,35 @@ class ServerManager(EventEmitter):
         return cls.version_sort_key(candidate) > cls.version_sort_key(current)
 
     @staticmethod
-    def is_loader_version_newer(candidate: str | None, current: str | None) -> bool:
+    def filter_upgrade_builds(builds: list[str], current: str | None, loader_type: str | None = None) -> list[str]:
+        """Same-version upgrade candidates from a newest-first build list.
+
+        Only strictly newer builds are kept (the installed one and anything
+        older is hidden so a downgrade can't be picked). Arclight builds are
+        unordered git-SHA snapshots, so "newer" means appearing *earlier* in
+        the API's newest-first listing. When the installed build is not in
+        the list (e.g. pruned snapshots), everything is kept.
+        """
+        ordered = [str(b).strip() for b in (builds or []) if str(b).strip()]
+        if normalize_loader_type(loader_type) == LOADER_ARCLIGHT:
+            installed = str(current or "").strip()
+            if installed and installed in ordered:
+                return ordered[: ordered.index(installed)]
+            return list(ordered)
+        return [b for b in ordered if ServerManager.is_loader_version_newer(b, current, loader_type)]
+
+    @staticmethod
+    def is_loader_version_newer(candidate: str | None, current: str | None, loader_type: str | None = None) -> bool:
         """True when ``candidate`` is a newer loader build than ``current``.
 
         Empty candidates never count as updates. An empty current version
         counts as outdated whenever a candidate build exists, so servers
         missing a stored loader version still offer the update.
+
+        Arclight builds are git-SHA snapshots (e.g.
+        ``1.0.2-SNAPSHOT-d27101f``) with no reliable string ordering, so any
+        different build counts as an update and ordering comes from the
+        API's newest-first listing instead.
         """
         latest = str(candidate or "").strip()
         installed = str(current or "").strip()
@@ -570,6 +658,8 @@ class ServerManager(EventEmitter):
             return True
         if latest == installed:
             return False
+        if normalize_loader_type(loader_type) == LOADER_ARCLIGHT:
+            return True
         return ServerManager.is_version_after(latest, installed)
 
     def check_runtime_updates(self, server_id: str) -> dict:
@@ -593,16 +683,27 @@ class ServerManager(EventEmitter):
             games = self.download_manager.fetch_game_versions()
         except Exception:
             games = []
+        if normalize_loader_type(info.loader_type) == LOADER_ARCLIGHT:
+            try:
+                games = self.download_manager.fetch_arclight_mc_versions() or games
+            except Exception:
+                pass
         has_mc = any(self.is_version_after(v, info.mc_version) for v in (games or []))
         try:
-            latest_loader = self.download_manager.resolve_loader_build(info.loader_type, info.mc_version)
+            latest_loader = self.download_manager.resolve_loader_build(
+                info.loader_type,
+                info.mc_version,
+                platform=normalize_arclight_platform(info.arclight_platform)
+                if normalize_loader_type(info.loader_type) == LOADER_ARCLIGHT
+                else None,
+            )
         except Exception:
             latest_loader = ""
         return {
             "game_versions": games or [],
             "has_mc_update": bool(has_mc),
             "latest_loader": str(latest_loader or ""),
-            "has_loader_update": self.is_loader_version_newer(latest_loader, info.loader_version),
+            "has_loader_update": self.is_loader_version_newer(latest_loader, info.loader_version, info.loader_type),
         }
 
     def update_candidate_versions(self, server_id: str, game_versions: list[str] | None = None) -> list[str]:
@@ -632,6 +733,14 @@ class ServerManager(EventEmitter):
     def _tracked_mod_state(self, root: Path) -> dict:
         data = self._json_file(root / ".hosty-mod-installs.json")
         return data.get("mods") if isinstance(data.get("mods"), dict) else {}
+
+    def _tracked_plugin_state(self, root: Path) -> dict:
+        """Tracked Bukkit plugin installs (Arclight servers, plugins/ directory)."""
+        data = self._json_file(root / ".hosty-plugin-installs.json")
+        return data.get("plugins") if isinstance(data.get("plugins"), dict) else {}
+
+    def _write_plugin_state(self, root: Path, plugins: dict) -> None:
+        self._write_json_file(root / ".hosty-plugin-installs.json", {"plugins": plugins})
 
     def _tracked_modpack_state(self, root: Path) -> dict:
         data = self._json_file(root / ".hosty-modpacks.json")
@@ -744,16 +853,16 @@ class ServerManager(EventEmitter):
         """Return compatible/incompatible tracked content for a target Minecraft version."""
         info = self._servers.get(server_id)
         if not info:
-            empty = {"mods": [], "modpacks": [], "datapacks": []}
+            empty = {"mods": [], "modpacks": [], "datapacks": [], "plugins": []}
             return {"compatible": empty.copy(), "incompatible": empty.copy(), "unknown": empty.copy()}
 
         from hosty.shared.backend import modrinth_client
 
         root = info.server_dir
         plan = {
-            "compatible": {"mods": [], "modpacks": [], "datapacks": []},
-            "incompatible": {"mods": [], "modpacks": [], "datapacks": []},
-            "unknown": {"mods": [], "modpacks": [], "datapacks": []},
+            "compatible": {"mods": [], "modpacks": [], "datapacks": [], "plugins": []},
+            "incompatible": {"mods": [], "modpacks": [], "datapacks": [], "plugins": []},
+            "unknown": {"mods": [], "modpacks": [], "datapacks": [], "plugins": []},
         }
 
         def best_version(project_id: str, kind: str):
@@ -763,10 +872,17 @@ class ServerManager(EventEmitter):
                 return None
             if not versions:
                 return None
-            loader = normalize_loader_type(info.loader_type)
+            loader = effective_mod_loader(info.loader_type, info.arclight_platform)
             loader_l = loader.lower()
             if kind == "datapacks":
                 candidates = [v for v in versions if not (v.loaders or [])]
+            elif kind == "plugins":
+                candidates = [
+                    v
+                    for v in versions
+                    if not (v.loaders or [])
+                    or any(x.lower() in modrinth_client.BUKKIT_FAMILY_LOADERS for x in (v.loaders or []))
+                ]
             elif kind == "modpacks":
                 loader_candidates = [v for v in versions if loader_l in [x.lower() for x in (v.loaders or [])]]
                 candidates = loader_candidates or versions
@@ -806,6 +922,21 @@ class ServerManager(EventEmitter):
                 )
             else:
                 plan["compatible"]["mods"].append(self._version_entry(str(project_id), meta, version))
+
+        for project_id, meta in self._tracked_plugin_state(root).items():
+            if not isinstance(meta, dict):
+                continue
+            version = best_version(str(project_id), "plugins")
+            if version is False:
+                plan["incompatible"]["plugins"].append(
+                    self._incompatible_entry(str(project_id), meta, target_mc_version, "plugin")
+                )
+            elif version is None:
+                plan["unknown"]["plugins"].append(
+                    self._incompatible_entry(str(project_id), meta, target_mc_version, "plugin")
+                )
+            else:
+                plan["compatible"]["plugins"].append(self._version_entry(str(project_id), meta, version))
 
         for project_id, meta in self._tracked_datapack_state(root).items():
             if not isinstance(meta, dict):
@@ -944,7 +1075,7 @@ class ServerManager(EventEmitter):
                     continue
 
                 deps = modrinth_client.resolve_required_dependencies(
-                    version_id, target_mc_version, normalize_loader_type(info.loader_type)
+                    version_id, target_mc_version, effective_mod_loader(info.loader_type, info.arclight_platform)
                 )
                 for dep in deps:
                     dep_name = Path(str(dep.filename)).name
@@ -987,6 +1118,35 @@ class ServerManager(EventEmitter):
             except Exception:
                 failed += 1
 
+        plugin_state = self._tracked_plugin_state(root)
+        plugins_dir = root / "plugins"
+        if compatible.get("plugins"):
+            plugins_dir.mkdir(parents=True, exist_ok=True)
+        for entry in compatible.get("plugins", []) or []:
+            try:
+                project_id = str(entry.get("project_id", "")).strip()
+                version_id = str(entry.get("version_id", "")).strip()
+                filename = Path(str(entry.get("filename", ""))).name
+                download_url = str(entry.get("download_url", "")).strip()
+                if not project_id or not version_id or not filename or not download_url:
+                    continue
+                modrinth_client.download_to(download_url, plugins_dir / filename)
+                old_filename = str(entry.get("current_filename", "")).strip()
+                if old_filename and Path(old_filename).name.casefold() != filename.casefold():
+                    old = self._find_file_case_insensitive(plugins_dir, old_filename)
+                    if old:
+                        old.unlink(missing_ok=True)
+                plugin_state[project_id] = {
+                    "title": str(entry.get("title", "")),
+                    "version_id": version_id,
+                    "version_number": str(entry.get("version_number", "")),
+                    "filename": filename,
+                }
+                self._write_plugin_state(root, plugin_state)
+                applied += 1
+            except Exception:
+                failed += 1
+
         dp_state = self._tracked_datapack_state(root)
         for entry in compatible.get("datapacks", []) or []:
             try:
@@ -1021,19 +1181,20 @@ class ServerManager(EventEmitter):
         target_mc_version: str,
         plan: dict | None = None,
     ) -> dict[str, list[dict[str, str]]]:
-        """Move tracked Modrinth mods/modpack files/datapacks that lack a compatible target version."""
+        """Move tracked Modrinth mods/modpack files/plugins/datapacks that lack a compatible target version."""
         info = self._servers.get(server_id)
         if not info:
-            return {"mods": [], "modpacks": [], "datapacks": []}
+            return {"mods": [], "modpacks": [], "datapacks": [], "plugins": []}
 
         root = info.server_dir
         mods_dir = root / content_dir_name(info.loader_type)
         datapacks_dir = self._server_datapacks_dir(root)
         disabled_mods = root / "mods_incompatible"
         disabled_datapacks = root / "datapacks_incompatible"
+        disabled_plugins = root / "plugins_incompatible"
         plan = plan or self.scan_update_compatibility(server_id, target_mc_version)
         incompatible = plan.get("incompatible") if isinstance(plan.get("incompatible"), dict) else {}
-        record: dict[str, list[dict[str, str]]] = {"mods": [], "modpacks": [], "datapacks": []}
+        record: dict[str, list[dict[str, str]]] = {"mods": [], "modpacks": [], "datapacks": [], "plugins": []}
 
         mod_state_path = root / ".hosty-mod-installs.json"
         mods = self._tracked_mod_state(root)
@@ -1051,6 +1212,22 @@ class ServerManager(EventEmitter):
                 record["mods"].append(new_entry)
         if kept_mods != mods:
             self._write_json_file(mod_state_path, {"mods": kept_mods})
+
+        plugins = self._tracked_plugin_state(root)
+        kept_plugins = dict(plugins)
+        for entry in incompatible.get("plugins", []) or []:
+            project_id = str(entry.get("project_id", "")).strip()
+            meta = plugins.get(project_id)
+            if not isinstance(meta, dict):
+                continue
+            moved = self._move_if_present(root / "plugins", str(meta.get("filename", "")), disabled_plugins)
+            if moved:
+                kept_plugins.pop(project_id, None)
+                new_entry = dict(entry)
+                new_entry["filename"] = moved.name
+                record["plugins"].append(new_entry)
+        if kept_plugins != plugins:
+            self._write_plugin_state(root, kept_plugins)
 
         pack_state_path = root / ".hosty-modpacks.json"
         packs = self._tracked_modpack_state(root)
@@ -1089,17 +1266,20 @@ class ServerManager(EventEmitter):
 
         if any(record.values()):
             previous = self.get_incompatible_components(server_id)
-            merged = {key: [*previous.get(key, []), *record.get(key, [])] for key in ("mods", "modpacks", "datapacks")}
+            merged = {
+                key: [*previous.get(key, []), *record.get(key, [])]
+                for key in ("mods", "modpacks", "datapacks", "plugins")
+            }
             self._write_json_file(root / ".hosty-incompatible-components.json", merged)
         return record
 
     def get_incompatible_components(self, server_id: str) -> dict[str, list[dict[str, str]]]:
         info = self._servers.get(server_id)
         if not info:
-            return {"mods": [], "modpacks": [], "datapacks": []}
+            return {"mods": [], "modpacks": [], "datapacks": [], "plugins": []}
         data = self._json_file(info.server_dir / ".hosty-incompatible-components.json")
         out: dict[str, list[dict[str, str]]] = {}
-        for key in ("mods", "modpacks", "datapacks"):
+        for key in ("mods", "modpacks", "datapacks", "plugins"):
             values = data.get(key) if isinstance(data.get(key), list) else []
             out[key] = [v for v in values if isinstance(v, dict)]
         return out
@@ -1134,6 +1314,7 @@ class ServerManager(EventEmitter):
                 "mods": [*data.get("mods", []), entry],
                 "modpacks": data.get("modpacks", []),
                 "datapacks": data.get("datapacks", []),
+                "plugins": data.get("plugins", []),
             }
             self._write_json_file(info.server_dir / ".hosty-incompatible-components.json", merged)
             return True
@@ -1142,9 +1323,9 @@ class ServerManager(EventEmitter):
             return False
 
     def retry_incompatible_components(self, server_id: str) -> tuple[int, int]:
-        """Reinstall parked mods that now have a compatible release.
+        """Reinstall parked mods/plugins that now have a compatible release.
 
-        Only file-less records are retried (mods that never installed, e.g.
+        Only file-less records are retried (items that never installed, e.g.
         parked tunnel requirements); version-update casualties with moved-aside
         files stay for the manual flow. Returns (restored, failed).
         """
@@ -1156,7 +1337,7 @@ class ServerManager(EventEmitter):
 
         root = info.server_dir
         mc_version = str(info.mc_version or "")
-        loader = normalize_loader_type(info.loader_type)
+        loader = effective_mod_loader(info.loader_type, info.arclight_platform)
         mods_dir = root / content_dir_name(loader)
         try:
             mods_dir.mkdir(parents=True, exist_ok=True)
@@ -1204,7 +1385,52 @@ class ServerManager(EventEmitter):
             except Exception:
                 logger.exception("failed to restore parked mod %s", pid)
                 failed += 1
+
+        plugins_dir = root / "plugins"
+        try:
+            plugins_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return restored, failed
+        for record in list(self.get_incompatible_components(server_id).get("plugins", [])):
+            if not isinstance(record, dict):
+                continue
+            pid = str(record.get("project_id", "")).strip()
+            if not pid:
+                continue
+            if str(record.get("filename", "")).strip():
+                continue
+            try:
+                if pid in self._tracked_plugin_state(root):
+                    self._forget_incompatible_record(server_id, pid)
+                    continue
+                version = modrinth_client.find_compatible_plugin_version(pid, mc_version)
+                if version is None:
+                    continue
+                filename = Path(str(version.filename or "")).name
+                if not filename:
+                    continue
+                if not (plugins_dir / filename).exists():
+                    modrinth_client.download_to(
+                        version.download_url, plugins_dir / filename, expected_hashes=version.hashes
+                    )
+                self._track_plugin_install(root, pid, record, version, filename)
+                self._forget_incompatible_record(server_id, pid)
+                restored += 1
+            except Exception:
+                logger.exception("failed to restore parked plugin %s", pid)
+                failed += 1
         return restored, failed
+
+    def _track_plugin_install(self, root: Path, project_id: str, record: dict, version, filename: str) -> None:
+        """Write a restored plugin into the tracked plugin-installs state."""
+        state = self._tracked_plugin_state(root)
+        state[str(project_id)] = {
+            "title": str(record.get("title") or project_id),
+            "version_id": str(version.version_id or ""),
+            "version_number": str(version.version_number or ""),
+            "filename": str(filename),
+        }
+        self._write_plugin_state(root, state)
 
     def _track_mod_install(self, root: Path, project_id: str, record: dict, version, filename: str) -> None:
         """Write a restored mod into the tracked installs state."""
@@ -1224,10 +1450,14 @@ class ServerManager(EventEmitter):
         if not info or not pid:
             return
         data = self.get_incompatible_components(server_id)
-        kept = [r for r in data.get("mods", []) if str(r.get("project_id", "")).strip().lower() != pid]
-        if len(kept) == len(data.get("mods", [])):
+        changed = False
+        for key in ("mods", "plugins"):
+            kept = [r for r in data.get(key, []) if str(r.get("project_id", "")).strip().lower() != pid]
+            if len(kept) != len(data.get(key, [])):
+                data[key] = kept
+                changed = True
+        if not changed:
             return
-        data["mods"] = kept
         self._write_json_file(info.server_dir / ".hosty-incompatible-components.json", data)
 
     def delete_incompatible_component(
@@ -1250,13 +1480,20 @@ class ServerManager(EventEmitter):
             "modpacks": "modpacks",
             "datapack": "datapacks",
             "datapacks": "datapacks",
+            "plugin": "plugins",
+            "plugins": "plugins",
         }
         key = aliases.get(key, key)
-        if key not in {"mods", "modpacks", "datapacks"}:
+        if key not in {"mods", "modpacks", "datapacks", "plugins"}:
             return False, _("Unknown disabled item type")
 
         root = info.server_dir
-        disabled_dir = root / ("datapacks_incompatible" if key == "datapacks" else "mods_incompatible")
+        if key == "datapacks":
+            disabled_dir = root / "datapacks_incompatible"
+        elif key == "plugins":
+            disabled_dir = root / "plugins_incompatible"
+        else:
+            disabled_dir = root / "mods_incompatible"
         data_path = root / ".hosty-incompatible-components.json"
         data = self.get_incompatible_components(server_id)
         records = data.get(key, [])
@@ -1557,6 +1794,7 @@ class ServerManager(EventEmitter):
             endpoint=_vc_endpoint,
             voicechat_port=self.get_voicechat_port(server_id),
             loader=info.loader_type,
+            platform=info.arclight_platform,
         )
 
         # Bedrock tunnels only support RakNet (NetherNet fails silently):
@@ -2204,8 +2442,15 @@ class ServerManager(EventEmitter):
         return True, backup_path.name
 
     def _cleanup_old_backups(self, server_id: str) -> None:
-        """Remove backup zips older than 30 days if the preference is enabled."""
-        if not self.preferences.auto_delete_old_backups:
+        """Enforce backup retention for a server.
+
+        Deletes backups older than the configured day limit (when > 0),
+        then trims to the max backup count, newest kept (when > 0).
+        """
+        try:
+            retention_days = int(self.preferences.backup_retention_days)
+            max_count = int(self.preferences.max_backups)
+        except Exception:
             return
         info = self.get_server(server_id)
         if not info:
@@ -2213,16 +2458,42 @@ class ServerManager(EventEmitter):
         backups_dir = info.server_dir / "hosty-backups"
         if not backups_dir.exists():
             return
-        cutoff = datetime.now(timezone.utc) - timedelta(days=30)  # noqa: UP017
-        for p in backups_dir.iterdir():
-            if p.suffix != ".zip":
-                continue
+
+        def _zip_mtime(path: Path) -> float:
             try:
-                mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)  # noqa: UP017
-                if mtime < cutoff:
-                    p.unlink()
+                return path.stat().st_mtime
             except OSError:
-                continue
+                return 0.0
+
+        try:
+            zips = [p for p in backups_dir.iterdir() if p.suffix == ".zip"]
+        except OSError:
+            return
+
+        if retention_days > 0:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)  # noqa: UP017
+            kept = []
+            for p in zips:
+                try:
+                    mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)  # noqa: UP017
+                except OSError:
+                    continue
+                if mtime < cutoff:
+                    try:
+                        p.unlink()
+                    except OSError:
+                        kept.append(p)
+                else:
+                    kept.append(p)
+            zips = kept
+
+        if max_count > 0 and len(zips) > max_count:
+            zips.sort(key=_zip_mtime, reverse=True)
+            for p in zips[max_count:]:
+                try:
+                    p.unlink()
+                except OSError:
+                    continue
 
     def restore_world_backup(self, server_id: str, zip_path: Path) -> tuple[bool, str]:
         """Restore a zip backup. If it's a full backup, it overwrites everything

@@ -79,18 +79,62 @@ PAPER_LATEST_BUILD_URL = f"{PAPER_FILL_API_BASE}/projects/paper/versions/{{mc}}/
 PAPER_BUILD_URL = f"{PAPER_FILL_API_BASE}/projects/paper/versions/{{mc}}/builds/{{build}}"
 HOSTY_USER_AGENT = f"Hosty/{APP_VERSION} (+{APP_WEBSITE})"
 
+# Arclight download API (official download site backend, see arclight.izzel.io).
+# Virtual filesystem: /arclight/minecraft -> MC versions;
+# /arclight/minecraft/{mc}/loaders -> base platforms (forge/fabric/neoforge);
+# /arclight/minecraft/{mc}/loaders/{platform}/versions-snapshot -> Arclight builds
+# (each entry carries a ``permlink`` direct-download URL and ``last-modified``).
+ARCLIGHT_FILES_API_BASES = [
+    "https://files.hypoglycemia.icu/v1/files",
+    "https://files.hypertention.cn/v1/files",
+]
+ARCLIGHT_MINECRAFT_PATH = "arclight/minecraft"
+
+
+def arclight_api_urls(path: str) -> list[str]:
+    """Return candidate API URLs for an Arclight files path (primary + fallback)."""
+    stripped = str(path or "").strip().strip("/")
+    return [f"{base}/{stripped}" for base in ARCLIGHT_FILES_API_BASES]
+
+
+def arclight_loaders_path(mc_version: str) -> str:
+    """API path listing base platforms for an Arclight Minecraft version."""
+    return f"{ARCLIGHT_MINECRAFT_PATH}/{str(mc_version or '').strip()}/loaders"
+
+
+def arclight_builds_path(mc_version: str, platform: str) -> str:
+    """API path listing Arclight builds for an MC version + base platform."""
+    return f"{arclight_loaders_path(mc_version)}/{str(platform or '').strip().lower()}/versions-snapshot"
+
+
 # Mod loaders
 LOADER_FABRIC = "fabric"
 LOADER_NEOFORGE = "neoforge"
 LOADER_FORGE = "forge"
 LOADER_PAPER = "paper"
-SUPPORTED_LOADERS = [LOADER_FABRIC, LOADER_NEOFORGE, LOADER_FORGE, LOADER_PAPER]
+LOADER_ARCLIGHT = "arclight"
+SUPPORTED_LOADERS = [LOADER_FABRIC, LOADER_NEOFORGE, LOADER_FORGE, LOADER_PAPER, LOADER_ARCLIGHT]
 LOADER_NAMES = {
     LOADER_FABRIC: _("Fabric"),
     LOADER_NEOFORGE: _("NeoForge"),
     LOADER_FORGE: _("Forge"),
     LOADER_PAPER: _("Paper"),
+    LOADER_ARCLIGHT: _("Arclight"),
 }
+
+# Base mod platforms an Arclight build can target. Arclight is a Bukkit
+# implementation on top of a mod loader, so each Minecraft version offers one
+# or more of these variants (older MC versions are Forge-only).
+ARCLIGHT_PLATFORMS = [LOADER_NEOFORGE, LOADER_FORGE, LOADER_FABRIC]
+ARCLIGHT_DEFAULT_PLATFORM = LOADER_NEOFORGE
+
+
+def normalize_arclight_platform(value: str | None) -> str:
+    """Return a known Arclight base platform, defaulting to NeoForge."""
+    value = str(value or "").strip().lower()
+    if value in (LOADER_FORGE, LOADER_FABRIC, LOADER_NEOFORGE):
+        return value
+    return ARCLIGHT_DEFAULT_PLATFORM
 
 
 def normalize_loader_type(value: str | None) -> str:
@@ -107,6 +151,43 @@ def mod_loader_name(loader_type: str | None) -> str:
 def content_dir_name(loader_type: str | None) -> str:
     """Directory (inside the server dir) where loader jars live."""
     return "plugins" if normalize_loader_type(loader_type) == LOADER_PAPER else "mods"
+
+
+def content_dir_names(loader_type: str | None) -> list[str]:
+    """All content directories (inside the server dir) for a loader type.
+
+    Arclight is a hybrid: mods live in ``mods/`` and Bukkit plugins in
+    ``plugins/`` simultaneously. Paper only has ``plugins/``.
+    """
+    loader = normalize_loader_type(loader_type)
+    if loader == LOADER_ARCLIGHT:
+        return ["mods", "plugins"]
+    if loader == LOADER_PAPER:
+        return ["plugins"]
+    return ["mods"]
+
+
+def supports_mods(loader_type: str | None) -> bool:
+    """True when the loader runs mods from ``mods/``."""
+    return normalize_loader_type(loader_type) != LOADER_PAPER
+
+
+def supports_plugins(loader_type: str | None) -> bool:
+    """True when the loader runs Bukkit plugins from ``plugins/``."""
+    return normalize_loader_type(loader_type) in (LOADER_PAPER, LOADER_ARCLIGHT)
+
+
+def effective_mod_loader(loader_type: str | None, arclight_platform: str | None = None) -> str:
+    """Modrinth loader id to use for *mod* queries/installs.
+
+    Arclight mods target its underlying base platform (e.g. a NeoForge-based
+    Arclight server runs NeoForge mods), so the platform is returned instead
+    of ``arclight`` (which Modrinth does not know).
+    """
+    loader = normalize_loader_type(loader_type)
+    if loader == LOADER_ARCLIGHT:
+        return normalize_arclight_platform(arclight_platform)
+    return loader
 
 
 # Adoptium JRE API
