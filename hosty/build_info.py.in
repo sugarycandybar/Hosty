@@ -1,0 +1,3 @@
+# Generated at build time by meson. Do not edit.
+BUILD_GIT_SHA = "@git_sha@"
+BUILD_CHANNEL = "@channel@"

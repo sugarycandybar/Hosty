@@ -16,6 +16,24 @@ APP_NAME = "Hosty"
 APP_VERSION = __version__
 APP_WEBSITE = "https://github.com/sugarycandybar/Hosty"
 
+try:
+    from hosty.build_info import BUILD_CHANNEL as APP_CHANNEL
+    from hosty.build_info import BUILD_GIT_SHA as APP_BUILD_SHA
+except Exception:
+    APP_CHANNEL = "dev"
+    APP_BUILD_SHA = "unknown"
+
+
+def _display_version() -> str:
+    if APP_CHANNEL == "beta" and APP_BUILD_SHA not in ("", "unknown"):
+        return f"{APP_VERSION} (beta {APP_BUILD_SHA})"
+    if APP_CHANNEL == "beta":
+        return f"{APP_VERSION} (beta)"
+    return APP_VERSION
+
+
+APP_VERSION_DISPLAY = _display_version()
+
 # Directories
 
 

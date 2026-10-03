@@ -8,7 +8,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 
-from hosty.shared.utils.constants import APP_ID, APP_NAME, APP_VERSION, APP_WEBSITE
+from hosty.shared.utils.constants import APP_ID, APP_NAME, APP_VERSION_DISPLAY, APP_WEBSITE
 
 
 def show_about_dialog(parent):
@@ -16,7 +16,7 @@ def show_about_dialog(parent):
     about = Adw.AboutDialog()
     about.set_application_name(APP_NAME)
     about.set_application_icon(APP_ID)
-    about.set_version(APP_VERSION)
+    about.set_version(APP_VERSION_DISPLAY)
     about.set_developer_name("Sugarycandybar")
     about.set_license_type(Gtk.License.GPL_3_0)
     about.set_comments(
