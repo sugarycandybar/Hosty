@@ -19,6 +19,7 @@ DEFAULT_SETTINGS = {
     "remote_management_enabled": False,
     "prevent_sleep_while_running": False,
     "auto_backup_on_stop": True,
+    "auto_backup_scope": "world",
     "backup_retention_days": 30,
     "max_backups": 0,
     "auto_resolve_mod_dependencies": True,
@@ -126,6 +127,21 @@ class PreferencesManager:
     @auto_backup_on_stop.setter
     def auto_backup_on_stop(self, value: bool) -> None:
         self._settings["auto_backup_on_stop"] = bool(value)
+        self._save()
+
+    #: What the stop-triggered auto backup contains.
+    AUTO_BACKUP_SCOPES = ("world", "full")
+
+    @property
+    def auto_backup_scope(self) -> str:
+        """Auto-backup content: ``world`` (world folders) or ``full`` (everything)."""
+        scope = str(self._settings.get("auto_backup_scope", "world")).strip().lower()
+        return scope if scope in self.AUTO_BACKUP_SCOPES else "world"
+
+    @auto_backup_scope.setter
+    def auto_backup_scope(self, value: str) -> None:
+        scope = str(value or "").strip().lower()
+        self._settings["auto_backup_scope"] = scope if scope in self.AUTO_BACKUP_SCOPES else "world"
         self._save()
 
     @property

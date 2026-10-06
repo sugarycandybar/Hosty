@@ -111,6 +111,16 @@ def test_retention_setters_validate(tmp_path):
     assert prefs.max_backups == 1000
 
 
+def test_auto_backup_scope(tmp_path):
+    prefs = PreferencesManager(tmp_path / "settings.json")
+    assert prefs.auto_backup_scope == "world"
+    prefs.auto_backup_scope = "full"
+    assert prefs.auto_backup_scope == "full"
+    prefs.auto_backup_scope = "bogus"
+    assert prefs.auto_backup_scope == "world"
+    assert prefs.auto_backup_on_stop is True
+
+
 def _make_backup(backups_dir: Path, name: str, age_days: float) -> Path:
     target = backups_dir / name
     target.write_bytes(b"fake-zip")

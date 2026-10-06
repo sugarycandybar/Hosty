@@ -41,7 +41,6 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._mods_group: Adw.PreferencesGroup | None = None
         self._open_mods_row: Adw.ActionRow | None = None
         self._open_plugins_row: Adw.ActionRow | None = None
-        self._check_updates_row: Adw.ActionRow | None = None
         self._mods_update_busy = False
         self._modpack_version_enrich_busy = False
         self._active_mod_operation_tokens: dict[str, str] = {}
@@ -139,7 +138,6 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         check_updates_row.set_activatable(True)
         check_updates_row.connect("activated", self._on_check_mod_updates)
         self._mods_group.add(check_updates_row)
-        self._check_updates_row = check_updates_row
 
         # "Installed Mods" collapsible section (modpacks + standalone mods)
         mods_expander = Adw.ExpanderRow(title=_("Installed Mods"))
@@ -326,6 +324,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             if self._disabled_expander:
                 info = self._add_info_row_to_expander(self._disabled_expander, _("No server folder"))
                 self._disabled_rows.append(info)
+                self._disabled_expander.set_visible(False)
             self._worlds_snapshot = tuple()
             self._disabled_snapshot = tuple()
             return
@@ -506,6 +505,8 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
             count = len(disabled_items)
             self._disabled_expander.set_subtitle(_("{} item(s)").format(count) if count else _("None disabled"))
+            # Only show the section when something was actually disabled.
+            self._disabled_expander.set_visible(count > 0)
 
         self._worlds_snapshot = self._build_worlds_snapshot()
         self._disabled_snapshot = self._build_disabled_snapshot()

@@ -61,19 +61,21 @@ def show_preferences_window(
     data_row.add_suffix(data_button)
     app_group.add(data_row)
 
-    bg_row = Adw.SwitchRow(
+    bg_expander = Adw.ExpanderRow(
         title=_("Run in background"),
     )
-    bg_row.set_active(preferences.run_in_background_on_close)
+    bg_expander.set_show_enable_switch(True)
+    bg_expander.set_enable_expansion(preferences.run_in_background_on_close)
 
     startup_row = Adw.SwitchRow(
         title=_("Open Hosty on startup"),
     )
     startup_row.set_active(preferences.open_on_startup)
     startup_row.set_sensitive(preferences.run_in_background_on_close)
+    bg_expander.add_row(startup_row)
 
     def on_bg_toggled(row, _pspec):
-        active = row.get_active()
+        active = row.get_enable_expansion()
         preferences.run_in_background_on_close = active
         startup_row.set_sensitive(active)
 
@@ -86,12 +88,12 @@ def show_preferences_window(
 
             def on_bg_response(success, bg, auto, err):
                 if not success or not bg:
-                    GLib.idle_add(row.set_active, False)
+                    GLib.idle_add(row.set_enable_expansion, False)
                     GLib.idle_add(preferences.__setattr__, "run_in_background_on_close", False)
 
             request_background(False, on_bg_response)
 
-    bg_row.connect("notify::active", on_bg_toggled)
+    bg_expander.connect("notify::enable-expansion", on_bg_toggled)
 
     def on_startup_toggled(row, _pspec):
         active = row.get_active()
@@ -108,8 +110,7 @@ def show_preferences_window(
 
     startup_row.connect("notify::active", on_startup_toggled)
 
-    app_group.add(bg_row)
-    app_group.add(startup_row)
+    app_group.add(bg_expander)
 
     prevent_sleep_row = Adw.SwitchRow(
         title=_("Prevent sleep while server is running"),
@@ -191,16 +192,46 @@ def show_preferences_window(
         title=_("Backups"),
     )
 
-    autobackup_row = Adw.SwitchRow(
-        title=_("Auto backup world on stop"),
+    scope_keys = ["world", "full"]
+    scope_names = [_("Worlds only"), _("Everything")]
+
+    backup_expander = Adw.ExpanderRow(
+        title=_("Auto backup on stop"),
     )
-    autobackup_row.set_active(preferences.auto_backup_on_stop)
+    backup_expander.set_show_enable_switch(True)
+    backup_expander.set_enable_expansion(preferences.auto_backup_on_stop)
+
+    def _backup_scope_subtitle() -> str:
+        if not preferences.auto_backup_on_stop:
+            return _("Off")
+        scope = preferences.auto_backup_scope
+        return scope_names[scope_keys.index(scope)] if scope in scope_keys else scope_names[0]
+
+    backup_expander.set_subtitle(_backup_scope_subtitle())
+
+    scope_row = Adw.ComboRow(
+        title=_("Back up"),
+        model=Gtk.StringList.new(scope_names),
+    )
+    current_scope = preferences.auto_backup_scope
+    scope_row.set_selected(scope_keys.index(current_scope) if current_scope in scope_keys else 0)
+    scope_row.set_sensitive(preferences.auto_backup_on_stop)
+    backup_expander.add_row(scope_row)
+
+    def on_backup_scope_changed(row, _pspec):
+        preferences.auto_backup_scope = scope_keys[row.get_selected()]
+        backup_expander.set_subtitle(_backup_scope_subtitle())
+
+    scope_row.connect("notify::selected", on_backup_scope_changed)
 
     def on_autobackup_toggled(row, _pspec):
-        preferences.auto_backup_on_stop = row.get_active()
+        active = row.get_enable_expansion()
+        preferences.auto_backup_on_stop = active
+        scope_row.set_sensitive(active)
+        backup_expander.set_subtitle(_backup_scope_subtitle())
 
-    autobackup_row.connect("notify::active", on_autobackup_toggled)
-    backups_group.add(autobackup_row)
+    backup_expander.connect("notify::enable-expansion", on_autobackup_toggled)
+    backups_group.add(backup_expander)
 
     from hosty.shared.backend.preferences_manager import BACKUP_RETENTION_OPTIONS
 

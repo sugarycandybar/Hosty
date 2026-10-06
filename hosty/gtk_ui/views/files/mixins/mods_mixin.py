@@ -884,10 +884,6 @@ class ModsMixin:
         d.add_response("ok", _("OK"))
         d.present(self.get_root())
 
-    def _set_mod_update_row_subtitle(self, subtitle: str) -> None:
-        if self._check_updates_row:
-            self._check_updates_row.set_subtitle(subtitle)
-
     def _on_check_mod_updates(self, *_args) -> None:
         if self._mods_update_busy:
             self._toast(_("Mod update check already running"))
@@ -900,7 +896,178 @@ class ModsMixin:
             return
 
         self._mods_update_busy = True
-        self._set_mod_update_row_subtitle(_("Checking for updates..."))
+
+        state: dict = {
+            "open": True,
+            "token": None,
+            "blocked": 0,
+            "modpacks": [],
+            "mods": [],
+            "datapacks": [],
+            "plugins": [],
+        }
+
+        dialog = Adw.Dialog()
+        dialog.set_title(_("Updates"))
+        dialog.set_content_width(460)
+        dialog.set_content_height(520)
+
+        toolbar = Adw.ToolbarView()
+        header = Adw.HeaderBar()
+        header.set_show_start_title_buttons(False)
+        header.set_show_end_title_buttons(False)
+        cancel_btn = Gtk.Button(label=_("Cancel"))
+        primary_btn = Gtk.Button(label=_("Install"))
+        primary_btn.add_css_class("suggested-action")
+        primary_btn.set_visible(False)
+        header.pack_start(cancel_btn)
+        header.pack_end(primary_btn)
+        toolbar.add_top_bar(header)
+
+        stack = Gtk.Stack()
+        stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
+
+        checking_page = Adw.StatusPage()
+        checking_page.set_icon_name("software-update-available-symbolic")
+        checking_page.set_title(_("Checking for updates..."))
+        checking_spinner = Gtk.Spinner()
+        checking_spinner.start()
+        checking_page.set_child(checking_spinner)
+        stack.add_named(checking_page, "checking")
+
+        review_page = Adw.PreferencesPage()
+        stack.add_named(review_page, "review")
+
+        progress_page = Adw.PreferencesPage()
+        progress_group = Adw.PreferencesGroup(title=_("Updating"))
+        progress_status_row = Adw.ActionRow(title=_("Preparing update"), subtitle="")
+        progress_spinner = Gtk.Spinner()
+        progress_status_row.add_suffix(progress_spinner)
+        progress_group.add(progress_status_row)
+        progress_bar = Gtk.ProgressBar()
+        progress_bar.set_margin_top(12)
+        progress_bar.set_margin_bottom(12)
+        progress_group.add(progress_bar)
+        progress_label = Gtk.Label(label="")
+        progress_label.add_css_class("dim-label")
+        progress_label.set_wrap(True)
+        progress_group.add(progress_label)
+        progress_page.add(progress_group)
+        stack.add_named(progress_page, "progress")
+
+        done_page = Adw.StatusPage()
+        stack.add_named(done_page, "done")
+
+        toolbar.set_content(stack)
+        dialog.set_child(toolbar)
+
+        def set_primary(label: str | None, sensitive: bool = True) -> None:
+            if label is None:
+                primary_btn.set_visible(False)
+                return
+            primary_btn.set_visible(True)
+            primary_btn.set_label(label)
+            primary_btn.set_sensitive(sensitive)
+
+        def show_done(icon: str, title: str, description: str) -> None:
+            done_page.set_icon_name(icon)
+            done_page.set_title(title)
+            done_page.set_description(description)
+            cancel_btn.set_visible(False)
+            set_primary(_("Close"))
+            stack.set_visible_child_name("done")
+
+        def start_install() -> None:
+            op_token = self._begin_mod_operation()
+            if not op_token:
+                self._mods_update_busy = False
+                self._alert(_("No server selected"), _("Select a server before updating mods."))
+                return
+            state["token"] = op_token
+            cancel_btn.set_sensitive(False)
+            set_primary(None)
+            progress_bar.set_fraction(0.0)
+            progress_label.set_label("")
+            progress_status_row.set_title(_("Updating"))
+            progress_status_row.set_subtitle("")
+            progress_spinner.start()
+            stack.set_visible_child_name("progress")
+
+            def on_progress(frac: float, message: str) -> None:
+                def update():
+                    progress_bar.set_fraction(max(0.0, min(1.0, float(frac))))
+                    progress_label.set_label(str(message))
+                    return False
+
+                GLib.idle_add(update)
+
+            def on_done(applied: int, failed: int) -> None:
+                if not state["open"]:
+                    return
+                progress_spinner.stop()
+                if applied == 0 and failed == 0:
+                    show_done(
+                        "dialog-information-symbolic",
+                        _("Nothing was updated"),
+                        _("No updates could be applied."),
+                    )
+                elif failed:
+                    show_done(
+                        "dialog-warning-symbolic",
+                        _("Updates finished with errors"),
+                        _("Applied {} update(s), {} failed.").format(applied, failed),
+                    )
+                else:
+                    show_done(
+                        "object-select-symbolic",
+                        _("All updates installed"),
+                        _("Applied {} update(s).").format(applied)
+                        + (
+                            _(" {} update(s) were skipped because dependencies are managed by a modpack.").format(
+                                state["blocked"]
+                            )
+                            if state["blocked"]
+                            else ""
+                        ),
+                    )
+
+            self._toast(
+                _("Updating {} modpack(s), {} mod(s), {} datapack(s) and {} plugin(s)").format(
+                    len(state["modpacks"]), len(state["mods"]), len(state["datapacks"]), len(state["plugins"])
+                )
+            )
+            threading.Thread(
+                target=self._apply_mod_updates,
+                args=(
+                    state["modpacks"],
+                    state["mods"],
+                    op_token,
+                    state["datapacks"],
+                    state["plugins"],
+                    on_progress,
+                    on_done,
+                ),
+                daemon=True,
+            ).start()
+
+        def on_cancel(*_args):
+            dialog.close()
+
+        def on_primary(*_args):
+            if stack.get_visible_child_name() == "review":
+                start_install()
+            else:
+                dialog.close()
+
+        def on_closed(*_args):
+            state["open"] = False
+            if not state["token"]:
+                self._mods_update_busy = False
+
+        cancel_btn.connect("clicked", on_cancel)
+        primary_btn.connect("clicked", on_primary)
+        dialog.connect("closed", on_closed)
+        dialog.present(self.get_root())
 
         def worker():
             from hosty.shared.backend import modrinth_client
@@ -1056,121 +1223,121 @@ class ModsMixin:
                 GLib.idle_add(self._rebuild_lists)
 
             def show_result():
+                if not state["open"]:
+                    self._mods_update_busy = False
+                    return False
+                state["blocked"] = blocked
+                state["modpacks"] = modpack_updates
+                state["mods"] = standalone_updates
+                state["datapacks"] = datapack_updates
+                state["plugins"] = plugin_updates
                 total_updates = (
                     len(modpack_updates) + len(standalone_updates) + len(datapack_updates) + len(plugin_updates)
                 )
                 if total_updates == 0:
                     self._mods_update_busy = False
-                    self._set_mod_update_row_subtitle(_("Update check complete"))
                     if blocked > 0:
-                        self._toast(
-                            _("No safe updates found ({} blocked by modpack-managed dependencies)").format(blocked)
+                        show_done(
+                            "dialog-information-symbolic",
+                            _("You're up to date"),
+                            _("No safe updates found ({} blocked by modpack-managed dependencies)").format(blocked),
                         )
                     else:
-                        self._toast(_("All tracked mods, plugins and datapacks are up to date"))
+                        show_done(
+                            "object-select-symbolic",
+                            _("You're up to date"),
+                            _("All tracked mods, plugins and datapacks are up to date"),
+                        )
                     return False
 
-                lines: list[str] = []
+                def version_line(old: str, new: str) -> str:
+                    old_v = str(old or "").strip()
+                    new_v = str(new or "").strip()
+                    if old_v and new_v:
+                        return _("{} → {}").format(old_v, new_v)
+                    return new_v or old_v
+
+                for group in state.setdefault("review_groups", []):
+                    try:
+                        review_page.remove(group)
+                    except Exception:
+                        pass
+                state["review_groups"] = []
+
+                def add_kind_group(title: str, items: list[tuple[str, str, str]]) -> None:
+                    group = Adw.PreferencesGroup(title=title)
+                    for item_title, old_v, new_v in items:
+                        row = Adw.ActionRow(title=item_title, subtitle=version_line(old_v, new_v))
+                        row.set_activatable(False)
+                        group.add(row)
+                    review_page.add(group)
+                    state["review_groups"].append(group)
+
                 if modpack_updates:
-                    lines.append(_("Modpacks:"))
-                    for pid, entry, newer in modpack_updates[:12]:
-                        title = str(entry.get("title", "")).strip() or pid
-                        vn = str(newer.version_number or newer.version_id)
-                        lines.append(_("- {} -> {}").format(title, vn))
-                    if len(modpack_updates) > 12:
-                        lines.append(_("- and {} more modpacks").format(len(modpack_updates) - 12))
-
+                    add_kind_group(
+                        _("Modpacks ({})").format(len(modpack_updates)),
+                        [
+                            (
+                                str(entry.get("title", "")).strip() or pid,
+                                str(entry.get("version_number", "")).strip(),
+                                str(newer.version_number or newer.version_id),
+                            )
+                            for pid, entry, newer in modpack_updates
+                        ],
+                    )
                 if standalone_updates:
-                    if lines:
-                        lines.append("")
-                    lines.append(_("Standalone mods:"))
-                    for pid, meta, newer, _deps in standalone_updates[:14]:
-                        title = str((meta or {}).get("title", "")).strip() or pid
-                        vn = str(newer.version_number or newer.version_id)
-                        lines.append(_("- {} -> {}").format(title, vn))
-                    if len(standalone_updates) > 14:
-                        lines.append(_("- and {} more mods").format(len(standalone_updates) - 14))
-
-                if datapack_updates:
-                    if lines:
-                        lines.append("")
-                    lines.append(_("Datapacks:"))
-                    for pid, meta, newer in datapack_updates[:14]:
-                        title = str((meta or {}).get("title", "")).strip() or pid
-                        vn = str(newer.version_number or newer.version_id)
-                        lines.append(_("- {} -> {}").format(title, vn))
-                    if len(datapack_updates) > 14:
-                        lines.append(_("- and {} more datapacks").format(len(datapack_updates) - 14))
-
+                    add_kind_group(
+                        _("Mods ({})").format(len(standalone_updates)),
+                        [
+                            (
+                                str((meta or {}).get("title", "")).strip() or pid,
+                                str((meta or {}).get("version_number", "")).strip(),
+                                str(newer.version_number or newer.version_id),
+                            )
+                            for pid, meta, newer, _deps in standalone_updates
+                        ],
+                    )
                 if plugin_updates:
-                    if lines:
-                        lines.append("")
-                    lines.append(_("Plugins:"))
-                    for pid, meta, newer in plugin_updates[:14]:
-                        title = str((meta or {}).get("title", "")).strip() or pid
-                        vn = str(newer.version_number or newer.version_id)
-                        lines.append(_("- {} -> {}").format(title, vn))
-                    if len(plugin_updates) > 14:
-                        lines.append(_("- and {} more plugins").format(len(plugin_updates) - 14))
-
-                listing = "\n".join(lines)
-
-                body_parts = []
-                if modpack_updates or standalone_updates:
-                    body_parts.append(
-                        _("Found {} modpack update(s) and {} standalone mod update(s).").format(
-                            len(modpack_updates), len(standalone_updates)
-                        )
+                    add_kind_group(
+                        _("Plugins ({})").format(len(plugin_updates)),
+                        [
+                            (
+                                str((meta or {}).get("title", "")).strip() or pid,
+                                str((meta or {}).get("version_number", "")).strip(),
+                                str(newer.version_number or newer.version_id),
+                            )
+                            for pid, meta, newer in plugin_updates
+                        ],
                     )
                 if datapack_updates:
-                    body_parts.append(_("Found {} datapack update(s).").format(len(datapack_updates)))
-                if plugin_updates:
-                    body_parts.append(_("Found {} plugin update(s).").format(len(plugin_updates)))
-                if blocked > 0:
-                    body_parts.append(
-                        _("{} standalone update(s) were skipped because dependencies are managed by a modpack.").format(
-                            blocked
-                        )
+                    add_kind_group(
+                        _("Datapacks ({})").format(len(datapack_updates)),
+                        [
+                            (
+                                str((meta or {}).get("title", "")).strip() or pid,
+                                str((meta or {}).get("version_number", "")).strip(),
+                                str(newer.version_number or newer.version_id),
+                            )
+                            for pid, meta, newer in datapack_updates
+                        ],
                     )
-                if listing:
-                    body_parts.append(listing)
-
-                dialog = Adw.AlertDialog()
-                dialog.set_heading(_("Install available updates?"))
-                dialog.set_body("\n\n".join(body_parts))
-                dialog.add_response("cancel", _("Cancel"))
-                dialog.add_response("update", _("Update"))
-                dialog.set_response_appearance("update", Adw.ResponseAppearance.SUGGESTED)
-                dialog.set_default_response("update")
-                dialog.set_close_response("cancel")
-
-                def on_response(_d, response):
-                    if response != "update":
-                        self._mods_update_busy = False
-                        self._set_mod_update_row_subtitle(_("Update check complete"))
-                        return
-
-                    op_token = self._begin_mod_operation()
-                    if not op_token:
-                        self._mods_update_busy = False
-                        self._set_mod_update_row_subtitle(_("Update check complete"))
-                        self._alert(_("No server selected"), _("Select a server before updating mods."))
-                        return
-
-                    self._set_mod_update_row_subtitle(_("Updating mods..."))
-                    self._toast(
-                        _("Updating {} modpack(s), {} mod(s), {} datapack(s) and {} plugin(s)").format(
-                            len(modpack_updates), len(standalone_updates), len(datapack_updates), len(plugin_updates)
-                        )
+                if blocked:
+                    notes = Adw.PreferencesGroup(title=_("Notes"))
+                    note = Adw.ActionRow(
+                        title=_("Skipped updates"),
+                        subtitle=_(
+                            "{} standalone update(s) were skipped because dependencies are managed by a modpack."
+                        ).format(blocked),
                     )
-                    threading.Thread(
-                        target=self._apply_mod_updates,
-                        args=(modpack_updates, standalone_updates, op_token, datapack_updates, plugin_updates),
-                        daemon=True,
-                    ).start()
+                    note.set_activatable(False)
+                    notes.add(note)
+                    review_page.add(notes)
+                    state["review_groups"].append(notes)
 
-                dialog.connect("response", on_response)
-                dialog.present(self.get_root())
+                cancel_btn.set_visible(True)
+                cancel_btn.set_sensitive(True)
+                set_primary(_("Install"))
+                stack.set_visible_child_name("review")
                 return False
 
             GLib.idle_add(show_result)
@@ -1184,50 +1351,67 @@ class ModsMixin:
         mod_operation_token: str | None = None,
         datapack_updates: list | None = None,
         plugin_updates: list | None = None,
+        progress_callback=None,
+        done_callback=None,
     ) -> None:
+        """Apply mod/modpack/datapack/plugin updates on a worker thread.
+
+        ``progress_callback(fraction, message)`` is invoked from the worker
+        thread after each item (wrap widget access in ``GLib.idle_add``).
+        ``done_callback(applied, failed)`` runs on the main thread via
+        ``finish_ui``; when given, the summary toast is skipped so the caller
+        (e.g. the update dialog) can present the result itself.
+        """
         from hosty.shared.backend import modrinth_client
+
+        def _finish_early() -> None:
+            GLib.idle_add(lambda: self._alert(_("No server selected"), _("Select a server to update mods.")))
+            GLib.idle_add(lambda: setattr(self, "_mods_update_busy", False))
+            GLib.idle_add(lambda t=mod_operation_token: self._end_mod_operation(t))
+            if done_callback is not None:
+                GLib.idle_add(lambda: done_callback(0, 0))
 
         root = self._server_dir()
         if not root:
-            GLib.idle_add(lambda: self._alert(_("No server selected"), _("Select a server to update mods.")))
-            GLib.idle_add(lambda: self._set_mod_update_row_subtitle(_("Update check complete")))
-            GLib.idle_add(lambda: setattr(self, "_mods_update_busy", False))
-            GLib.idle_add(lambda t=mod_operation_token: self._end_mod_operation(t))
+            _finish_early()
             return
 
         mods_dir = self._content_dir(root)
         if not mods_dir:
+            _finish_early()
             return
         mods_dir.mkdir(parents=True, exist_ok=True)
 
         applied = 0
         failed = 0
+        total_items = (
+            len(modpack_updates or [])
+            + len(standalone_updates or [])
+            + len(datapack_updates or [])
+            + len(plugin_updates or [])
+        )
+        done_items = 0
+
+        def _report(label: str) -> None:
+            """Forward per-item progress (called from the worker thread)."""
+            nonlocal done_items
+            if progress_callback is None or total_items <= 0:
+                return
+            done_items += 1
+            try:
+                progress_callback(min(1.0, done_items / total_items), label)
+            except Exception:
+                pass
 
         # Apply modpack updates first so pack-managed versions remain authoritative.
         for index, (project_id, entry, newer_version) in enumerate(modpack_updates, start=1):
             pack_title = str(entry.get("title", "")).strip() or project_id
-            GLib.idle_add(
-                lambda i=index, total=len(modpack_updates), t=pack_title: self._set_mod_update_row_subtitle(
-                    _("Updating modpack {}/{}: {}").format(i, total, t)
-                )
-            )
             try:
                 previous_mods = {
                     str(m).strip().lower() for m in (entry.get("mods") or []) if str(m).strip().lower().endswith(".jar")
                 }
 
-                def on_progress(done: int, total: int, rel_path: str):
-                    GLib.idle_add(
-                        lambda d=done, t=total: self._set_mod_update_row_subtitle(
-                            _("Updating {}: {}/{}").format(pack_title, d, t)
-                        )
-                    )
-
-                result = modrinth_client.install_modpack(
-                    newer_version.version_id,
-                    root,
-                    progress_callback=on_progress,
-                )
+                result = modrinth_client.install_modpack(newer_version.version_id, root)
 
                 new_managed_mods = {
                     str(m).strip().lower()
@@ -1252,17 +1436,13 @@ class ModsMixin:
                 applied += 1
             except Exception:
                 failed += 1
+            _report(_("Updating modpack {}/{}: {}").format(index, len(modpack_updates), pack_title))
 
         managed_mods = set(self._modpack_managed_mod_map().keys())
 
         # Apply standalone updates, installing required dependencies first.
         for index, (project_id, meta, latest, deps) in enumerate(standalone_updates, start=1):
             mod_title = str((meta or {}).get("title", "")).strip() or project_id
-            GLib.idle_add(
-                lambda i=index, total=len(standalone_updates), t=mod_title: self._set_mod_update_row_subtitle(
-                    _("Updating standalone mod {}/{}: {}").format(i, total, t)
-                )
-            )
             try:
                 old_name = str((meta or {}).get("filename", "")).strip()
                 deps_to_install = [dep for dep in deps if str(dep.filename).strip().lower() not in managed_mods]
@@ -1319,6 +1499,7 @@ class ModsMixin:
                 applied += 1
             except Exception:
                 failed += 1
+            _report(_("Updating standalone mod {}/{}: {}").format(index, len(standalone_updates), mod_title))
 
         # Apply datapack updates.
         dp_updates = datapack_updates or []
@@ -1327,11 +1508,6 @@ class ModsMixin:
             dp_dir.mkdir(parents=True, exist_ok=True)
         for index, (project_id, meta, latest) in enumerate(dp_updates, start=1):
             dp_title = str((meta or {}).get("title", "")).strip() or project_id
-            GLib.idle_add(
-                lambda i=index, total=len(dp_updates), t=dp_title: self._set_mod_update_row_subtitle(
-                    _("Updating datapack {}/{}: {}").format(i, total, t)
-                )
-            )
             try:
                 if not dp_dir:
                     raise RuntimeError("No datapacks folder available.")
@@ -1352,15 +1528,11 @@ class ModsMixin:
                 applied += 1
             except Exception:
                 failed += 1
+            _report(_("Updating datapack {}/{}: {}").format(index, len(dp_updates), dp_title))
 
         # Apply plugin updates.
         for index, (project_id, meta, latest) in enumerate(plugin_updates or [], start=1):
             plugin_title = str((meta or {}).get("title", "")).strip() or project_id
-            GLib.idle_add(
-                lambda i=index, total=len(plugin_updates or []), t=plugin_title: self._set_mod_update_row_subtitle(
-                    _("Updating plugin {}/{}: {}").format(i, total, t)
-                )
-            )
             try:
                 plugins_dir = self._plugins_dir()
                 if not plugins_dir:
@@ -1383,13 +1555,18 @@ class ModsMixin:
                 applied += 1
             except Exception:
                 failed += 1
+            _report(_("Updating plugin {}/{}: {}").format(index, len(plugin_updates or []), plugin_title))
 
         def finish_ui():
             self._mods_update_busy = False
-            self._set_mod_update_row_subtitle(_("Update check complete"))
             self._end_mod_operation(mod_operation_token)
             self._rebuild_lists()
-            if failed == 0:
+            if done_callback is not None:
+                try:
+                    done_callback(applied, failed)
+                except Exception:
+                    pass
+            elif failed == 0:
                 self._toast(_("Applied {} update(s)").format(applied))
             else:
                 self._toast(_("Applied {} update(s), {} failed").format(applied, failed))

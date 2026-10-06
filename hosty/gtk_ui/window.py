@@ -418,7 +418,14 @@ class HostyWindow(Adw.ApplicationWindow):
 
     def _start_auto_backup(self, server_id: str):
         def worker():
-            ok, msg = self._server_manager.create_world_backup(server_id, auto=True)
+            try:
+                scope = self._server_manager.preferences.auto_backup_scope
+            except Exception:
+                scope = "world"
+            if scope == "full":
+                ok, msg = self._server_manager.create_full_backup(server_id)
+            else:
+                ok, msg = self._server_manager.create_world_backup(server_id, auto=True)
 
             def ui_done():
                 if ok:
