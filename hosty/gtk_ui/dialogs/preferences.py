@@ -131,36 +131,11 @@ def show_preferences_window(
     page.add(app_group)
 
     # ---------- Appearance ----------
+    # Theme lives in the main (hamburger) menu as the Ptyxis-style
+    # three-circle selector, not here.
     appearance_group = Adw.PreferencesGroup(
         title=_("Appearance"),
     )
-
-    theme_keys = ["system", "light", "dark"]
-    theme_names = [_("System"), _("Light"), _("Dark")]
-    theme_model = Gtk.StringList.new(theme_names)
-    theme_row = Adw.ComboRow(
-        title=_("Theme"),
-        model=theme_model,
-    )
-    current_theme = preferences.theme
-    theme_row.set_selected(theme_keys.index(current_theme) if current_theme in theme_keys else 0)
-
-    def on_theme_changed(row, _pspec):
-        key = theme_keys[row.get_selected()]
-        preferences.theme = key
-        try:
-            style_manager = Adw.StyleManager.get_default()
-            if key == "light":
-                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_LIGHT)
-            elif key == "dark":
-                style_manager.set_color_scheme(Adw.ColorScheme.FORCE_DARK)
-            else:
-                style_manager.set_color_scheme(Adw.ColorScheme.DEFAULT)
-        except Exception:
-            pass
-
-    theme_row.connect("notify::selected", on_theme_changed)
-    appearance_group.add(theme_row)
 
     lang_keys = list(LANGUAGES.keys())
     lang_names = list(LANGUAGES.values())

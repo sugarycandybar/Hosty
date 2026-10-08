@@ -7,8 +7,9 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Adw, Gdk, Gio, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
+from hosty.gtk_ui.widgets.theme_selector import ThemeSelector
 from hosty.shared.backend.server_manager import ServerInfo, ServerManager
 from hosty.shared.utils.constants import ServerStatus, mod_loader_name
 from hosty.shared.utils.image_utils import load_pixbuf
@@ -185,11 +186,30 @@ class Sidebar(Gtk.Box):
         menu_btn.set_tooltip_text(_("Main menu"))
         menu_btn.add_css_class("flat")
         menu_btn.set_focusable(True)
+        # Primary menu, following Ptyxis's pattern: a GMenu whose first
+        # section holds a custom "interface-style" child (the three-circle
+        # PtyxisThemeSelector), injected via
+        # gtk_popover_menu_add_child(popover, selector, "interface-style").
         menu = Gio.Menu()
-        menu.append(_("Preferences"), "app.preferences")
-        menu.append(_("Keyboard Shortcuts"), "app.shortcuts")
-        menu.append(_("About Hosty"), "app.about")
-        menu_btn.set_menu_model(menu)
+        theme_section = Gio.Menu()
+        theme_item = Gio.MenuItem.new(None, None)
+        theme_item.set_attribute_value("custom", GLib.Variant.new_string("interface-style"))
+        theme_section.append_item(theme_item)
+        menu.append_section(None, theme_section)
+        main_section = Gio.Menu()
+        main_section.append(_("Preferences"), "app.preferences")
+        main_section.append(_("Keyboard Shortcuts"), "app.shortcuts")
+        main_section.append(_("About Hosty"), "app.about")
+        menu.append_section(None, main_section)
+        popover = Gtk.PopoverMenu.new_from_model(menu)
+        try:
+            prefs = self._server_manager.preferences
+        except Exception:
+            prefs = None
+        self._theme_selector = ThemeSelector(prefs)
+        popover.add_child(self._theme_selector, "interface-style")
+        self._main_menu_popover = popover
+        menu_btn.set_popover(popover)
         self._menu_btn = menu_btn
         header.pack_end(menu_btn)
 
@@ -316,6 +336,11 @@ class Sidebar(Gtk.Box):
     def popup_main_menu(self):
         """Open the sidebar menu."""
         if hasattr(self, "_menu_btn") and self._menu_btn:
+            try:
+                if hasattr(self, "_theme_selector") and self._theme_selector:
+                    self._theme_selector.sync_from_preferences()
+            except Exception:
+                pass
             self._menu_btn.grab_focus()
             self._menu_btn.popup()
 
