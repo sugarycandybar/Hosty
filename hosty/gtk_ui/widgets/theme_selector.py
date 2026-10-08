@@ -64,9 +64,7 @@ class ThemeSelector(Gtk.Box):
         self._follow_btn.set_focus_on_click(False)
         self._follow_btn.set_tooltip_text(_("Follow System Style"))
         try:
-            self._follow_btn.update_property(
-                Gtk.AccessibleProperty.LABEL, _("Follow system style")
-            )
+            self._follow_btn.update_property(Gtk.AccessibleProperty.LABEL, _("Follow system style"))
         except Exception:
             pass
         self.append(self._follow_btn)
@@ -80,9 +78,7 @@ class ThemeSelector(Gtk.Box):
         self._light_btn.set_focus_on_click(False)
         self._light_btn.set_tooltip_text(_("Light Style"))
         try:
-            self._light_btn.update_property(
-                Gtk.AccessibleProperty.LABEL, _("Light style")
-            )
+            self._light_btn.update_property(Gtk.AccessibleProperty.LABEL, _("Light style"))
         except Exception:
             pass
         self.append(self._light_btn)
@@ -96,9 +92,7 @@ class ThemeSelector(Gtk.Box):
         self._dark_btn.set_focus_on_click(False)
         self._dark_btn.set_tooltip_text(_("Dark Style"))
         try:
-            self._dark_btn.update_property(
-                Gtk.AccessibleProperty.LABEL, _("Dark style")
-            )
+            self._dark_btn.update_property(Gtk.AccessibleProperty.LABEL, _("Dark style"))
         except Exception:
             pass
         self.append(self._dark_btn)
