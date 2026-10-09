@@ -682,7 +682,8 @@ class PlayitManager(EventEmitter):
             # created afterwards would never receive traffic until restart.
             restart_ok, restart_msg = self.restart_agent()
             if not restart_ok:
-                return True, f"{linked_msg} {_('Agent restart failed: {}').format(restart_msg)}"
+                restart_detail = _("Agent restart failed: {}").format(restart_msg)
+                return True, f"{linked_msg} {restart_detail}"
         return True, linked_msg
 
     def validate_existing_link(self, retry_attempts: int = 3) -> tuple[bool, str]:

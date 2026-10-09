@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: hosty\n"
 "Report-Msgid-Bugs-To: https://github.com/sugarycandybar/Hosty/issues\n"
-"POT-Creation-Date: 2026-10-07 22:12-0400\n"
+"POT-Creation-Date: 2026-10-09 17:49-0400\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -3543,9 +3543,9 @@ msgid "Missing playit setup code"
 msgstr ""
 
 #: hosty/shared/backend/playit_manager.py:620
-#: hosty/shared/backend/playit_manager.py:717
-#: hosty/shared/backend/playit_manager.py:1171
-#: hosty/shared/backend/playit_manager.py:1292
+#: hosty/shared/backend/playit_manager.py:718
+#: hosty/shared/backend/playit_manager.py:1172
+#: hosty/shared/backend/playit_manager.py:1293
 msgid "playit binary not found"
 msgstr ""
 
@@ -3592,34 +3592,34 @@ msgstr ""
 msgid "Agent restart failed: {}"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:690
+#: hosty/shared/backend/playit_manager.py:691
 msgid "not linked"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:693
+#: hosty/shared/backend/playit_manager.py:694
 msgid "linked"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:695
-#: hosty/shared/backend/playit_manager.py:1195
-#: hosty/shared/backend/playit_manager.py:1312
+#: hosty/shared/backend/playit_manager.py:696
+#: hosty/shared/backend/playit_manager.py:1196
+#: hosty/shared/backend/playit_manager.py:1313
 msgid "unknown error"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:698
+#: hosty/shared/backend/playit_manager.py:699
 msgid "linked key is invalid and was cleared"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:723
+#: hosty/shared/backend/playit_manager.py:724
 msgid "playit secret key not found"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:735
+#: hosty/shared/backend/playit_manager.py:736
 msgid "agents/rundata did not include agent_id"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:920
-#: hosty/shared/backend/playit_manager.py:986
+#: hosty/shared/backend/playit_manager.py:921
+#: hosty/shared/backend/playit_manager.py:987
 #, python-brace-format
 msgid ""
 "This account cannot create more than {count} tunnel. You can increase your "
@@ -3630,191 +3630,191 @@ msgid_plural ""
 msgstr[0] ""
 msgstr[1] ""
 
-#: hosty/shared/backend/playit_manager.py:1152
+#: hosty/shared/backend/playit_manager.py:1153
 msgid "playit is already running for this server"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1161
+#: hosty/shared/backend/playit_manager.py:1162
 msgid "playit agent is running"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1168
-#: hosty/shared/backend/playit_manager.py:1289
+#: hosty/shared/backend/playit_manager.py:1169
+#: hosty/shared/backend/playit_manager.py:1290
 #, python-brace-format
 msgid "playit install failed: {}"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1179
-#: hosty/shared/backend/playit_manager.py:1300
+#: hosty/shared/backend/playit_manager.py:1180
+#: hosty/shared/backend/playit_manager.py:1301
 #, python-brace-format
 msgid "Failed to install playit v0.17.1: {}"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1189
-#: hosty/shared/backend/playit_manager.py:1309
+#: hosty/shared/backend/playit_manager.py:1190
+#: hosty/shared/backend/playit_manager.py:1310
 msgid "playit is not linked yet"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1192
+#: hosty/shared/backend/playit_manager.py:1193
 msgid "playit setup is required"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1201
-msgid "playit key invalid, setup is required"
-msgstr ""
-
 #: hosty/shared/backend/playit_manager.py:1202
-#: hosty/shared/backend/playit_manager.py:1315
-msgid "linked playit key is invalid; run setup again"
+msgid "playit key invalid, setup is required"
 msgstr ""
 
 #: hosty/shared/backend/playit_manager.py:1203
 #: hosty/shared/backend/playit_manager.py:1316
+msgid "linked playit key is invalid; run setup again"
+msgstr ""
+
+#: hosty/shared/backend/playit_manager.py:1204
+#: hosty/shared/backend/playit_manager.py:1317
 #, python-brace-format
 msgid "failed to initialize playit API session: {}"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1214
+#: hosty/shared/backend/playit_manager.py:1215
 msgid "failed to start playit agent"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1225
+#: hosty/shared/backend/playit_manager.py:1226
 msgid "playit started"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1259
+#: hosty/shared/backend/playit_manager.py:1260
 msgid "failed to allocate a new playit tunnel"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1272
+#: hosty/shared/backend/playit_manager.py:1273
 msgid "playit tunnel domain regenerated"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1273
+#: hosty/shared/backend/playit_manager.py:1274
 msgid "playit tunnel created for this server"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1479
+#: hosty/shared/backend/playit_manager.py:1480
 msgid ""
 "Replaced the legacy voice tunnel but failed to create a raw replacement. "
 "Delete an unused tunnel in the dashboard and try again."
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1569
+#: hosty/shared/backend/playit_manager.py:1570
 #, python-brace-format
 msgid "Could not point the {} tunnel at local port {}"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1608
-#: hosty/shared/backend/playit_manager.py:1739
-#: hosty/shared/backend/playit_manager.py:1858
+#: hosty/shared/backend/playit_manager.py:1609
+#: hosty/shared/backend/playit_manager.py:1740
+#: hosty/shared/backend/playit_manager.py:1859
 msgid "Voice Chat"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1613
-#: hosty/shared/backend/playit_manager.py:1618
-#: hosty/shared/backend/playit_manager.py:1742
-#: hosty/shared/backend/playit_manager.py:1861
+#: hosty/shared/backend/playit_manager.py:1614
+#: hosty/shared/backend/playit_manager.py:1619
+#: hosty/shared/backend/playit_manager.py:1743
+#: hosty/shared/backend/playit_manager.py:1862
 msgid "Bedrock"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1618
-#: hosty/shared/backend/playit_manager.py:1742
-#: hosty/shared/backend/playit_manager.py:1861
+#: hosty/shared/backend/playit_manager.py:1619
+#: hosty/shared/backend/playit_manager.py:1743
+#: hosty/shared/backend/playit_manager.py:1862
 msgid "Java"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1634
+#: hosty/shared/backend/playit_manager.py:1635
 #, python-brace-format
 msgid "failed to allocate a {} playit tunnel"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1656
+#: hosty/shared/backend/playit_manager.py:1657
 #, python-brace-format
 msgid "{} tunnel ready: {}"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1657
+#: hosty/shared/backend/playit_manager.py:1658
 #, python-brace-format
 msgid "{} tunnel created on {} port {}"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1770
+#: hosty/shared/backend/playit_manager.py:1771
 #, python-brace-format
 msgid "Could not remove the old {} tunnel ({}). It was kept."
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1795
+#: hosty/shared/backend/playit_manager.py:1796
 #, python-brace-format
 msgid ""
 "Old tunnel removed but still at {} of {} tunnels. Delete an unused tunnel in "
 "the dashboard and try again."
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1815
+#: hosty/shared/backend/playit_manager.py:1816
 #, python-brace-format
 msgid "{} tunnel domain regenerated: {}"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1817
+#: hosty/shared/backend/playit_manager.py:1818
 #, python-brace-format
 msgid "{} tunnel domain regenerated"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1865
+#: hosty/shared/backend/playit_manager.py:1866
 #, python-brace-format
 msgid "No {} tunnel found"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1879
+#: hosty/shared/backend/playit_manager.py:1880
 #, python-brace-format
 msgid "Failed to delete {} tunnel"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1896
+#: hosty/shared/backend/playit_manager.py:1897
 #, python-brace-format
 msgid "{} tunnel deleted"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1901
+#: hosty/shared/backend/playit_manager.py:1902
 msgid "no tunnels to delete"
 msgstr ""
 
 #. Translators: {port} is a port number, e.g. 25565
-#: hosty/shared/backend/playit_manager.py:1925
+#: hosty/shared/backend/playit_manager.py:1926
 #, python-brace-format
 msgid "Failed to delete tunnels for port {port}."
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:1929
+#: hosty/shared/backend/playit_manager.py:1930
 #, python-brace-format
 msgid "Deleted {count} tunnel for port {port}."
 msgid_plural "Deleted {count} tunnels for port {port}."
 msgstr[0] ""
 msgstr[1] ""
 
-#: hosty/shared/backend/playit_manager.py:2941
+#: hosty/shared/backend/playit_manager.py:2942
 msgid "playit is not running for this server"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:2949
+#: hosty/shared/backend/playit_manager.py:2950
 msgid "playit stopped for this server"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:2958
-#: hosty/shared/backend/playit_manager.py:2988
+#: hosty/shared/backend/playit_manager.py:2959
+#: hosty/shared/backend/playit_manager.py:2989
 msgid "playit is not running"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:2978
+#: hosty/shared/backend/playit_manager.py:2979
 msgid "playit stopped"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:2999
+#: hosty/shared/backend/playit_manager.py:3000
 msgid "playit is already running"
 msgstr ""
 
-#: hosty/shared/backend/playit_manager.py:3023
+#: hosty/shared/backend/playit_manager.py:3024
 msgid "playit agent restarted"
 msgstr ""
 

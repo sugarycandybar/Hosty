@@ -1667,7 +1667,7 @@ class ModsMixin:
             )
         else:
             dialog.set_heading(_("Delete mod?"))
-            dialog.set_body(_("Remove \u201c{}\u201d?").format(name))
+            dialog.set_body(_("Remove “{}”?").format(name))
         dialog.add_response("cancel", _("Cancel"))
         dialog.add_response("delete", _("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
@@ -1859,7 +1859,7 @@ class ModsMixin:
 
         dialog = Adw.AlertDialog()
         dialog.set_heading(_("Delete plugin?"))
-        dialog.set_body(_("Remove \u201c{}\u201d?").format(name))
+        dialog.set_body(_("Remove “{}”?").format(name))
         dialog.add_response("cancel", _("Cancel"))
         dialog.add_response("delete", _("Delete"))
         dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
