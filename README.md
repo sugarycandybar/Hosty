@@ -8,6 +8,7 @@
   Host Minecraft servers
   <br><br>
   <a href="https://flathub.org/en/apps/io.github.sugarycandybar.Hosty"><img src="https://img.shields.io/flathub/downloads/io.github.sugarycandybar.Hosty?label=Flathub%20Downloads&color=brightgreen"></a>
+  <a href="https://hosted.weblate.org/engage/hosty/"><img src="https://hosted.weblate.org/widgets/hosty/-/hosty/svg-badge.svg"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/sugarycandybar/Hosty?label=License&color=blue"></a>
   <a href="https://github.com/sugarycandybar/Hosty/releases"><img src="https://img.shields.io/github/v/release/sugarycandybar/Hosty?label=Version&color=blue"></a>
   <a href="https://github.com/sugarycandybar/Hosty/releases"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?color=blue"></a>
