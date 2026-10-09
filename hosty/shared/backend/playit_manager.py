@@ -805,7 +805,11 @@ class PlayitManager(EventEmitter):
             key = tunnel.protocol if tunnel.protocol in fresh else "tcp"
             fresh[key].append(tunnel)
         if dupes:
-            logger.warning("playit tunnels/list echoed %d duplicate tunnel(s); counted once", dupes)
+            logger.warning(
+                "playit tunnels/list echoed %d %s; counted once",
+                dupes,
+                "duplicate tunnel" if dupes == 1 else "duplicate tunnels",
+            )
 
         self.tunnels = fresh
         self.tunnels_refreshed_at = time.monotonic()
@@ -910,10 +914,13 @@ class PlayitManager(EventEmitter):
             port = 25565
 
         if not self._check_tunnel_limit():
+            # Translators: {count} is the tunnel limit number, {url} is a web address and should not be translated
             raise self.TunnelException(
-                _("This account cannot create more than {} tunnel(s). You can increase your limit here: {}").format(
-                    self.max_tunnels, "https://playit.gg/account/upgrade"
-                )
+                ngettext(
+                    "This account cannot create more than {count} tunnel. You can increase your limit here: {url}",
+                    "This account cannot create more than {count} tunnels. You can increase your limit here: {url}",
+                    self.max_tunnels,
+                ).format(count=self.max_tunnels, url="https://playit.gg/account/upgrade")
             )
 
         if tunnel_type is None:
@@ -973,10 +980,13 @@ class PlayitManager(EventEmitter):
             port = 24454
 
         if not self._check_tunnel_limit():
+            # Translators: {count} is the tunnel limit number, {url} is a web address and should not be translated
             raise self.TunnelException(
-                _("This account cannot create more than {} tunnel(s). You can increase your limit here: {}").format(
-                    self.max_tunnels, "https://playit.gg/account/upgrade"
-                )
+                ngettext(
+                    "This account cannot create more than {count} tunnel. You can increase your limit here: {url}",
+                    "This account cannot create more than {count} tunnels. You can increase your limit here: {url}",
+                    self.max_tunnels,
+                ).format(count=self.max_tunnels, url="https://playit.gg/account/upgrade")
             )
 
         tunnel_name = self._tunnel_name(label, protocol, port)
@@ -1911,8 +1921,13 @@ class PlayitManager(EventEmitter):
                 self._emit_endpoint_changed(sid)
 
         if not deleted_any:
-            return False, _("failed to delete tunnels for port {}").format(port)
-        return True, _("deleted {} tunnel(s) for port {}").format(len(deleted_ids), port)
+            # Translators: {port} is a port number, e.g. 25565
+            return False, _("Failed to delete tunnels for port {port}.").format(port=port)
+        deleted_count = len(deleted_ids)
+        # Translators: e.g. "Deleted 1 tunnel for port 25565.", "Deleted 3 tunnels for port 25565."
+        return True, ngettext(
+            "Deleted {count} tunnel for port {port}.", "Deleted {count} tunnels for port {port}.", deleted_count
+        ).format(count=deleted_count, port=port)
 
     def add_java_tunnel(
         self,
@@ -3090,7 +3105,7 @@ class PlayitManager(EventEmitter):
                             self._active_server_ids[server_id]["endpoint"] = tunnel.hostname.strip()
                             self._emit_endpoint_changed(server_id)
                             break
-                # If no tunnel_id match, update the first unmatched server —
+                # If no tunnel_id match, update the first unmatched server,
                 # but only with a candidate that actually belongs to it: it
                 # must match a TCP tunnel on this server's java port. Agent
                 # logs also contain UDP (voice/bedrock) domain:port lines,

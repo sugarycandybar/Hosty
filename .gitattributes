@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Translation catalogs: keep them out of the language stats, still reviewable
+po/*.po linguist-vendored
+po/*.pot linguist-vendored

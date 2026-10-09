@@ -9,23 +9,22 @@
 
 ## Translations
 
-Hosty uses Python's standard `gettext` for i18n. Strings are marked with `_("...")` in the source.
+Hosty uses `gettext`. Mark UI strings with `_("...")` and counts with
+`ngettext("singular", "plural", n)` (both come from builtins via
+`hosty/i18n.py`, no import needed).
 
-### Adding or updating a translation
+The easiest way to contribute a translation is Weblate, which proposes the
+`.po` changes as a pull request.
 
-1. Generate/update the `.pot` template:
-   ```bash
-   xgettext --from-code=UTF-8 --language=Python --keyword=_ \
-     --output=po/hosty.pot --package-name=hosty \
-     $(cat po/POTFILES)
-   ```
-2. Create or update your `.po` file:
-   ```bash
-   msginit -l <locale> -i po/hosty.pot -o po/<locale>.po   # new
-   msgmerge -U po/<locale>.po po/hosty.pot                  # update
-   ```
-3. Translate the strings in the `.po` file with the tool of your choice.
-4. Add your locale to `po/LINGUAS` (one code per line).
-5. Submit the `.po` file in your PR.
+Manually:
 
-Don't edit `po/POTFILES` unless you're adding or removing source files with translatable strings.
+```bash
+meson setup build
+meson compile -C build hosty-pot        # refresh po/hosty.pot
+meson compile -C build hosty-update-po  # merge into po/*.po
+msginit -l <locale> -i po/hosty.pot -o po/<locale>.po  # new language only
+```
+
+Then add your locale to `po/LINGUAS` and open a PR. New languages show up in
+the in-app picker automatically, no code changes needed. Only touch
+`po/POTFILES` when adding or removing source files with translatable strings.

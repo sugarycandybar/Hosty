@@ -23,8 +23,11 @@ hosty/gtk_ui/views/properties_view.py
 hosty/gtk_ui/views/server_detail.py
 hosty/gtk_ui/views/sidebar.py
 hosty/gtk_ui/views/welcome_view.py
+hosty/gtk_ui/widgets/theme_selector.py
 hosty/shared/backend/download_manager.py
 hosty/shared/backend/java_manager.py
 hosty/shared/backend/playit_manager.py
 hosty/shared/backend/server_manager.py
 hosty/shared/utils/constants.py
+packaging/linux/io.github.sugarycandybar.Hosty.desktop.in
+packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml.in

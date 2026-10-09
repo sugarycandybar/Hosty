@@ -531,20 +531,38 @@ class ServerManager(EventEmitter):
         progress(1.0, _("Server runtime updated"))
 
         disabled_count = sum(len(v) for v in disabled.values())
+        parts: list[str] = []
         if mc_version != old_mc:
-            detail = _("Updated to Minecraft {}.").format(mc_version) + _(" Updated {} compatible file(s).").format(
-                applied
-            )
+            # Translators: {mc_version} is a version number, e.g. "1.21"
+            parts.append(_("Updated to Minecraft {mc_version}.").format(mc_version=mc_version))
         elif str(loader_version or "") != str(old_loader or ""):
-            detail = _("Updated {} to {}.").format(loader_name, loader_version) + _(
-                " Updated {} compatible file(s)."
-            ).format(applied)
+            # Translators: {loader} and {version} are names, e.g. "Fabric" and "0.16.9"
+            parts.append(_("Updated {loader} to {version}.").format(loader=loader_name, version=loader_version))
         else:
-            detail = _("Server runtime updated.") + _(" Updated {} compatible file(s).").format(applied)
+            parts.append(_("Server runtime updated."))
+        # Translators: number of updated files, e.g. "1 compatible file", "3 compatible files"
+        parts.append(
+            ngettext("{count} compatible file updated.", "{count} compatible files updated.", applied).format(
+                count=applied
+            )
+        )
         if disabled_count:
-            detail += _(" Disabled {} incompatible file(s).").format(disabled_count)
+            # Translators: number of disabled files, e.g. "1 incompatible file", "3 incompatible files"
+            parts.append(
+                ngettext(
+                    "{count} incompatible file disabled.",
+                    "{count} incompatible files disabled.",
+                    disabled_count,
+                ).format(count=disabled_count)
+            )
         if failed:
-            detail += _(" {} compatible update(s) failed.").format(failed)
+            # Translators: number of failed updates, e.g. "1 compatible update", "3 compatible updates"
+            parts.append(
+                ngettext("{count} compatible update failed.", "{count} compatible updates failed.", failed).format(
+                    count=failed
+                )
+            )
+        detail = " ".join(parts)
         return True, detail
 
     def _json_file(self, path: Path) -> dict:
@@ -1531,7 +1549,11 @@ class ServerManager(EventEmitter):
         self._write_json_file(data_path, data)
         self.emit_on_main_thread("server-changed", server_id)
         if deleted_files:
-            return True, _("Deleted {} disabled file(s).").format(deleted_files)
+            # Translators: number of deleted files, e.g. "1 disabled file", "3 disabled files"
+            msg = ngettext("Deleted {count} disabled file.", "Deleted {count} disabled files.", deleted_files).format(
+                count=deleted_files
+            )
+            return True, msg
         return True, _("Removed disabled item record.")
 
     @staticmethod

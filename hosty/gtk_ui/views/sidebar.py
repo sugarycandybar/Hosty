@@ -165,7 +165,7 @@ class Sidebar(Gtk.Box):
         self._rows: dict[str, ServerRow] = {}
         self.add_css_class("server-sidebar")
 
-        # Header bar -- GNOME Files–like: new server top-left, centered title, menu top-right
+        # Header bar, GNOME Files-like: new server top-left, centered title, menu top-right
         header = Adw.HeaderBar()
         header.set_show_end_title_buttons(False)
 

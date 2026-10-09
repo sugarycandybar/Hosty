@@ -285,7 +285,10 @@ class HostyWindow(Adw.ApplicationWindow):
         from hosty.shared.utils.portal import set_background_status
 
         if current_ids:
-            set_background_status(_("{} server(s) running").format(len(current_ids)))
+            count = len(current_ids)
+            # Translators: status text showing how many servers are running
+            status = ngettext("{count} server running", "{count} servers running", count).format(count=count)
+            set_background_status(status)
         else:
             set_background_status(_("Server not running"))
 

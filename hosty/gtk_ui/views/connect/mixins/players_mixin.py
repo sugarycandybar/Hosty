@@ -76,11 +76,13 @@ class PlayersMixin:
         page.add(banned_group)
 
     def _update_player_section_summaries(self, whitelist_count: int, banned_count: int):
-        wl_summary = _("{} player(s)").format(whitelist_count)
+        # Translators: number of whitelisted players, e.g. "1 player", "3 players"
+        wl_summary = ngettext("{count} player", "{count} players", whitelist_count).format(count=whitelist_count)
         for row in self._whitelist_list_rows:
             row.set_subtitle(wl_summary)
 
-        ban_summary = _("{} player(s)").format(banned_count)
+        # Translators: number of banned players, e.g. "1 player", "3 players"
+        ban_summary = ngettext("{count} player", "{count} players", banned_count).format(count=banned_count)
         for row in self._banned_list_rows:
             row.set_subtitle(ban_summary)
 

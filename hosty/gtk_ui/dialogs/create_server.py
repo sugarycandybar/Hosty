@@ -198,7 +198,7 @@ class CreateServerDialog(Adw.Dialog):
 
         self._world_import_row = Adw.ActionRow(
             title=_("Import world folder"),
-            subtitle=_("No world selected."),
+            subtitle=_("No world selected"),
         )
         self._choose_world_btn = Gtk.Button(valign=Gtk.Align.CENTER)
         self._choose_world_btn.add_css_class("flat")
@@ -766,7 +766,7 @@ class CreateServerDialog(Adw.Dialog):
 
     def _on_remove_world(self, *_args):
         self._world_import_source_path = ""
-        self._world_import_row.set_subtitle(_("No world selected."))
+        self._world_import_row.set_subtitle(_("No world selected"))
         self._seed_entry.set_text("")
         self._seed_entry.set_sensitive(True)
         default_level_type = str(DEFAULT_SERVER_PROPERTIES.get("level-type", "minecraft\\:normal"))

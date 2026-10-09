@@ -1012,30 +1012,68 @@ class ModsMixin:
                         _("No updates could be applied."),
                     )
                 elif failed:
+                    # Translators: e.g. "1 update applied", "3 updates applied"
+                    applied_str = ngettext("{count} update applied.", "{count} updates applied.", applied).format(
+                        count=applied
+                    )
+                    # Translators: e.g. "1 failed", "3 failed"
+                    failed_str = ngettext("{count} failed.", "{count} failed.", failed).format(count=failed)
                     show_done(
                         "dialog-warning-symbolic",
                         _("Updates finished with errors"),
-                        _("Applied {} update(s), {} failed.").format(applied, failed),
+                        f"{applied_str} {failed_str}",
                     )
                 else:
+                    # Translators: e.g. "1 update applied", "3 updates applied"
+                    applied_str = ngettext("{count} update applied.", "{count} updates applied.", applied).format(
+                        count=applied
+                    )
+                    blocked = int(state.get("blocked") or 0)
+                    if blocked:
+                        # Translators: e.g. "1 update was skipped", "3 updates were skipped"
+                        skipped_str = ngettext(
+                            "{count} update was skipped because dependencies are managed by a modpack.",
+                            "{count} updates were skipped because dependencies are managed by a modpack.",
+                            blocked,
+                        ).format(count=blocked)
+                        message = f"{applied_str} {skipped_str}"
+                    else:
+                        message = applied_str
                     show_done(
                         "object-select-symbolic",
                         _("All updates installed"),
-                        _("Applied {} update(s).").format(applied)
-                        + (
-                            _(" {} update(s) were skipped because dependencies are managed by a modpack.").format(
-                                state["blocked"]
-                            )
-                            if state["blocked"]
-                            else ""
-                        ),
+                        message,
                     )
 
-            self._toast(
-                _("Updating {} modpack(s), {} mod(s), {} datapack(s) and {} plugin(s)").format(
-                    len(state["modpacks"]), len(state["mods"]), len(state["datapacks"]), len(state["plugins"])
+            # Build a plural-correct list like "1 modpack, 3 mods" instead of "modpack(s)".
+            update_parts: list[str] = []
+            modpack_count = len(state["modpacks"])
+            if modpack_count:
+                # Translators: e.g. "1 modpack", "3 modpacks"
+                update_parts.append(
+                    ngettext("{count} modpack", "{count} modpacks", modpack_count).format(count=modpack_count)
                 )
-            )
+            mod_count = len(state["mods"])
+            if mod_count:
+                # Translators: e.g. "1 mod", "3 mods"
+                update_parts.append(ngettext("{count} mod", "{count} mods", mod_count).format(count=mod_count))
+            datapack_count = len(state["datapacks"])
+            if datapack_count:
+                # Translators: e.g. "1 datapack", "3 datapacks"
+                update_parts.append(
+                    ngettext("{count} datapack", "{count} datapacks", datapack_count).format(count=datapack_count)
+                )
+            plugin_count = len(state["plugins"])
+            if plugin_count:
+                # Translators: e.g. "1 plugin", "3 plugins"
+                update_parts.append(
+                    ngettext("{count} plugin", "{count} plugins", plugin_count).format(count=plugin_count)
+                )
+            if update_parts:
+                # Translators: {items} is a comma-separated list like "1 modpack, 3 mods"
+                self._toast(_("Updating {items}.").format(items=", ".join(update_parts)))
+            else:
+                self._toast(_("Updating selected items."))
             threading.Thread(
                 target=self._apply_mod_updates,
                 args=(
@@ -1323,11 +1361,15 @@ class ModsMixin:
                     )
                 if blocked:
                     notes = Adw.PreferencesGroup(title=_("Notes"))
+                    blocked_count = int(blocked)
+                    # Translators: e.g. "1 standalone update was skipped", "3 standalone updates were skipped"
                     note = Adw.ActionRow(
                         title=_("Skipped updates"),
-                        subtitle=_(
-                            "{} standalone update(s) were skipped because dependencies are managed by a modpack."
-                        ).format(blocked),
+                        subtitle=ngettext(
+                            "{count} standalone update was skipped because dependencies are managed by a modpack.",
+                            "{count} standalone updates were skipped because dependencies are managed by a modpack.",
+                            blocked_count,
+                        ).format(count=blocked_count),
                     )
                     note.set_activatable(False)
                     notes.add(note)
@@ -1567,9 +1609,17 @@ class ModsMixin:
                 except Exception:
                     pass
             elif failed == 0:
-                self._toast(_("Applied {} update(s)").format(applied))
+                # Translators: e.g. "1 update applied", "3 updates applied"
+                msg = ngettext("{count} update applied.", "{count} updates applied.", applied).format(count=applied)
+                self._toast(msg)
             else:
-                self._toast(_("Applied {} update(s), {} failed").format(applied, failed))
+                # Translators: e.g. "1 update applied", "3 updates applied"
+                applied_str = ngettext("{count} update applied.", "{count} updates applied.", applied).format(
+                    count=applied
+                )
+                # Translators: e.g. "1 failed", "3 failed"
+                failed_str = ngettext("{count} failed.", "{count} failed.", failed).format(count=failed)
+                self._toast(f"{applied_str} {failed_str}")
             return False
 
         # Pick back up version-parked mods that now have a compatible

@@ -125,7 +125,10 @@ class PropertiesView(Gtk.Box):
             title=_("Allocated RAM (MB)"),
             adjustment=ram_adj,
         )
-        self._ram_row.set_tooltip_text(_("Megabytes for the Java heap. Range {}–{}.").format(MIN_RAM_MB, MAX_RAM_MB))
+        self._ram_row.set_tooltip_text(
+            # Translators: {min_mb} and {max_mb} are numbers, e.g. "Range 512 to 16384."
+            _("Megabytes for the Java heap. Range {min_mb} to {max_mb}.").format(min_mb=MIN_RAM_MB, max_mb=MAX_RAM_MB)
+        )
         resources.add(self._ram_row)
         page.add(resources)
 
@@ -769,7 +772,11 @@ class PropertiesView(Gtk.Box):
             if not items:
                 add_review_row(Adw.ActionRow(title=fallback))
                 return
-            expander = Adw.ExpanderRow(title=title, subtitle=_("{} item(s)").format(len(items)))
+            plan_count = len(items)
+            # Translators: number of items, e.g. "1 item", "3 items"
+            expander = Adw.ExpanderRow(
+                title=title, subtitle=ngettext("{count} item", "{count} items", plan_count).format(count=plan_count)
+            )
             for item in items:
                 label = str(item.get("title") or item.get("filename") or _("Unknown"))
                 version = str(item.get("version_number") or item.get("version_id") or "").strip()

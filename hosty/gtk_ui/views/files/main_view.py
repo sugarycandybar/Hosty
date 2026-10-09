@@ -370,7 +370,12 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
             # Update expander subtitle with count
             total_mods = len(entries) + len([j for j in jars if j.name.lower() not in managed_set])
-            self._mods_expander.set_subtitle(_("{} item(s)").format(total_mods) if total_mods else _("None installed"))
+            # Translators: number of installed items, e.g. "1 item", "3 items"
+            self._mods_expander.set_subtitle(
+                ngettext("{count} item", "{count} items", total_mods).format(count=total_mods)
+                if total_mods
+                else _("None installed")
+            )
 
         # ---- Installed Plugins expander (Arclight hybrid servers) ----
         if self._plugins_expander and self._is_arclight():
@@ -403,7 +408,10 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._plugin_rows.append(info)
 
             self._plugins_expander.set_subtitle(
-                _("{} item(s)").format(plugin_count) if plugin_count else _("None installed")
+                # Translators: number of installed items, e.g. "1 item", "3 items"
+                ngettext("{count} item", "{count} items", plugin_count).format(count=plugin_count)
+                if plugin_count
+                else _("None installed")
             )
 
         # ---- Installed Datapacks expander ----
@@ -454,7 +462,10 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                         untracked_count += 1
             real_count = len(dp_state) + untracked_count
             self._datapacks_expander.set_subtitle(
-                _("{} item(s)").format(real_count) if real_count else _("None installed")
+                # Translators: number of installed items, e.g. "1 item", "3 items"
+                ngettext("{count} item", "{count} items", real_count).format(count=real_count)
+                if real_count
+                else _("None installed")
             )
 
         # ---- Disabled by Version Updates expander ----
@@ -504,7 +515,10 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._disabled_rows.append(info)
 
             count = len(disabled_items)
-            self._disabled_expander.set_subtitle(_("{} item(s)").format(count) if count else _("None disabled"))
+            # Translators: number of disabled items, e.g. "1 item", "3 items"
+            self._disabled_expander.set_subtitle(
+                ngettext("{count} item", "{count} items", count).format(count=count) if count else _("None disabled")
+            )
             # Only show the section when something was actually disabled.
             self._disabled_expander.set_visible(count > 0)
 
@@ -520,8 +534,9 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             self._backups_row.set_subtitle(_("No server selected"))
             return
 
-        count = sum(1 for _ in bdir.glob("*.zip"))
-        self._backups_row.set_subtitle(_("{} backup(s)").format(count))
+        count = sum(1 for _f in bdir.glob("*.zip"))
+        # Translators: number of backups, e.g. "1 backup", "3 backups"
+        self._backups_row.set_subtitle(ngettext("{count} backup", "{count} backups", count).format(count=count))
 
     def _build_worlds_snapshot(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
         root = self._server_dir()

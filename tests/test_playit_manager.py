@@ -8,6 +8,8 @@ import pytest
 def _ensure_gettext():
     if not hasattr(builtins, "_"):
         builtins._ = lambda s: s  # noqa: E731
+    if not hasattr(builtins, "ngettext"):
+        builtins.ngettext = lambda singular, plural, n: singular if n == 1 else plural  # noqa: E731
 
 
 def test_create_tunnel_over_limit_reports_readable_message():

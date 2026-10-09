@@ -3,6 +3,7 @@ runtime: org.gnome.Platform
 runtime-version: "51"
 sdk: org.gnome.Sdk
 command: hosty
+separate-locales: false
 finish-args:
   - --share=network
   - --socket=wayland

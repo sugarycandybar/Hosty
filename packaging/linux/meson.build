@@ -1,11 +1,20 @@
-install_data(
-  'io.github.sugarycandybar.Hosty.desktop',
-  install_dir: get_option('datadir') / 'applications'
+i18n = import('i18n')
+
+desktop = i18n.merge_file(
+  input: 'io.github.sugarycandybar.Hosty.desktop.in',
+  output: 'io.github.sugarycandybar.Hosty.desktop',
+  type: 'desktop',
+  po_dir: '../../po',
+  install: true,
+  install_dir: get_option('datadir') / 'applications',
 )
 
-install_data(
-  'io.github.sugarycandybar.Hosty.metainfo.xml',
-  install_dir: get_option('datadir') / 'metainfo'
+metainfo = i18n.merge_file(
+  input: 'io.github.sugarycandybar.Hosty.metainfo.xml.in',
+  output: 'io.github.sugarycandybar.Hosty.metainfo.xml',
+  po_dir: '../../po',
+  install: true,
+  install_dir: get_option('datadir') / 'metainfo',
 )
 
 if get_option('beta')

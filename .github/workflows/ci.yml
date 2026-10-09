@@ -38,3 +38,96 @@ jobs:
           python-version: "3.13"
       - run: python3 -m compileall hosty/ hosty.py
 
+  i18n:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pytest polib
+      - run: sudo apt-get update -q && sudo apt-get install -y -q meson ninja-build gettext
+      - run: meson setup build
+      - run: meson compile -C build
+      - run: meson compile -C build hosty-pot
+      - name: Check committed pot covers all source strings
+        run: |
+          python3 - <<'EOF'
+          import subprocess, sys, tempfile
+          from pathlib import Path
+          import polib
+          # hosty-pot above regenerated po/hosty.pot in place; compare its
+          # msgids against the committed version (byte-exact diffs are
+          # meaningless: line numbers, wrapping and xgettext versions differ).
+          committed_src = subprocess.run(
+              ["git", "show", "HEAD:po/hosty.pot"],
+              capture_output=True, text=True, check=True,
+          ).stdout
+          with tempfile.NamedTemporaryFile("w", suffix=".pot", delete=False) as f:
+              f.write(committed_src)
+              committed_path = f.name
+          def msgids(path):
+              return {
+                  (e.msgctxt, e.msgid, e.msgid_plural)
+                  for e in polib.pofile(path)
+                  if e.msgid
+              }
+          fresh, committed = msgids("po/hosty.pot"), msgids(committed_path)
+          errors = []
+          for ctx, singular, plural in sorted(fresh - committed):
+              errors.append(f"missing from committed po/hosty.pot: {singular!r}")
+          for ctx, singular, plural in sorted(committed - fresh):
+              errors.append(f"obsolete in committed po/hosty.pot: {singular!r}")
+          if errors:
+              for e in errors:
+                  print(f"::error::{e}")
+              print("::error::Run 'meson compile -C build hosty-pot hosty-update-po' and commit.")
+              sys.exit(1)
+          print(f"pot coverage OK ({len(fresh)} messages)")
+          EOF
+      - name: Check translation file lists
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+          from pathlib import Path
+          errors = []
+          listed = {
+              line.strip()
+              for line in Path("po/POTFILES").read_text(encoding="utf-8").splitlines()
+              if line.strip() and not line.strip().startswith("#")
+          }
+          # Every committed .po must be in LINGUAS (meson only builds those).
+          linguas = []
+          for line in Path("po/LINGUAS").read_text(encoding="utf-8").splitlines():
+              line = line.split("#", 1)[0]
+              linguas.extend(t for t in line.replace(",", " ").split() if t.strip())
+          for po in sorted(Path("po").glob("*.po")):
+              if po.stem not in linguas:
+                  errors.append(f"po/{po.name} is not listed in po/LINGUAS, meson will not build it")
+          # Every source file using _()/ngettext() must be in POTFILES.
+          for py in sorted(Path("hosty").rglob("*.py")):
+              if "__pycache__" in py.parts or py.name == "i18n.py":
+                  continue
+              try:
+                  src = py.read_text(encoding="utf-8")
+              except Exception:
+                  continue
+              if re.search(r'_\(\s*["\']', src) or "ngettext(" in src:
+                  if str(py) not in listed:
+                      errors.append(f"{py} uses gettext but is missing from po/POTFILES")
+          # Desktop/metainfo templates must be listed for string extraction.
+          for extra in (
+              "packaging/linux/io.github.sugarycandybar.Hosty.desktop.in",
+              "packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml.in",
+          ):
+              if extra not in listed:
+                  errors.append(f"{extra} is missing from po/POTFILES")
+          if errors:
+              for e in errors:
+                  print(f"::error::{e}")
+              sys.exit(1)
+          print("translation file lists OK")
+          EOF
+      - run: msgfmt --check po/pl.po -o /dev/null
+      - run: python3 -m pytest tests/test_playit_manager.py -q
+
