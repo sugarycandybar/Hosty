@@ -11,6 +11,12 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
+from hosty.gtk_ui.dialogs.dialog_common import (
+    apply_dialog_size,
+    build_progress_page,
+    make_dialog_header,
+    wrap_in_scrolled,
+)
 from hosty.shared.backend.config_manager import ConfigManager
 from hosty.shared.backend.server_manager import ServerInfo, ServerManager
 from hosty.shared.utils.constants import (
@@ -484,20 +490,14 @@ class PropertiesView(Gtk.Box):
             return
 
         dialog = Adw.Dialog()
-        dialog.set_title(_("Update Version"))
-        dialog.set_content_width(400)
-        dialog.set_content_height(420)
+        apply_dialog_size(dialog, _("Update Version"))
 
         toolbar = Adw.ToolbarView()
-        header = Adw.HeaderBar()
-        header.set_show_start_title_buttons(False)
-        header.set_show_end_title_buttons(False)
-        cancel_btn = Gtk.Button(label=_("Cancel"))
-        primary_btn = Gtk.Button(label=_("Next"))
-        primary_btn.add_css_class("suggested-action")
+        header, cancel_btn, primary_btn = make_dialog_header(
+            cancel_label=_("Cancel"),
+            primary_label=_("Next"),
+        )
         primary_btn.set_sensitive(False)
-        header.pack_start(cancel_btn)
-        header.pack_end(primary_btn)
         toolbar.add_top_bar(header)
 
         stack = Gtk.Stack()
@@ -549,26 +549,22 @@ class PropertiesView(Gtk.Box):
         runtime_group.add(java_info_row)
 
         runtime_page.add(runtime_group)
-        stack.add_named(runtime_page, "runtime")
+        stack.add_named(wrap_in_scrolled(runtime_page), "runtime")
 
         mods_page = Adw.PreferencesPage()
         review_group = Adw.PreferencesGroup(
             title=_("Mod Compatibility"),
         )
         mods_page.add(review_group)
-        stack.add_named(mods_page, "mods")
+        stack.add_named(wrap_in_scrolled(mods_page), "mods")
 
-        progress_page = Adw.PreferencesPage()
-        progress_group = Adw.PreferencesGroup(title=_("Updating Server"))
-        progress_row = Adw.ActionRow(title=_("Preparing update"), subtitle="")
-        progress_spinner = Gtk.Spinner()
-        progress_row.add_suffix(progress_spinner)
-        progress_group.add(progress_row)
-        progress_bar = Gtk.ProgressBar()
-        progress_bar.set_margin_top(12)
-        progress_bar.set_margin_bottom(12)
-        progress_group.add(progress_bar)
-        progress_page.add(progress_group)
+        progress_page, progress_status, progress_bar, progress_detail = build_progress_page(
+            icon_name="folder-download-symbolic",
+            title=_("Updating Server"),
+            description=_("Preparing update"),
+        )
+        # Legacy names kept for the callbacks below.
+        progress_row = progress_status
         stack.add_named(progress_page, "progress")
 
         review_rows: list[Gtk.Widget] = []
@@ -894,15 +890,15 @@ class PropertiesView(Gtk.Box):
             cancel_btn.set_sensitive(False)
             primary_btn.set_label(_("Update"))
             stack.set_visible_child_name("progress")
-            progress_spinner.start()
             progress_bar.set_fraction(0.0)
-            progress_row.set_title(_("Updating server"))
-            progress_row.set_subtitle("")
+            progress_row.set_title(_("Updating Server"))
+            progress_row.set_description(_("Updating server"))
+            progress_detail.set_label("")
 
             def progress(frac, message):
                 def update_progress():
                     progress_bar.set_fraction(max(0.0, min(1.0, float(frac))))
-                    progress_row.set_subtitle(str(message))
+                    progress_detail.set_label(str(message))
                     return False
 
                 GLib.idle_add(update_progress)
@@ -947,7 +943,6 @@ class PropertiesView(Gtk.Box):
                         primary_btn.set_label(_("Update"))
                         primary_btn.set_sensitive(True)
                         stack.set_visible_child_name("mods")
-                        progress_spinner.stop()
                         self._show_toast(msg, timeout=5)
                     return False
 

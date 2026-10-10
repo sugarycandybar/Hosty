@@ -19,6 +19,12 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Adw, GLib, Gtk
 
+from hosty.gtk_ui.dialogs.dialog_common import (
+    apply_dialog_size,
+    build_progress_page,
+    make_dialog_header,
+)
+
 from ..utils import *
 
 
@@ -905,23 +911,21 @@ class ModsMixin:
             "mods": [],
             "datapacks": [],
             "plugins": [],
+            "selected": set(),
+            "checks": [],
+            "select_all_row": None,
+            "syncing_select_all": False,
         }
 
         dialog = Adw.Dialog()
-        dialog.set_title(_("Updates"))
-        dialog.set_content_width(460)
-        dialog.set_content_height(520)
+        apply_dialog_size(dialog, _("Updates"))
 
         toolbar = Adw.ToolbarView()
-        header = Adw.HeaderBar()
-        header.set_show_start_title_buttons(False)
-        header.set_show_end_title_buttons(False)
-        cancel_btn = Gtk.Button(label=_("Cancel"))
-        primary_btn = Gtk.Button(label=_("Install"))
-        primary_btn.add_css_class("suggested-action")
+        header, cancel_btn, primary_btn = make_dialog_header(
+            cancel_label=_("Cancel"),
+            primary_label=_("Install"),
+        )
         primary_btn.set_visible(False)
-        header.pack_start(cancel_btn)
-        header.pack_end(primary_btn)
         toolbar.add_top_bar(header)
 
         stack = Gtk.Stack()
@@ -936,23 +940,39 @@ class ModsMixin:
         stack.add_named(checking_page, "checking")
 
         review_page = Adw.PreferencesPage()
-        stack.add_named(review_page, "review")
+        review_page.set_vexpand(True)
+        bulk_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        bulk_box.set_halign(Gtk.Align.CENTER)
+        bulk_box.set_margin_top(12)
+        bulk_box.set_margin_bottom(6)
+        bulk_box.set_visible(False)
+        select_all_btn = Gtk.Button(label=_("Select all"))
+        select_all_btn.connect(
+            "clicked",
+            lambda *_: [c.set_active(True) for c in list(state["checks"])],
+        )
+        unselect_all_btn = Gtk.Button(label=_("Unselect all"))
+        unselect_all_btn.connect(
+            "clicked",
+            lambda *_: [c.set_active(False) for c in list(state["checks"])],
+        )
+        bulk_box.append(select_all_btn)
+        bulk_box.append(unselect_all_btn)
+        review_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        review_content.append(bulk_box)
+        review_content.append(review_page)
+        scrolled_review = Gtk.ScrolledWindow()
+        scrolled_review.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled_review.set_child(review_content)
+        stack.add_named(scrolled_review, "review")
 
-        progress_page = Adw.PreferencesPage()
-        progress_group = Adw.PreferencesGroup(title=_("Updating"))
-        progress_status_row = Adw.ActionRow(title=_("Preparing update"), subtitle="")
-        progress_spinner = Gtk.Spinner()
-        progress_status_row.add_suffix(progress_spinner)
-        progress_group.add(progress_status_row)
-        progress_bar = Gtk.ProgressBar()
-        progress_bar.set_margin_top(12)
-        progress_bar.set_margin_bottom(12)
-        progress_group.add(progress_bar)
-        progress_label = Gtk.Label(label="")
-        progress_label.add_css_class("dim-label")
-        progress_label.set_wrap(True)
-        progress_group.add(progress_label)
-        progress_page.add(progress_group)
+        progress_page, progress_status, progress_bar, progress_label = build_progress_page(
+            icon_name="folder-download-symbolic",
+            title=_("Updating"),
+            description=_("Preparing update"),
+        )
+        # Legacy name kept for the callbacks below (StatusPage API).
+        progress_status_row = progress_status
         stack.add_named(progress_page, "progress")
 
         done_page = Adw.StatusPage()
@@ -978,6 +998,18 @@ class ModsMixin:
             stack.set_visible_child_name("done")
 
         def start_install() -> None:
+            selected: set = set(state.get("selected") or set())
+
+            def _is_selected(kind: str, pid: str) -> bool:
+                return f"{kind}:{pid}" in selected
+
+            filtered_modpacks = [x for x in state["modpacks"] if _is_selected("modpack", str(x[0]))]
+            filtered_mods = [x for x in state["mods"] if _is_selected("mod", str(x[0]))]
+            filtered_datapacks = [x for x in state["datapacks"] if _is_selected("datapack", str(x[0]))]
+            filtered_plugins = [x for x in state["plugins"] if _is_selected("plugin", str(x[0]))]
+            if not (filtered_modpacks or filtered_mods or filtered_datapacks or filtered_plugins):
+                self._toast(_("Select at least one update to install"))
+                return
             op_token = self._begin_mod_operation()
             if not op_token:
                 self._mods_update_busy = False
@@ -989,8 +1021,7 @@ class ModsMixin:
             progress_bar.set_fraction(0.0)
             progress_label.set_label("")
             progress_status_row.set_title(_("Updating"))
-            progress_status_row.set_subtitle("")
-            progress_spinner.start()
+            progress_status_row.set_description(_("Updating"))
             stack.set_visible_child_name("progress")
 
             def on_progress(frac: float, message: str) -> None:
@@ -1004,7 +1035,6 @@ class ModsMixin:
             def on_done(applied: int, failed: int) -> None:
                 if not state["open"]:
                     return
-                progress_spinner.stop()
                 if applied == 0 and failed == 0:
                     show_done(
                         "dialog-information-symbolic",
@@ -1047,23 +1077,23 @@ class ModsMixin:
 
             # Build a plural-correct list like "1 modpack, 3 mods" instead of "modpack(s)".
             update_parts: list[str] = []
-            modpack_count = len(state["modpacks"])
+            modpack_count = len(filtered_modpacks)
             if modpack_count:
                 # Translators: e.g. "1 modpack", "3 modpacks"
                 update_parts.append(
                     ngettext("{count} modpack", "{count} modpacks", modpack_count).format(count=modpack_count)
                 )
-            mod_count = len(state["mods"])
+            mod_count = len(filtered_mods)
             if mod_count:
                 # Translators: e.g. "1 mod", "3 mods"
                 update_parts.append(ngettext("{count} mod", "{count} mods", mod_count).format(count=mod_count))
-            datapack_count = len(state["datapacks"])
+            datapack_count = len(filtered_datapacks)
             if datapack_count:
                 # Translators: e.g. "1 datapack", "3 datapacks"
                 update_parts.append(
                     ngettext("{count} datapack", "{count} datapacks", datapack_count).format(count=datapack_count)
                 )
-            plugin_count = len(state["plugins"])
+            plugin_count = len(filtered_plugins)
             if plugin_count:
                 # Translators: e.g. "1 plugin", "3 plugins"
                 update_parts.append(
@@ -1077,11 +1107,11 @@ class ModsMixin:
             threading.Thread(
                 target=self._apply_mod_updates,
                 args=(
-                    state["modpacks"],
-                    state["mods"],
+                    filtered_modpacks,
+                    filtered_mods,
                     op_token,
-                    state["datapacks"],
-                    state["plugins"],
+                    filtered_datapacks,
+                    filtered_plugins,
                     on_progress,
                     on_done,
                 ),
@@ -1301,13 +1331,49 @@ class ModsMixin:
                     except Exception:
                         pass
                 state["review_groups"] = []
+                state["selected"] = set()
+                state["checks"] = []
 
-                def add_kind_group(title: str, items: list[tuple[str, str, str]]) -> None:
+                all_keys: list[str] = (
+                    [f"modpack:{pid}" for pid, _e, _n in modpack_updates]
+                    + [f"mod:{pid}" for pid, _m, _n, _d in standalone_updates]
+                    + [f"plugin:{pid}" for pid, _m, _n in plugin_updates]
+                    + [f"datapack:{pid}" for pid, _m, _n in datapack_updates]
+                )
+                state["selected"] = set(all_keys)
+                total_count = len(all_keys)
+
+                def refresh_primary() -> None:
+                    count = len(state["selected"])
+                    if count == 0:
+                        set_primary(_("Install"), sensitive=False)
+                    elif count == total_count:
+                        set_primary(_("Install"))
+                    else:
+                        set_primary(_("Install ({})").format(count))
+
+                bulk_box.set_visible(True)
+
+                def on_item_toggled(key: str, active: bool) -> None:
+                    if active:
+                        state["selected"].add(key)
+                    else:
+                        state["selected"].discard(key)
+                    refresh_primary()
+
+                def add_kind_group(title: str, items: list[tuple[str, str, str, str]]) -> None:
                     group = Adw.PreferencesGroup(title=title)
-                    for item_title, old_v, new_v in items:
+                    for key, item_title, old_v, new_v in items:
                         row = Adw.ActionRow(title=item_title, subtitle=version_line(old_v, new_v))
-                        row.set_activatable(False)
+                        check = Gtk.CheckButton()
+                        check.set_active(True)
+                        check.set_valign(Gtk.Align.CENTER)
+                        check.connect("toggled", lambda c, k=key: on_item_toggled(k, c.get_active()))
+                        row.add_prefix(check)
+                        row.set_activatable(True)
+                        row.connect("activated", lambda r, c=check: c.set_active(not c.get_active()))
                         group.add(row)
+                        state["checks"].append(check)
                     review_page.add(group)
                     state["review_groups"].append(group)
 
@@ -1316,6 +1382,7 @@ class ModsMixin:
                         _("Modpacks ({})").format(len(modpack_updates)),
                         [
                             (
+                                f"modpack:{pid}",
                                 str(entry.get("title", "")).strip() or pid,
                                 str(entry.get("version_number", "")).strip(),
                                 str(newer.version_number or newer.version_id),
@@ -1328,6 +1395,7 @@ class ModsMixin:
                         _("Mods ({})").format(len(standalone_updates)),
                         [
                             (
+                                f"mod:{pid}",
                                 str((meta or {}).get("title", "")).strip() or pid,
                                 str((meta or {}).get("version_number", "")).strip(),
                                 str(newer.version_number or newer.version_id),
@@ -1340,6 +1408,7 @@ class ModsMixin:
                         _("Plugins ({})").format(len(plugin_updates)),
                         [
                             (
+                                f"plugin:{pid}",
                                 str((meta or {}).get("title", "")).strip() or pid,
                                 str((meta or {}).get("version_number", "")).strip(),
                                 str(newer.version_number or newer.version_id),
@@ -1352,6 +1421,7 @@ class ModsMixin:
                         _("Datapacks ({})").format(len(datapack_updates)),
                         [
                             (
+                                f"datapack:{pid}",
                                 str((meta or {}).get("title", "")).strip() or pid,
                                 str((meta or {}).get("version_number", "")).strip(),
                                 str(newer.version_number or newer.version_id),
@@ -1378,7 +1448,7 @@ class ModsMixin:
 
                 cancel_btn.set_visible(True)
                 cancel_btn.set_sensitive(True)
-                set_primary(_("Install"))
+                refresh_primary()
                 stack.set_visible_child_name("review")
                 return False
 

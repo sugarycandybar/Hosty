@@ -12,6 +12,11 @@ from pathlib import Path
 
 from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk
 
+from hosty.gtk_ui.dialogs.dialog_common import (
+    apply_dialog_size,
+    make_action_button,
+    make_dialog_header,
+)
 from hosty.shared.utils.image_utils import (
     convert_to_png,
     load_pixbuf,
@@ -40,25 +45,17 @@ class IconPickerDialog(Adw.Dialog):
         self._crop_y = 0.0
         self._crop_size = 1.0
 
-        self.set_title(_("Change Server Icon"))
-        self.set_content_width(380)
-        self.set_content_height(500)
+        apply_dialog_size(self, _("Change Server Icon"))
 
         toolbar = Adw.ToolbarView()
 
-        header = Adw.HeaderBar()
-        header.set_show_start_title_buttons(False)
-        header.set_show_end_title_buttons(False)
-
-        cancel_btn = Gtk.Button(label=_("Cancel"))
+        header, cancel_btn, self._apply_btn = make_dialog_header(
+            cancel_label=_("Cancel"),
+            primary_label=_("Apply"),
+        )
         cancel_btn.connect("clicked", lambda b: self.close())
-        header.pack_start(cancel_btn)
-
-        self._apply_btn = Gtk.Button(label=_("Apply"))
-        self._apply_btn.add_css_class("suggested-action")
         self._apply_btn.set_sensitive(False)
         self._apply_btn.connect("clicked", self._on_apply)
-        header.pack_end(self._apply_btn)
 
         toolbar.add_top_bar(header)
 
@@ -66,8 +63,8 @@ class IconPickerDialog(Adw.Dialog):
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         content.set_margin_top(16)
         content.set_margin_bottom(16)
-        content.set_margin_start(16)
-        content.set_margin_end(16)
+        content.set_margin_start(24)
+        content.set_margin_end(24)
 
         # Preview area
         preview_frame = Gtk.Frame()
@@ -93,9 +90,7 @@ class IconPickerDialog(Adw.Dialog):
         content.append(result_box)
 
         # File chooser button
-        choose_btn = Gtk.Button(label=_("Choose Image…"))
-        choose_btn.add_css_class("pill")
-        choose_btn.set_halign(Gtk.Align.CENTER)
+        choose_btn = make_action_button(_("Choose Image…"))
         choose_btn.connect("clicked", self._on_choose_image)
         content.append(choose_btn)
 

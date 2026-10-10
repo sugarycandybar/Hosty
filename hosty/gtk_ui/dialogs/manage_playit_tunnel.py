@@ -10,6 +10,12 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GObject, Gtk
 
+from hosty.gtk_ui.dialogs.dialog_common import (
+    apply_dialog_size,
+    make_action_button,
+    make_dialog_header,
+)
+
 
 class ManagePlayitTunnelDialog(Adw.Dialog):
     """Dialog to manage a playit tunnel (show details, edit local port, regenerate, delete)."""
@@ -23,8 +29,7 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
     def __init__(self, tunnel_name: str, connection_type: str, local_port: int, domain: str):
         super().__init__()
 
-        self.set_title(_("Manage {} Tunnel").format(tunnel_name))
-        self.set_content_width(360)
+        apply_dialog_size(self, _("Manage {} Tunnel").format(tunnel_name))
 
         # Parse domain if it contains a remote port (format: "domain:port")
         remote_port = local_port
@@ -42,7 +47,14 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
 
         self._toolbar_view = Adw.ToolbarView()
 
-        header = Adw.HeaderBar()
+        header, close_btn, _primary = make_dialog_header(
+            cancel_label=_("Close"),
+            primary_label=_("Save"),
+        )
+        # Manage dialog applies actions from its own buttons; the header
+        # primary just saves the port like "Update Local Port".
+        _primary.set_visible(False)
+        close_btn.connect("clicked", lambda *_: self.close())
 
         self._toolbar_view.add_top_bar(header)
 
@@ -71,42 +83,39 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         group.add(domain_row)
 
         page.add(group)
+        page.set_vexpand(True)
 
-        action_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        action_box.set_margin_top(32)
+        action_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        action_box.set_margin_top(12)
         action_box.set_margin_bottom(18)
+        action_box.set_margin_start(24)
+        action_box.set_margin_end(24)
         action_box.set_halign(Gtk.Align.CENTER)
 
         # Update Local Port button
-        save_port_btn = Gtk.Button(label=_("Update Local Port"))
-        save_port_btn.add_css_class("pill")
-        save_port_btn.add_css_class("suggested-action")
-        save_port_btn.set_size_request(220, 36)
+        save_port_btn = make_action_button(_("Update Local Port"), style="suggested-action")
         save_port_btn.connect("clicked", self._on_save_port)
         action_box.append(save_port_btn)
 
         # Regenerate button
-        regen_btn = Gtk.Button(label=_("Regenerate Domain"))
-        regen_btn.add_css_class("pill")
-        regen_btn.set_size_request(220, 36)
+        regen_btn = make_action_button(_("Regenerate Domain"))
         regen_btn.connect("clicked", self._on_regenerate)
         action_box.append(regen_btn)
 
         # Delete button
-        delete_btn = Gtk.Button(label=_("Delete Tunnel"))
-        delete_btn.add_css_class("pill")
-        delete_btn.add_css_class("destructive-action")
-        delete_btn.set_size_request(220, 36)
+        delete_btn = make_action_button(_("Delete Tunnel"), style="destructive-action")
         delete_btn.connect("clicked", self._on_delete)
         action_box.append(delete_btn)
-
-        page.set_vexpand(True)
 
         content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         content_box.append(page)
         content_box.append(action_box)
 
-        self._toolbar_view.set_content(content_box)
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_child(content_box)
+
+        self._toolbar_view.set_content(scrolled)
         self.set_child(self._toolbar_view)
 
     def _on_save_port(self, *_args):

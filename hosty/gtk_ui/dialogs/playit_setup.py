@@ -16,6 +16,12 @@ gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Adw, GLib, GObject, Gtk
 
+from hosty.gtk_ui.dialogs.dialog_common import (
+    apply_dialog_size,
+    build_progress_page,
+    make_dialog_header,
+    wrap_in_scrolled,
+)
 from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
 from hosty.shared.backend.server_manager import ServerInfo, ServerManager
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
@@ -60,24 +66,16 @@ class PlayitSetupDialog(Adw.Dialog):
         self._finished = False
         self._did_try_open_setup_link = False
 
-        self.set_title(_("Set Up Playit"))
-        self.set_content_width(400)
-        self.set_content_height(500)
+        apply_dialog_size(self, _("Set Up Playit"))
 
         self._toolbar_view = Adw.ToolbarView()
 
-        header = Adw.HeaderBar()
-        header.set_show_start_title_buttons(False)
-        header.set_show_end_title_buttons(False)
-
-        self._close_btn = Gtk.Button(label=_("Cancel"))
+        header, self._close_btn, self._action_btn = make_dialog_header(
+            cancel_label=_("Cancel"),
+            primary_label=_("Next"),
+        )
         self._close_btn.connect("clicked", self._on_close_clicked)
-        header.pack_start(self._close_btn)
-
-        self._action_btn = Gtk.Button(label=_("Next"))
-        self._action_btn.add_css_class("suggested-action")
         self._action_btn.connect("clicked", self._on_action_clicked)
-        header.pack_end(self._action_btn)
 
         self._toolbar_view.add_top_bar(header)
 
@@ -107,27 +105,11 @@ class PlayitSetupDialog(Adw.Dialog):
         return status
 
     def _build_progress_page(self) -> Gtk.Widget:
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        box.set_margin_top(18)
-        box.set_margin_bottom(18)
-        box.set_margin_start(24)
-        box.set_margin_end(24)
-
-        self._progress_status = Adw.StatusPage()
-        self._progress_status.set_icon_name("folder-download-symbolic")
-        self._progress_status.set_title(_("Preparing Playit"))
-        self._progress_status.set_description(_("Starting setup..."))
-
-        self._progress_bar = Gtk.ProgressBar()
-        self._progress_bar.set_show_text(True)
-
-        self._progress_detail = Gtk.Label(label="")
-        self._progress_detail.set_xalign(0)
-        self._progress_detail.add_css_class("dim-label")
-
-        box.append(self._progress_status)
-        box.append(self._progress_bar)
-        box.append(self._progress_detail)
+        box, self._progress_status, self._progress_bar, self._progress_detail = build_progress_page(
+            icon_name="folder-download-symbolic",
+            title=_("Preparing Playit"),
+            description=_("Starting setup..."),
+        )
         return box
 
     def _build_claim_page(self) -> Gtk.Widget:
@@ -151,10 +133,7 @@ class PlayitSetupDialog(Adw.Dialog):
 
         page.add(group)
 
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_child(page)
-        return scrolled
+        return wrap_in_scrolled(page)
 
     def _build_success_page(self) -> Gtk.Widget:
         status = Adw.StatusPage()

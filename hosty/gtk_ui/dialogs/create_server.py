@@ -11,6 +11,12 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio, GLib, GObject, Gtk
 
+from hosty.gtk_ui.dialogs.dialog_common import (
+    apply_dialog_size,
+    build_progress_page,
+    make_dialog_header,
+    wrap_in_scrolled,
+)
 from hosty.shared.backend.server_manager import ServerManager
 from hosty.shared.utils.constants import (
     DEFAULT_SERVER_PROPERTIES,
@@ -68,26 +74,18 @@ class CreateServerDialog(Adw.Dialog):
         self._world_import_source_path: str = ""
         self._java_item_rows: list[dict] = []
 
-        self.set_title(_("Create Server"))
-        self.set_content_width(400)
-        self.set_content_height(500)
+        apply_dialog_size(self, _("Create Server"))
 
         # Main content
         self._toolbar_view = Adw.ToolbarView()
 
-        header = Adw.HeaderBar()
-        header.set_show_start_title_buttons(False)
-        header.set_show_end_title_buttons(False)
-
-        self._cancel_btn = Gtk.Button(label=_("Cancel"))
+        header, self._cancel_btn, self._create_btn = make_dialog_header(
+            cancel_label=_("Cancel"),
+            primary_label=_("Next"),
+        )
         self._cancel_btn.connect("clicked", self._on_cancel_clicked)
-        header.pack_start(self._cancel_btn)
-
-        self._create_btn = Gtk.Button(label=_("Next"))
-        self._create_btn.add_css_class("suggested-action")
         self._create_btn.set_sensitive(False)
         self._create_btn.connect("clicked", self._on_primary_clicked)
-        header.pack_end(self._create_btn)
 
         self._toolbar_view.add_top_bar(header)
 
@@ -117,9 +115,6 @@ class CreateServerDialog(Adw.Dialog):
 
     def _build_details_page(self) -> Gtk.Widget:
         """Build step 1: basic server details."""
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-
         page = Adw.PreferencesPage()
 
         info_group = Adw.PreferencesGroup(
@@ -220,14 +215,10 @@ class CreateServerDialog(Adw.Dialog):
 
         page.add(world_group)
 
-        scrolled.set_child(page)
-        return scrolled
+        return wrap_in_scrolled(page)
 
     def _build_runtime_page(self) -> Gtk.Widget:
         """Build step 2: versions, runtime, and optional optimizations."""
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-
         page = Adw.PreferencesPage()
 
         version_group = Adw.PreferencesGroup(
@@ -312,46 +303,17 @@ class CreateServerDialog(Adw.Dialog):
         page.add(mods_group)
         self._mods_group = mods_group
 
-        scrolled.set_child(page)
-        return scrolled
+        return wrap_in_scrolled(page)
 
     def _build_progress_page(self) -> Gtk.Widget:
         """Build the progress/installation page."""
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        box.set_valign(Gtk.Align.CENTER)
-        box.set_halign(Gtk.Align.CENTER)
-        box.set_hexpand(True)
-        box.set_margin_start(24)
-        box.set_margin_end(24)
-
-        self._progress_status = Adw.StatusPage()
-        self._progress_status.set_icon_name("folder-download-symbolic")
-        self._progress_status.set_title(_("Creating Server"))
-        self._progress_status.set_description(_("Preparing..."))
-        self._progress_status.set_vexpand(False)
-        self._progress_status.set_hexpand(True)
-
-        # Progress bar
-        self._progress_bar = Gtk.ProgressBar()
-        self._progress_bar.set_show_text(True)
-        self._progress_bar.set_hexpand(True)
-        self._progress_bar.set_margin_start(12)
-        self._progress_bar.set_margin_end(12)
+        box, self._progress_status, self._progress_bar, self._progress_label = build_progress_page(
+            icon_name="folder-download-symbolic",
+            title=_("Creating Server"),
+            description=_("Preparing..."),
+        )
         self._progress_bar.add_css_class("hosty-progress")
-
-        progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        progress_box.set_hexpand(True)
-        progress_box.append(self._progress_bar)
-
-        self._progress_label = Gtk.Label(label="")
-        self._progress_label.add_css_class("dim-label")
-        self._progress_label.set_wrap(True)
-        self._progress_label.set_justify(Gtk.Justification.CENTER)
-        progress_box.append(self._progress_label)
-
-        self._progress_status.set_child(progress_box)
-
-        box.append(self._progress_status)
+        self._progress_label.set_halign(Gtk.Align.CENTER)
         return box
 
     def _fetch_versions(self):
