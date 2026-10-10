@@ -1,6 +1,7 @@
 hosty/gtk_ui/application.py
 hosty/gtk_ui/window.py
 hosty/gtk_ui/dialogs/about.py
+hosty/gtk_ui/dialogs/add_playit_tunnel.py
 hosty/gtk_ui/dialogs/create_server.py
 hosty/gtk_ui/dialogs/icon_picker.py
 hosty/gtk_ui/dialogs/manage_playit_tunnel.py

@@ -857,6 +857,41 @@ class PlayitManager(EventEmitter):
         used = len(self.tunnels["tcp"]) + len(self.tunnels["udp"]) + len(self.tunnels["both"])
         return used, max(1, int(self.max_tunnels))
 
+    #: How long a retrieved tunnel list counts as verified truth for the
+    #: "tunnel missing" UI state (see stored_tunnel_state).
+    TUNNEL_LIST_FRESH_SECS = 120.0
+
+    def stored_tunnel_state(
+        self,
+        kind: str,
+        tunnel_id: str = "",
+        endpoint: str = "",
+        max_age_secs: float = TUNNEL_LIST_FRESH_SECS,
+    ) -> str:
+        """Classify a stored tunnel reference against the live account state.
+
+        Returns ``"live"`` (a suitable tunnel exists), ``"missing"`` (a
+        reference is stored but no suitable tunnel exists), ``"unknown"``
+        (no fresh tunnel list to judge by), or ``"none"`` (nothing stored).
+        Never raises.
+        """
+        try:
+            tid = str(tunnel_id or "").strip()
+            ep = str(endpoint or "").strip()
+            if not tid and not ep:
+                return "none"
+            refreshed = self.tunnels_refreshed_at
+            if refreshed is None or (time.monotonic() - refreshed) > max_age_secs:
+                return "unknown"
+            for tunnel in self._return_single_list():
+                if tid and str(tunnel.id or "") == tid:
+                    return "live" if self._tunnel_suits_kind(tunnel, kind) else "missing"
+                if ep and self._tunnel_matches_endpoint(tunnel, ep):
+                    return "live" if self._tunnel_suits_kind(tunnel, kind) else "missing"
+            return "missing"
+        except Exception:
+            return "unknown"
+
     def ensure_free_slot(self, port: int, protocol: str) -> bool:
         """Free the obsolete tunnel on ``port`` if the account is at its cap.
 

@@ -2218,3 +2218,59 @@ def test_sync_migration_leaves_active_java_slot_alone(tmp_path):
 
     assert pm._active_server_ids["a"]["endpoint"] == ""
     assert pm._active_server_ids["a"]["tunnel_id"] is None
+
+
+def test_sync_adopts_java_only_after_session_restore(tmp_path):
+    """Reconcile-on-show premise: a fresh manager (post-restart, no API
+    session) cannot refresh, so sync reports stale and adopts nothing. After
+    a single initialize(), the same sync adopts the existing same-port java
+    tunnel instead of leaving the row empty."""
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_config import load_playit_config
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    assert pm.initialized is False
+    assert pm._agent_id is None
+
+    store = {
+        "t-java": _tunnel_data(
+            "t-java",
+            proto="tcp",
+            tunnel_type="minecraft-java",
+            local_port=25565,
+            domain="java.tun.ply.gg",
+            remote_port=25565,
+            name="hosty-srv-tcp-25565",
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    srv_dir = _sync_cfg(tmp_path, "srvA")
+
+    def fake_api(endpoint, **kwargs):
+        if endpoint == "agents/rundata":
+            return {"status": "success", "data": {"agent_id": "agent-1"}}
+        if endpoint == "proto/register":
+            return {"status": "success", "data": {"key": "proto-1"}}
+        return api(endpoint, **kwargs)
+
+    with patch.object(PlayitManager, "_request", side_effect=fake_api):
+        stale = pm.sync_account_tunnels([("a", str(srv_dir))])
+    assert stale["status"] == "stale"
+    assert stale["adopted"] == []
+    assert load_playit_config(srv_dir)["java_endpoint"] == ""
+
+    with (
+        patch.object(PlayitManager, "resolve_binary", return_value="/fake/playit"),
+        patch.object(PlayitManager, "read_claimed_secret", return_value="sekrit"),
+        patch.object(PlayitManager, "_request", side_effect=fake_api),
+    ):
+        assert pm.initialize() is True
+        summary = pm.sync_account_tunnels([("a", str(srv_dir))])
+
+    assert summary["status"] == "ok"
+    assert summary["adopted"] == [{"server": "a", "kind": "java", "tunnel": "t-java"}]
+    cfg = load_playit_config(srv_dir)
+    assert cfg["java_endpoint"] == "java.tun.ply.gg"
+    assert cfg["java_tunnel_id"] == "t-java"

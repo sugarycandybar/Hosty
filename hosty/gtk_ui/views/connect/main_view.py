@@ -39,6 +39,9 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._voicechat_in_progress = False
         self._tunnels_usage_refreshing = False
         self._tunnels_usage_updated_at = 0.0
+        self._tunnels_reconciled_at = 0.0
+        self._tunnels_reconcile_in_progress = False
+        self._tunnels_reconciled_servers: set[str] = set()
         self._local_ip_rows: list[Adw.ActionRow] = []
         self._local_ip_value = _("Not available")
         self._whitelist_status_rows: list[Adw.ActionRow] = []
@@ -104,8 +107,12 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
 
         group = Adw.PreferencesGroup(
             title=_("Playit.gg"),
-            description=_("Share with friends"),
         )
+        self._playit_add_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
+        self._playit_add_btn.add_css_class("flat")
+        self._playit_add_btn.set_tooltip_text(_("Add tunnel"))
+        self._playit_add_btn.connect("clicked", self._on_add_playit_tunnel)
+        group.set_header_suffix(self._playit_add_btn)
 
         self._tunnel_row = Adw.ActionRow(title=_("Agent"), subtitle=_("Stopped"))
         self._tunnel_row.set_activatable(False)
@@ -116,7 +123,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._tunnel_row.add_suffix(self._tunnel_btn)
         group.add(self._tunnel_row)
 
-        self._tunnel_domain_row = Adw.ActionRow(title=_("Java tunnel domain"), subtitle=_("Not available"))
+        self._tunnel_domain_row = Adw.ActionRow(title=_("Java tunnel"), subtitle=_("Not available"))
         self._tunnel_domain_row.set_activatable(False)
         self._tunnel_domain_row.connect("activated", self._on_java_domain_row_activated)
         self._copy_tunnel_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
@@ -138,7 +145,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._tunnel_domain_row.add_suffix(self._java_tunnel_action_btn)
         group.add(self._tunnel_domain_row)
 
-        self._bedrock_domain_row = Adw.ActionRow(title=_("Bedrock tunnel domain"), subtitle=_("Not available"))
+        self._bedrock_domain_row = Adw.ActionRow(title=_("Bedrock tunnel"), subtitle=_("Not available"))
         self._bedrock_domain_row.set_activatable(False)
         self._bedrock_domain_row.connect("activated", self._on_bedrock_domain_row_activated)
         self._copy_bedrock_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
@@ -160,16 +167,9 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._bedrock_domain_row.add_suffix(self._bedrock_tunnel_action_btn)
         group.add(self._bedrock_domain_row)
 
-        self._voicechat_domain_row = Adw.ActionRow(title=_("Voice Chat tunnel domain"), subtitle=_("Not available"))
+        self._voicechat_domain_row = Adw.ActionRow(title=_("Voice Chat tunnel"), subtitle=_("Not available"))
         self._voicechat_domain_row.set_activatable(False)
         self._voicechat_domain_row.connect("activated", self._on_voicechat_domain_row_activated)
-        self._copy_voicechat_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
-        self._copy_voicechat_domain_btn.add_css_class("flat")
-        self._copy_voicechat_domain_btn.set_tooltip_text(_("Copy voice chat tunnel domain"))
-        self._copy_voicechat_domain_btn.set_sensitive(False)
-        self._copy_voicechat_domain_btn.set_visible(False)
-        self._copy_voicechat_domain_btn.connect("clicked", self._on_copy_voicechat_domain)
-        self._voicechat_domain_row.add_suffix(self._copy_voicechat_domain_btn)
         self._voicechat_tunnel_action_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
         self._voicechat_tunnel_action_btn.add_css_class("flat")
         self._voicechat_tunnel_action_btn.set_tooltip_text(_("Add Voice Chat tunnel"))
@@ -251,6 +251,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._refresh_player_lists()
         self._refresh_mode()
         self._refresh_status_row()
+        self._maybe_reconcile_tunnels()
 
     def _on_server_changed(self, _manager, server_id):
         if not self._server_info or server_id != self._server_info.id:
@@ -280,6 +281,12 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
 
     def refresh_server_state(self) -> None:
         self._refresh_whitelist_status()
+        if self._server_manager is None or self._server_info is None:
+            return
+        self._load_server_config()
+        self._refresh_mode()
+        self._refresh_status_row()
+        self._maybe_reconcile_tunnels()
 
     def _on_whitelist_toggled(self, row, _pspec):
         if self._suppress_whitelist_toggle:

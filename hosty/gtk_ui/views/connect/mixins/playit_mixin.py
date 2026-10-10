@@ -17,6 +17,7 @@ gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Adw, Gdk, GLib
 
+from hosty.gtk_ui.dialogs.add_playit_tunnel import AddPlayitTunnelDialog
 from hosty.gtk_ui.dialogs.manage_playit_tunnel import ManagePlayitTunnelDialog
 from hosty.gtk_ui.dialogs.playit_setup import PlayitSetupDialog
 from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
@@ -83,6 +84,21 @@ class PlayitMixin:
                 # Only update port if the caller explicitly passed it
                 **({"bedrock_port": updates["bedrock_port"]} if updates and "bedrock_port" in updates else {}),
                 **({"voicechat_port": updates["voicechat_port"]} if updates and "voicechat_port" in updates else {}),
+                # Tunnel ids are only written when the caller explicitly
+                # passes them (e.g. clearing both id and endpoint on delete
+                # so a user-deleted tunnel reads as "never had", not
+                # "missing").
+                **({"java_tunnel_id": updates["java_tunnel_id"]} if updates and "java_tunnel_id" in updates else {}),
+                **(
+                    {"bedrock_tunnel_id": updates["bedrock_tunnel_id"]}
+                    if updates and "bedrock_tunnel_id" in updates
+                    else {}
+                ),
+                **(
+                    {"voicechat_tunnel_id": updates["voicechat_tunnel_id"]}
+                    if updates and "voicechat_tunnel_id" in updates
+                    else {}
+                ),
             },
         )
         return save_playit_config(root, existing)
@@ -177,6 +193,151 @@ class PlayitMixin:
             )
         )
 
+    _TUNNEL_ID_FIELDS = {
+        "java": "java_tunnel_id",
+        "bedrock": "bedrock_tunnel_id",
+        "voicechat": "voicechat_tunnel_id",
+    }
+    _TUNNEL_ENDPOINT_FIELDS = {
+        "java": "java_endpoint",
+        "bedrock": "bedrock_endpoint",
+        "voicechat": "voicechat_endpoint",
+    }
+
+    def _tunnel_presence(self, kind: str) -> str:
+        """Classify a stored tunnel ref: live/missing/unknown/none.
+
+        "missing" (stored ref, no live tunnel) is only reported against a
+        fresh tunnel list; otherwise the stored state is trusted.
+        """
+        if not self._server_manager or not self._server_info:
+            return "unknown"
+        playit = self._server_manager.playit_manager
+        id_field = self._TUNNEL_ID_FIELDS.get(kind, "")
+        ep_field = self._TUNNEL_ENDPOINT_FIELDS.get(kind, "")
+        return playit.stored_tunnel_state(
+            kind,
+            str(self._cfg.get(id_field, "") if id_field else ""),
+            str(self._cfg.get(ep_field, "") if ep_field else ""),
+        )
+
+    def _tunnel_addable(self, kind: str) -> bool:
+        """Whether a fresh tunnel of this kind can be added (nothing stored)."""
+        id_field = self._TUNNEL_ID_FIELDS.get(kind, "")
+        ep_field = self._TUNNEL_ENDPOINT_FIELDS.get(kind, "")
+        has_id = bool(str(self._cfg.get(id_field, "") if id_field else "").strip())
+        has_ep = bool(str(self._cfg.get(ep_field, "") if ep_field else "").strip())
+        return not has_id and not has_ep
+
+    def _maybe_reconcile_tunnels(self):
+        """Reconcile stored tunnel refs against the live account (throttled).
+
+        Runs when the shown server was never reconciled (e.g. just created)
+        or the last reconcile is older than 60s, so rows show verified
+        state: adopted existing tunnels appear, dashboard-deleted ones surface
+        as missing instead of stale domains. A sync covers every server at
+        once, so all current servers count as covered afterwards.
+        """
+        if not self._server_manager or not self._server_info:
+            return
+        if not self._is_setup_complete():
+            return
+        if not self._server_manager.playit_manager.has_claimed_secret():
+            return
+        server_id = self._server_info.id
+        if self._tunnels_reconcile_in_progress:
+            return
+        if time.monotonic() - self._tunnels_reconciled_at < 60 and server_id in self._tunnels_reconciled_servers:
+            return
+        self._tunnels_reconciled_at = time.monotonic()
+        self._tunnels_reconcile_in_progress = True
+
+        def run():
+            playit = self._server_manager.playit_manager
+            if not playit.initialized:
+                # After an app restart the in-memory API session is gone, so
+                # a bare sync could never refresh the tunnel list. Restore it
+                # with a few retries (the API is briefly out-of-sync after
+                # linking); this never unlinks credentials or downloads
+                # anything, unlike the full ensure flow.
+                try:
+                    playit._initialize_with_retry(max_attempts=6, delay_seconds=1.0)
+                except Exception:
+                    pass
+            try:
+                summary = self._server_manager.sync_playit_tunnels()
+            except Exception:
+                summary = {"status": "error"}
+            try:
+                adopted = len(summary.get("adopted") or [])
+                healed = len(summary.get("healed") or [])
+                migrated = len(summary.get("migrated") or [])
+                cleaned = len(summary.get("cleaned") or [])
+                if adopted or healed or migrated or cleaned:
+                    logger.info(
+                        "tunnel reconcile for %s: status=%s adopted=%d healed=%d migrated=%d cleaned=%d",
+                        server_id,
+                        summary.get("status"),
+                        adopted,
+                        healed,
+                        migrated,
+                        cleaned,
+                    )
+                elif summary.get("status") not in ("ok",):
+                    logger.warning("tunnel reconcile for %s: status=%s", server_id, summary.get("status"))
+            except Exception:
+                pass
+
+            def done():
+                self._tunnels_reconcile_in_progress = False
+                if summary.get("status") == "ok" and self._server_manager is not None:
+                    # A successful sync verified every server at once.
+                    try:
+                        self._tunnels_reconciled_servers = {s.id for s in self._server_manager.servers}
+                    except Exception:
+                        pass
+                if not self._server_info or self._server_info.id != server_id:
+                    return
+                self._load_server_config()
+                self._refresh_status_row()
+
+            GLib.idle_add(done)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _on_add_playit_tunnel(self, *_args):
+        """Open the Add Tunnel chooser for kinds with nothing stored."""
+        if not self._server_manager or not self._server_info:
+            return
+        if not self._is_setup_complete():
+            self._on_open_setup_dialog()
+            return
+        if (
+            self._java_tunnel_in_progress
+            or self._bedrock_in_progress
+            or self._voicechat_in_progress
+            or self._start_in_progress
+        ):
+            self._toast(_("A tunnel operation is already in progress"))
+            return
+        kinds: list[tuple[str, str]] = []
+        if self._tunnel_addable("bedrock"):
+            kinds.append(("bedrock", _("Bedrock tunnel")))
+        if self._tunnel_addable("voicechat"):
+            kinds.append(("voicechat", _("Voice Chat tunnel")))
+        if not kinds:
+            return
+        dialog = AddPlayitTunnelDialog(kinds)
+        dialog.connect("add-requested", self._on_add_tunnel_kind)
+        dialog.present(self.get_root())
+
+    def _on_add_tunnel_kind(self, _dialog, kind: str):
+        """Run the normal setup flow for a kind chosen in the Add dialog."""
+        if kind == "bedrock":
+            self._on_manage_bedrock_tunnel()
+        elif kind == "voicechat":
+            self._on_manage_voicechat_tunnel()
+
     def _refresh_mode(self):
         mode = "ready" if self._is_setup_complete() else "setup"
         self._mode_stack.set_visible_child_name(mode)
@@ -194,8 +355,9 @@ class PlayitMixin:
             self._copy_bedrock_domain_btn.set_visible(False)
             self._voicechat_domain_row.set_subtitle(_("Not available"))
             self._voicechat_domain_row.set_activatable(False)
-            self._copy_voicechat_domain_btn.set_sensitive(False)
-            self._copy_voicechat_domain_btn.set_visible(False)
+            self._bedrock_domain_row.set_visible(False)
+            self._voicechat_domain_row.set_visible(False)
+            self._playit_add_btn.set_visible(False)
             self._java_tunnel_action_btn.set_label("")
             self._java_tunnel_action_btn.set_icon_name("list-add-symbolic")
             self._java_tunnel_action_btn.set_tooltip_text(_("Add Java tunnel"))
@@ -249,11 +411,18 @@ class PlayitMixin:
             if java_endpoint != str(self._cfg.get("java_endpoint", "")).strip():
                 self._save_server_config({"java_endpoint": java_endpoint})
 
+        java_presence = self._tunnel_presence("java")
+        java_missing = not java_endpoint and java_presence == "missing"
         if java_endpoint:
             self._tunnel_domain_row.set_subtitle(java_endpoint)
             self._tunnel_domain_row.set_activatable(True)
             self._copy_tunnel_domain_btn.set_sensitive(True)
             self._copy_tunnel_domain_btn.set_visible(True)
+        elif java_missing:
+            self._tunnel_domain_row.set_subtitle(_("Tunnel missing"))
+            self._tunnel_domain_row.set_activatable(True)
+            self._copy_tunnel_domain_btn.set_sensitive(False)
+            self._copy_tunnel_domain_btn.set_visible(False)
         else:
             self._tunnel_domain_row.set_subtitle(_("Not available"))
             self._tunnel_domain_row.set_activatable(True)
@@ -261,6 +430,10 @@ class PlayitMixin:
             self._copy_tunnel_domain_btn.set_visible(False)
 
         bedrock_endpoint = str(self._cfg.get("bedrock_endpoint", "")).strip()
+        bedrock_presence = self._tunnel_presence("bedrock")
+        bedrock_missing = not bedrock_endpoint and bedrock_presence == "missing"
+        # Optional rows only show once they exist, go missing, or are working.
+        self._bedrock_domain_row.set_visible(bool(bedrock_endpoint) or bedrock_missing or self._bedrock_in_progress)
         if bedrock_endpoint:
             # Format bedrock endpoint with middle dot separator and Port label (domain:port -> domain · Port port)
             if ":" in bedrock_endpoint:
@@ -272,6 +445,11 @@ class PlayitMixin:
             self._bedrock_domain_row.set_activatable(True)
             self._copy_bedrock_domain_btn.set_sensitive(True)
             self._copy_bedrock_domain_btn.set_visible(True)
+        elif bedrock_missing:
+            self._bedrock_domain_row.set_subtitle(_("Tunnel missing"))
+            self._bedrock_domain_row.set_activatable(True)
+            self._copy_bedrock_domain_btn.set_sensitive(False)
+            self._copy_bedrock_domain_btn.set_visible(False)
         else:
             self._bedrock_domain_row.set_subtitle(_("Not available"))
             self._bedrock_domain_row.set_activatable(True)
@@ -282,6 +460,12 @@ class PlayitMixin:
             self._java_tunnel_action_btn.set_label("")
             self._java_tunnel_action_btn.set_icon_name("emblem-system-symbolic")
             self._java_tunnel_action_btn.set_tooltip_text(_("Manage Java tunnel"))
+            self._java_tunnel_action_btn.remove_css_class("pill")
+            self._java_tunnel_action_btn.add_css_class("flat")
+        elif java_missing:
+            self._java_tunnel_action_btn.set_label("")
+            self._java_tunnel_action_btn.set_icon_name("view-refresh-symbolic")
+            self._java_tunnel_action_btn.set_tooltip_text(_("Repair Java tunnel"))
             self._java_tunnel_action_btn.remove_css_class("pill")
             self._java_tunnel_action_btn.add_css_class("flat")
         else:
@@ -307,6 +491,12 @@ class PlayitMixin:
             self._bedrock_tunnel_action_btn.set_tooltip_text(_("Manage Bedrock tunnel"))
             self._bedrock_tunnel_action_btn.remove_css_class("pill")
             self._bedrock_tunnel_action_btn.add_css_class("flat")
+        elif bedrock_missing:
+            self._bedrock_tunnel_action_btn.set_label("")
+            self._bedrock_tunnel_action_btn.set_icon_name("view-refresh-symbolic")
+            self._bedrock_tunnel_action_btn.set_tooltip_text(_("Repair Bedrock tunnel"))
+            self._bedrock_tunnel_action_btn.remove_css_class("pill")
+            self._bedrock_tunnel_action_btn.add_css_class("flat")
         else:
             self._bedrock_tunnel_action_btn.set_label("")
             self._bedrock_tunnel_action_btn.set_icon_name("list-add-symbolic")
@@ -325,27 +515,33 @@ class PlayitMixin:
             self._bedrock_tunnel_spinner.set_spinning(False)
 
         voicechat_endpoint = str(self._cfg.get("voicechat_endpoint", "")).strip()
+        voicechat_presence = self._tunnel_presence("voicechat")
+        voicechat_missing = not voicechat_endpoint and voicechat_presence == "missing"
+        self._voicechat_domain_row.set_visible(
+            bool(voicechat_endpoint) or voicechat_missing or self._voicechat_in_progress
+        )
         if voicechat_endpoint:
-            # Format voicechat endpoint with middle dot separator and Port label (domain:port -> domain · Port port)
-            if ":" in voicechat_endpoint:
-                domain, port = voicechat_endpoint.rsplit(":", 1)
-                formatted_endpoint = f"{domain} · Port {port}"
-            else:
-                formatted_endpoint = voicechat_endpoint
-            self._voicechat_domain_row.set_subtitle(formatted_endpoint)
+            # Voice chat is fully automatic via the mod: show status, never
+            # the domain/port (nothing to copy).
+            self._voicechat_domain_row.set_subtitle("✓ " + _("Configured"))
             self._voicechat_domain_row.set_activatable(True)
-            self._copy_voicechat_domain_btn.set_sensitive(True)
-            self._copy_voicechat_domain_btn.set_visible(True)
+        elif voicechat_missing:
+            self._voicechat_domain_row.set_subtitle(_("Tunnel missing"))
+            self._voicechat_domain_row.set_activatable(True)
         else:
             self._voicechat_domain_row.set_subtitle(_("Not available"))
             self._voicechat_domain_row.set_activatable(True)
-            self._copy_voicechat_domain_btn.set_sensitive(False)
-            self._copy_voicechat_domain_btn.set_visible(False)
 
         if voicechat_endpoint:
             self._voicechat_tunnel_action_btn.set_label("")
             self._voicechat_tunnel_action_btn.set_icon_name("emblem-system-symbolic")
             self._voicechat_tunnel_action_btn.set_tooltip_text(_("Manage Voice Chat tunnel"))
+            self._voicechat_tunnel_action_btn.remove_css_class("pill")
+            self._voicechat_tunnel_action_btn.add_css_class("flat")
+        elif voicechat_missing:
+            self._voicechat_tunnel_action_btn.set_label("")
+            self._voicechat_tunnel_action_btn.set_icon_name("view-refresh-symbolic")
+            self._voicechat_tunnel_action_btn.set_tooltip_text(_("Repair Voice Chat tunnel"))
             self._voicechat_tunnel_action_btn.remove_css_class("pill")
             self._voicechat_tunnel_action_btn.add_css_class("flat")
         else:
@@ -376,6 +572,12 @@ class PlayitMixin:
         self._java_tunnel_action_btn.set_sensitive(not tunnel_actions_locked)
         self._bedrock_tunnel_action_btn.set_sensitive(not tunnel_actions_locked)
         self._voicechat_tunnel_action_btn.set_sensitive(not tunnel_actions_locked)
+
+        # The header "+" offers only kinds with nothing stored yet; it hides
+        # once every optional tunnel exists or needs repair instead.
+        can_add = self._is_setup_complete() and (self._tunnel_addable("bedrock") or self._tunnel_addable("voicechat"))
+        self._playit_add_btn.set_visible(bool(can_add))
+        self._playit_add_btn.set_sensitive(not tunnel_actions_locked)
 
         if self._start_in_progress:
             self._tunnel_btn.set_label(_("Starting..."))
@@ -486,29 +688,9 @@ class PlayitMixin:
             return
         self._on_manage_bedrock_tunnel()
 
-    def _on_copy_voicechat_domain(self, *_args):
-        endpoint = str(self._cfg.get("voicechat_endpoint", "")).strip()
-        if not endpoint:
-            return
-
-        # Extract domain only (remove port if present)
-        domain_only = endpoint.rsplit(":", 1)[0] if ":" in endpoint else endpoint
-
-        try:
-            display = Gdk.Display.get_default()
-            if not display:
-                return
-            clipboard = display.get_clipboard()
-            clipboard.set(domain_only)
-            self._toast(_("Voice Chat tunnel domain copied"))
-        except Exception:
-            pass
-
     def _on_voicechat_domain_row_activated(self, *_args):
-        endpoint = str(self._cfg.get("voicechat_endpoint", "")).strip()
-        if endpoint:
-            self._on_copy_voicechat_domain()
-            return
+        # Voice chat needs no domain copying (fully automatic via the mod):
+        # tapping the row always opens management.
         self._on_manage_voicechat_tunnel()
 
     def _on_tunnel_toggle(self, *_args):
@@ -1073,7 +1255,7 @@ class PlayitMixin:
                 def ui_done():
                     self._java_tunnel_in_progress = False
                     if ok or "No java tunnel found" in str(msg):
-                        self._save_server_config({"java_endpoint": ""})
+                        self._save_server_config({"java_endpoint": "", "java_tunnel_id": ""})
                         java_port = self._server_manager.playit_manager._read_server_port(server_dir)
                         self._propagate_tunnel_endpoint("java_endpoint", java_port, "")
                         self._load_server_config()
@@ -1122,7 +1304,7 @@ class PlayitMixin:
                 def ui_done():
                     self._bedrock_in_progress = False
                     if ok or "No bedrock tunnel found" in str(msg):
-                        self._save_server_config({"bedrock_endpoint": ""})
+                        self._save_server_config({"bedrock_endpoint": "", "bedrock_tunnel_id": ""})
                         br_port = self._server_manager.get_bedrock_port(self._server_info.id)
                         self._propagate_tunnel_endpoint("bedrock_endpoint", br_port, "")
                         self._load_server_config()
@@ -1171,7 +1353,7 @@ class PlayitMixin:
                 def ui_done():
                     self._voicechat_in_progress = False
                     if ok or "No voice chat tunnel found" in str(msg):
-                        self._save_server_config({"voicechat_endpoint": ""})
+                        self._save_server_config({"voicechat_endpoint": "", "voicechat_tunnel_id": ""})
                         vc_port = self._server_manager.get_voicechat_port(self._server_info.id)
                         self._propagate_tunnel_endpoint("voicechat_endpoint", vc_port, "")
                         self._load_server_config()

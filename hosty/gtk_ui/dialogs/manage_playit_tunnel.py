@@ -8,7 +8,8 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GObject, Gtk
+gi.require_version("Gdk", "4.0")
+from gi.repository import Adw, Gdk, GObject, Gtk
 
 from hosty.gtk_ui.dialogs.dialog_common import (
     apply_dialog_size,
@@ -77,10 +78,21 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
 
         # Playit port (show remote port for tunnel endpoint)
         port_row = Adw.ActionRow(title=_("Playit port"), subtitle=str(remote_port))
+        copy_port_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
+        copy_port_btn.add_css_class("flat")
+        copy_port_btn.set_tooltip_text(_("Copy Playit port"))
+        copy_port_btn.connect("clicked", self._on_copy_value, str(remote_port))
+        port_row.add_suffix(copy_port_btn)
         group.add(port_row)
 
         # Playit Domain
         domain_row = Adw.ActionRow(title=_("Playit Domain"), subtitle=display_domain)
+        copy_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
+        copy_domain_btn.add_css_class("flat")
+        copy_domain_btn.set_tooltip_text(_("Copy Playit domain"))
+        copy_domain_btn.connect("clicked", self._on_copy_value, display_domain)
+        copy_domain_btn.set_visible(bool(display_domain.strip()))
+        domain_row.add_suffix(copy_domain_btn)
         group.add(domain_row)
 
         page.add(group)
@@ -116,6 +128,18 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
 
     def _on_port_value_changed(self, _spin):
         self._save_btn.set_sensitive(int(self._port_spin.get_value()) != self._local_port)
+
+    def _on_copy_value(self, _button, text: str):
+        text = str(text or "").strip()
+        if not text:
+            return
+        try:
+            display = Gdk.Display.get_default()
+            if not display:
+                return
+            display.get_clipboard().set(text)
+        except Exception:
+            pass
 
     def _on_save_port(self, *_args):
         new_port = int(self._port_spin.get_value())
