@@ -39,6 +39,7 @@ def show_preferences_window(
     application=None,
 ):
     win = Adw.PreferencesDialog()
+    win.set_search_enabled(True)
 
     def show_pref_toast(message: str) -> None:
         win.add_toast(Adw.Toast(title=message))
