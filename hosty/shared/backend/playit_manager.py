@@ -19,13 +19,14 @@ import urllib.request
 from datetime import datetime as dt
 from pathlib import Path
 
-import requests
-
 from hosty.shared.core.events import EventEmitter
 from hosty.shared.utils.constants import DATA_DIR
 from hosty.shared.utils.file_utils import atomic_write_json
-from hosty.shared.utils.net import make_ssl_context
+from hosty.shared.utils.net import lazy_requests, make_ssl_context
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
+
+# Imported lazily on first network use to keep app startup fast.
+requests = lazy_requests()
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +193,9 @@ class PlayitManager(EventEmitter):
         self.tunnel_cache = self.TunnelCacheHelper(self.directory)
         self.config: dict[str, str] = {}
 
-        self.session = requests.Session()
+        # Created on first network use so importing/constructing this
+        # manager never pays the requests import cost at app startup.
+        self.session = None
         self.agent_name = f"hosty ({platform.node()})"
         self.agent_web_url = ""
         self.max_tunnels = 4
@@ -280,10 +283,18 @@ class PlayitManager(EventEmitter):
     def _emit_endpoint_changed(self, server_id: str = ""):
         self.emit_on_main_thread("endpoint-changed", self.public_endpoint, self._claim_url)
 
+    def _session(self):
+        """Return the shared requests session, creating it on first use."""
+        session = self.session
+        if session is None:
+            session = requests.Session()
+            self.session = session
+        return session
+
     def _request(self, endpoint: str, **kwargs) -> dict:
         url = f"{self._api_base}/{endpoint.strip('/')}"
         try:
-            response = self.session.post(url, timeout=20, **kwargs)
+            response = self._session().post(url, timeout=20, **kwargs)
             response.raise_for_status()
         except requests.RequestException as e:
             message = str(e)
@@ -725,7 +736,7 @@ class PlayitManager(EventEmitter):
             return False
 
         self._secret_key = secret
-        self.session.headers["Authorization"] = f"agent-key {self._secret_key}"
+        self._session().headers["Authorization"] = f"agent-key {self._secret_key}"
 
         try:
             agent_data = self._request("agents/rundata")

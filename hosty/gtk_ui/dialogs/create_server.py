@@ -1061,7 +1061,11 @@ class CreateServerDialog(Adw.Dialog):
 
     def _find_supported_optimisation_version(self, modrinth_client, project_id: str, mc_version: str):
         """Return a Fabric version only when it explicitly supports the selected MC version."""
-        versions = modrinth_client.get_project_versions(project_id)
+        versions = modrinth_client.get_project_versions(
+            project_id,
+            loaders=["fabric"],
+            game_versions=[mc_version] if mc_version else None,
+        )
         if not versions:
             return None
 

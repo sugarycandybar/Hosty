@@ -534,19 +534,39 @@ class ModsMixin:
         self._modpack_version_enrich_busy = True
 
         def worker():
+            from concurrent.futures import ThreadPoolExecutor
+
             from hosty.shared.backend import modrinth_client
 
             latest_entries = self._modpack_entries()
             changed = False
             payload: dict[str, dict[str, Any]] = {}
 
+            def fetch_number(version_id: str) -> str:
+                try:
+                    raw = modrinth_client.get_version(version_id)
+                except Exception:
+                    return ""
+                if isinstance(raw, dict):
+                    return str(raw.get("version_number", "")).strip() or str(raw.get("name", "")).strip()
+                return ""
+
+            missing_numbers = {
+                project_id: str(entry.get("version_id", "")).strip()
+                for project_id, entry in latest_entries.items()
+                if not str(entry.get("version_number", "")).strip() and str(entry.get("version_id", "")).strip()
+            }
+            fetched: dict[str, str] = {}
+            if missing_numbers:
+                with ThreadPoolExecutor(max_workers=6, thread_name_prefix="hosty-enrich") as pool:
+                    for project_id, number in zip(missing_numbers, pool.map(fetch_number, missing_numbers.values())):
+                        fetched[project_id] = number
+
             for project_id, entry in latest_entries.items():
                 version_id = str(entry.get("version_id", "")).strip()
                 version_number = str(entry.get("version_number", "")).strip()
                 if not version_number and version_id:
-                    raw = modrinth_client.get_version(version_id)
-                    if isinstance(raw, dict):
-                        version_number = str(raw.get("version_number", "")).strip() or str(raw.get("name", "")).strip()
+                    version_number = fetched.get(project_id, "")
                     if version_number:
                         changed = True
 
@@ -1138,6 +1158,8 @@ class ModsMixin:
         dialog.present(self.get_root())
 
         def worker():
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
             from hosty.shared.backend import modrinth_client
 
             mc_version = self._server_info.mc_version if self._server_info else ""
@@ -1146,31 +1168,35 @@ class ModsMixin:
             individual_state = self._read_individual_mod_state().get("mods", {})
             datapack_state = self._read_datapack_state().get("datapacks", {})
             plugin_state = self._read_plugin_state().get("plugins", {})
+            loader_type = self._server_loader()
 
-            refresh_needed = False
-            modpack_updates = []
-            for project_id, entry in modpack_entries.items():
+            def check_modpack(project_id, entry):
+                """Return the newer version, or None (pure network + compute)."""
                 current_version = str(entry.get("version_id", "")).strip()
                 current_version_number = str(entry.get("version_number", "")).strip()
-                versions = modrinth_client.get_project_versions(project_id)
+                versions = modrinth_client.get_project_versions(
+                    project_id,
+                    game_versions=[mc_version] if mc_version else None,
+                )
                 compatible = [v for v in versions if mc_version in (v.game_versions or [])]
                 if not compatible:
-                    continue
+                    return None
                 latest = compatible[0]
 
                 latest_id = str(latest.version_id).strip()
                 latest_number = str(latest.version_number).strip()
                 same_id = current_version and (latest_id == current_version)
                 same_number = current_version_number and (latest_number == current_version_number)
-                newer = None if (same_id or same_number) else latest
-                if newer:
-                    modpack_updates.append((project_id, entry, newer))
+                return None if (same_id or same_number) else latest
 
-            # Check standalone updates
-            standalone_updates = []
-            blocked = 0
-            loader_type = self._server_loader()
-            for project_id, meta in individual_state.items():
+            def check_mod(project_id, meta):
+                """Return (status, newer, deps, backfill).
+
+                status is "update", "blocked", or "none". backfill is a
+                callable applying the metadata backfill, or None. Disk writes
+                stay out of worker threads; the caller applies backfills
+                sequentially.
+                """
                 current_version = str((meta or {}).get("version_id", "")).strip()
                 # Find compatible mod version for the server's loader
                 latest = modrinth_client.find_compatible_version(
@@ -1179,13 +1205,14 @@ class ModsMixin:
                     loader=loader_type,
                 )
                 if not latest:
-                    continue
+                    return ("none", None, [], None)
 
                 # Ensure the compatible version is actually a mod (has loaders)
                 if not latest.loaders or len(latest.loaders) == 0:
-                    continue
+                    return ("none", None, [], None)
 
                 # Update metadata if missing (backfilling)
+                backfill = None
                 if not (meta or {}).get("version_number") or not (meta or {}).get("title"):
                     title_to_record = (meta or {}).get("title")
                     if not title_to_record:
@@ -1193,19 +1220,25 @@ class ModsMixin:
                         if p_data:
                             title_to_record = p_data.get("title")
 
-                    self._record_individual_mod_install(
-                        project_id,
-                        title_to_record or project_id,
-                        current_version,
-                        (meta or {}).get("filename"),
-                        version_number=(meta or {}).get("version_number") or latest.version_number
-                        if latest.version_id == current_version
-                        else (meta or {}).get("version_number"),
-                    )
-                    refresh_needed = True
+                    def backfill(
+                        project_id=project_id,
+                        title_to_record=title_to_record,
+                        current_version=current_version,
+                        meta=meta,
+                        latest=latest,
+                    ):
+                        self._record_individual_mod_install(
+                            project_id,
+                            title_to_record or project_id,
+                            current_version,
+                            (meta or {}).get("filename"),
+                            version_number=(meta or {}).get("version_number") or latest.version_number
+                            if latest.version_id == current_version
+                            else (meta or {}).get("version_number"),
+                        )
 
                 if str(latest.version_id).strip() == current_version:
-                    continue
+                    return ("none", None, [], backfill)
 
                 deps = modrinth_client.resolve_required_dependencies(
                     latest.version_id,
@@ -1214,16 +1247,17 @@ class ModsMixin:
                 )
                 dep_hits_modpack = any(str(dep.filename).strip().lower() in managed_mods for dep in deps)
                 if dep_hits_modpack:
-                    blocked += 1
-                    continue
+                    return ("blocked", None, [], backfill)
 
-                standalone_updates.append((project_id, meta, latest, deps))
+                return ("update", latest, deps, backfill)
 
-            # Check datapack updates (datapacks have no loader requirement)
-            datapack_updates = []
-            for project_id, meta in datapack_state.items():
+            def check_datapack(project_id, meta):
+                """Return (newer, backfill); newer is None when up to date."""
                 current_version = str((meta or {}).get("version_id", "")).strip()
-                versions = modrinth_client.get_project_versions(project_id)
+                versions = modrinth_client.get_project_versions(
+                    project_id,
+                    game_versions=[mc_version] if mc_version else None,
+                )
                 # Filter to only datapack versions (no loaders)
                 datapack_versions = [v for v in versions if not v.loaders or len(v.loaders) == 0]
                 compatible = [v for v in datapack_versions if not mc_version or mc_version in (v.game_versions or [])]
@@ -1231,10 +1265,11 @@ class ModsMixin:
                     # Fall back to any datapack version without MC version requirement
                     compatible = datapack_versions
                 if not compatible:
-                    continue
+                    return (None, None)
                 latest = compatible[0]
 
                 # Update metadata if missing (backfilling)
+                backfill = None
                 if not (meta or {}).get("version_number") or not (meta or {}).get("title"):
                     title_to_record = (meta or {}).get("title")
                     if not title_to_record:
@@ -1242,29 +1277,35 @@ class ModsMixin:
                         if p_data:
                             title_to_record = p_data.get("title")
 
-                    self._record_datapack_install(
-                        project_id,
-                        title_to_record or project_id,
-                        current_version,
-                        (meta or {}).get("filename"),
-                        version_number=(meta or {}).get("version_number") or latest.version_number
-                        if latest.version_id == current_version
-                        else (meta or {}).get("version_number"),
-                    )
-                    refresh_needed = True
+                    def backfill(
+                        project_id=project_id,
+                        title_to_record=title_to_record,
+                        current_version=current_version,
+                        meta=meta,
+                        latest=latest,
+                    ):
+                        self._record_datapack_install(
+                            project_id,
+                            title_to_record or project_id,
+                            current_version,
+                            (meta or {}).get("filename"),
+                            version_number=(meta or {}).get("version_number") or latest.version_number
+                            if latest.version_id == current_version
+                            else (meta or {}).get("version_number"),
+                        )
 
                 if str(latest.version_id).strip() == current_version:
-                    continue
-                datapack_updates.append((project_id, meta, latest))
+                    return (None, backfill)
+                return (latest, backfill)
 
-            # Check plugin updates (Arclight servers; Bukkit-family loaders)
-            plugin_updates = []
-            for project_id, meta in plugin_state.items():
+            def check_plugin(project_id, meta):
+                """Return (newer, backfill); newer is None when up to date."""
                 current_version = str((meta or {}).get("version_id", "")).strip()
                 latest = modrinth_client.find_compatible_plugin_version(project_id, mc_version)
                 if not latest:
-                    continue
+                    return (None, None)
 
+                backfill = None
                 if not (meta or {}).get("version_number") or not (meta or {}).get("title"):
                     title_to_record = (meta or {}).get("title")
                     if not title_to_record:
@@ -1272,20 +1313,103 @@ class ModsMixin:
                         if p_data:
                             title_to_record = p_data.get("title")
 
-                    self._record_plugin_install(
-                        project_id,
-                        title_to_record or project_id,
-                        current_version,
-                        (meta or {}).get("filename"),
-                        version_number=(meta or {}).get("version_number") or latest.version_number
-                        if latest.version_id == current_version
-                        else (meta or {}).get("version_number"),
-                    )
-                    refresh_needed = True
+                    def backfill(
+                        project_id=project_id,
+                        title_to_record=title_to_record,
+                        current_version=current_version,
+                        meta=meta,
+                        latest=latest,
+                    ):
+                        self._record_plugin_install(
+                            project_id,
+                            title_to_record or project_id,
+                            current_version,
+                            (meta or {}).get("filename"),
+                            version_number=(meta or {}).get("version_number") or latest.version_number
+                            if latest.version_id == current_version
+                            else (meta or {}).get("version_number"),
+                        )
 
                 if str(latest.version_id).strip() == current_version:
+                    return (None, backfill)
+                return (latest, backfill)
+
+            def run_task(task):
+                kind, project_id, payload = task
+                if kind == "modpack":
+                    return ("modpack", check_modpack(project_id, payload))
+                if kind == "mod":
+                    return ("mod",) + check_mod(project_id, payload)
+                if kind == "datapack":
+                    return ("datapack",) + check_datapack(project_id, payload)
+                return ("plugin",) + check_plugin(project_id, payload)
+
+            tasks = (
+                [("modpack", pid, entry) for pid, entry in modpack_entries.items()]
+                + [("mod", pid, meta) for pid, meta in individual_state.items()]
+                + [("datapack", pid, meta) for pid, meta in datapack_state.items()]
+                + [("plugin", pid, meta) for pid, meta in plugin_state.items()]
+            )
+            results: dict[tuple[str, str], tuple] = {}
+            with ThreadPoolExecutor(max_workers=8, thread_name_prefix="hosty-update-check") as pool:
+                pending = {pool.submit(run_task, task): task for task in tasks}
+                for future in as_completed(pending):
+                    task = pending[future]
+                    try:
+                        results[(task[0], str(task[1]))] = future.result()
+                    except Exception:
+                        # One project's network failure must not fail the
+                        # whole check; it simply yields no update.
+                        pass
+
+            # Rebuild the update lists in the original order so the review UI
+            # stays deterministic, and apply backfills sequentially (disk
+            # read-modify-write is not safe to parallelize).
+            modpack_updates = []
+            standalone_updates = []
+            datapack_updates = []
+            plugin_updates = []
+            blocked = 0
+            refresh_needed = False
+            for kind, project_id, payload in tasks:
+                result = results.get((kind, str(project_id)))
+                if not result:
                     continue
-                plugin_updates.append((project_id, meta, latest))
+                if kind == "modpack":
+                    if result[1] is not None:
+                        modpack_updates.append((project_id, payload, result[1]))
+                elif kind == "mod":
+                    _kind, status, newer, deps, backfill = result
+                    if backfill is not None:
+                        try:
+                            backfill()
+                            refresh_needed = True
+                        except Exception:
+                            pass
+                    if status == "update":
+                        standalone_updates.append((project_id, payload, newer, deps))
+                    elif status == "blocked":
+                        blocked += 1
+                elif kind == "datapack":
+                    _kind, newer, backfill = result
+                    if backfill is not None:
+                        try:
+                            backfill()
+                            refresh_needed = True
+                        except Exception:
+                            pass
+                    if newer is not None:
+                        datapack_updates.append((project_id, payload, newer))
+                else:
+                    _kind, newer, backfill = result
+                    if backfill is not None:
+                        try:
+                            backfill()
+                            refresh_needed = True
+                        except Exception:
+                            pass
+                    if newer is not None:
+                        plugin_updates.append((project_id, payload, newer))
 
             if refresh_needed:
                 GLib.idle_add(self._rebuild_lists)

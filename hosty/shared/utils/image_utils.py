@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PIL import Image
+# NOTE: PIL is imported lazily inside the functions that need it (below) so
+# that importing this module never pays the Pillow import cost at app startup.
+# (Annotations referencing Image.Image are strings via __future__.)
 
 SERVER_ICON_FILENAME = "server-icon.png"
 SERVER_ICON_SIZE = 64
@@ -15,22 +17,41 @@ SERVER_ICON_SIZE = 64
 LEGACY_ICON_FILENAME = "icon.png"
 LEGACY_ICON_SIZE = 128
 
-try:
-    import gi
+gi = None
+GdkPixbuf = None
+Gdk = None
+Gtk = None
 
-    gi.require_version("Gtk", "4.0")
-    gi.require_version("Gdk", "4.0")
-    gi.require_version("GdkPixbuf", "2.0")
-    from gi.repository import Gdk, GdkPixbuf, Gtk
-except ImportError:
-    gi = None
-    GdkPixbuf = None
-    Gdk = None
-    Gtk = None
+
+def _ensure_gi() -> bool:
+    """Import gi namespaces on first use (keeps module import free of gi cost).
+
+    Returns True when GdkPixbuf is available. Behavior matches the previous
+    import-time fallback: without gi, pixbuf helpers return None.
+    """
+    global gi, Gdk, GdkPixbuf, Gtk
+    if GdkPixbuf is not None:
+        return True
+    try:
+        import gi as _gi
+
+        _gi.require_version("Gtk", "4.0")
+        _gi.require_version("Gdk", "4.0")
+        _gi.require_version("GdkPixbuf", "2.0")
+        from gi.repository import Gdk as _Gdk
+        from gi.repository import GdkPixbuf as _GdkPixbuf
+        from gi.repository import Gtk as _Gtk
+
+        gi, Gdk, GdkPixbuf, Gtk = _gi, _Gdk, _GdkPixbuf, _Gtk
+        return True
+    except ImportError:
+        return False
 
 
 def crop_to_square(input_path: str, x: int, y: int, size: int) -> Image.Image:
     """Crop an image to a square region."""
+    from PIL import Image
+
     img = Image.open(input_path)
     img = img.convert("RGBA")
     cropped = img.crop((x, y, x + size, y + size))
@@ -50,6 +71,8 @@ def convert_to_png(input_path: str, output_path: str, size: int = SERVER_ICON_SI
     Returns:
         The output_path.
     """
+    from PIL import Image
+
     img = Image.open(input_path)
     img = img.convert("RGBA")
 
@@ -69,6 +92,30 @@ def convert_to_png(input_path: str, output_path: str, size: int = SERVER_ICON_SI
     return output_path
 
 
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def _png_dimensions(path: str) -> tuple[int, int] | None:
+    """Read PNG width/height straight from the IHDR header (no Pillow).
+
+    Equivalent strictness to Pillow's lazy header parse used previously:
+    files Pillow would reject (missing, truncated, wrong magic/chunk) yield
+    None here too, without decoding any image data.
+    """
+    try:
+        with open(path, "rb") as f:
+            header = f.read(26)
+        if len(header) < 26 or not header.startswith(_PNG_MAGIC):
+            return None
+        if header[8:12] != b"\x00\x00\x00\x0d" or header[12:16] != b"IHDR":
+            return None
+        width = int.from_bytes(header[16:20], "big")
+        height = int.from_bytes(header[20:24], "big")
+        return (width, height)
+    except Exception:
+        return None
+
+
 def is_valid_server_icon(path: str) -> bool:
     """Check whether a file meets Minecraft's multiplayer icon spec.
 
@@ -78,12 +125,7 @@ def is_valid_server_icon(path: str) -> bool:
         p = Path(path)
         if not p.is_file():
             return False
-        with Image.open(p) as img:
-            if img.format != "PNG":
-                return False
-            if img.size != (SERVER_ICON_SIZE, SERVER_ICON_SIZE):
-                return False
-        return True
+        return _png_dimensions(str(p)) == (SERVER_ICON_SIZE, SERVER_ICON_SIZE)
     except Exception:
         return False
 
@@ -177,7 +219,7 @@ def migrate_legacy_server_icon(server_dir: str) -> str | None:
 
 def load_pixbuf(path: str, size: int = 128) -> GdkPixbuf.Pixbuf | None:
     """Load an image file as a GdkPixbuf at the given size."""
-    if GdkPixbuf is None:
+    if not _ensure_gi():
         return None
     try:
         pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), size, size, True)

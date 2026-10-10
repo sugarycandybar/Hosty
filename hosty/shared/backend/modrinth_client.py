@@ -5,8 +5,11 @@ Modrinth API v2 -- search and download mods and modpacks (stdlib only).
 from __future__ import annotations
 
 import hashlib
+import http.client
 import io
 import json
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -22,6 +25,24 @@ USER_AGENT = "Hosty/1.0 (+https://github.com/hosty)"
 API = "https://api.modrinth.com/v2"
 
 _SSL_CONTEXT = make_ssl_context()
+
+_API_HOST = "api.modrinth.com"
+
+# Shared response cache (project/version metadata only, never search or
+# downloads). Keeps repeated update checks and browser revisits fast while
+# staying fresh enough for an explicit user-triggered lookup.
+_CACHE_TTL = 180.0
+_CACHE_MAX_ENTRIES = 400
+
+# Loader names that are Hosty-internal pseudo-loaders, never real Modrinth
+# loaders. Version lookups with these must behave exactly like an unfiltered
+# "newest overall" lookup (see find_compatible_versions).
+_PSEUDO_LOADERS = frozenset({"datapack", "plugin"})
+
+_cache_lock = threading.Lock()
+_json_cache: dict[str, tuple[float, Any]] = {}
+
+_thread_state = threading.local()
 
 
 @dataclass
@@ -80,13 +101,112 @@ def _version_to_model(ver: dict[str, Any]) -> ModrinthVersion | None:
     )
 
 
-def _request_json(url: str, timeout: float = 30.0) -> Any:
+def _cache_get(url: str) -> tuple[bool, Any]:
+    """Return (hit, data) for a cached JSON response."""
+    now = time.monotonic()
+    with _cache_lock:
+        entry = _json_cache.get(url)
+        if entry is None:
+            return False, None
+        timestamp, data = entry
+        if now - timestamp > _CACHE_TTL:
+            _json_cache.pop(url, None)
+            return False, None
+        return True, data
+
+
+def _cache_put(url: str, data: Any) -> None:
+    """Store a JSON response, evicting expired then oldest entries when full."""
+    now = time.monotonic()
+    with _cache_lock:
+        _json_cache[url] = (now, data)
+        if len(_json_cache) <= _CACHE_MAX_ENTRIES:
+            return
+        expired = [key for key, (ts, _) in _json_cache.items() if now - ts > _CACHE_TTL]
+        for key in expired:
+            _json_cache.pop(key, None)
+        while len(_json_cache) > _CACHE_MAX_ENTRIES:
+            oldest = min(_json_cache.items(), key=lambda kv: kv[1][0])[0]
+            _json_cache.pop(oldest, None)
+
+
+def _pooled_connection() -> http.client.HTTPSConnection:
+    """Return the calling thread's keep-alive API connection (one per thread)."""
+    conn = getattr(_thread_state, "modrinth_conn", None)
+    if conn is None:
+        conn = http.client.HTTPSConnection(_API_HOST, timeout=30, context=_SSL_CONTEXT)
+        _thread_state.modrinth_conn = conn
+    return conn
+
+
+def _drop_pooled_connection() -> None:
+    try:
+        conn = getattr(_thread_state, "modrinth_conn", None)
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    finally:
+        _thread_state.modrinth_conn = None
+
+
+def _request_json_direct(url: str, timeout: float = 30.0) -> Any:
+    """Single HTTPS request with no connection reuse (original behavior)."""
     req = urllib.request.Request(
         url,
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _request_json_pooled(url: str, timeout: float = 30.0) -> Any:
+    """Same as _request_json_direct but over the thread's keep-alive connection.
+
+    Raises on any non-200 status (including redirects) so the caller can fall
+    back to _request_json_direct, which handles those exactly as before.
+    """
+    parsed = urllib.parse.urlparse(url)
+    target = parsed.path
+    if parsed.query:
+        target += "?" + parsed.query
+    conn = _pooled_connection()
+    # http.client reuses the constructor timeout; stash a per-call timeout.
+    conn.timeout = timeout
+    conn.request("GET", target, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    resp = conn.getresponse()
+    body = resp.read()
+    if resp.status != 200:
+        raise RuntimeError(f"Modrinth API returned HTTP {resp.status} for {url}")
+    return json.loads(body.decode("utf-8"))
+
+
+def _request_json(url: str, timeout: float = 30.0, cache_ttl: float = 0.0) -> Any:
+    if cache_ttl > 0:
+        hit, data = _cache_get(url)
+        if hit:
+            return data
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme == "https" and parsed.netloc == _API_HOST:
+        try:
+            data = _request_json_pooled(url, timeout)
+        except Exception:
+            # Stale/redirected/failed pooled connection: drop it and retry
+            # with a plain request (identical behavior to before).
+            _drop_pooled_connection()
+            data = _request_json_direct(url, timeout)
+    else:
+        data = _request_json_direct(url, timeout)
+    if cache_ttl > 0:
+        _cache_put(url, data)
+    return data
+
+
+def clear_cache() -> None:
+    """Drop all cached API responses (mainly useful for tests)."""
+    with _cache_lock:
+        _json_cache.clear()
 
 
 def _pick_primary_file(files: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -293,7 +413,7 @@ def get_project(project_id: str) -> dict[str, Any] | None:
     """Fetch a single Modrinth project object by id or slug."""
     url = f"{API}/project/{project_id}"
     try:
-        data = _request_json(url)
+        data = _request_json(url, cache_ttl=_CACHE_TTL)
     except urllib.error.HTTPError:
         return None
     if isinstance(data, dict):
@@ -301,13 +421,38 @@ def get_project(project_id: str) -> dict[str, Any] | None:
     return None
 
 
-def get_project_versions(project_id: str) -> list[ModrinthVersion]:
-    """Return all available versions for a project (newest first per API)."""
+def get_project_versions(
+    project_id: str,
+    *,
+    loaders: list[str] | tuple[str, ...] | None = None,
+    game_versions: list[str] | tuple[str, ...] | None = None,
+) -> list[ModrinthVersion]:
+    """Return available versions for a project (newest first per API).
+
+    Optional ``loaders``/``game_versions`` are forwarded to the API so the
+    response only contains matching versions (much smaller payloads for
+    popular projects). Callers must still apply their own local filters:
+    results are identical with or without server-side filtering. When the
+    filtered request fails, it is retried once unfiltered.
+    """
+    params: dict[str, str] = {}
+    if loaders:
+        params["loaders"] = json.dumps([str(v) for v in loaders])
+    if game_versions:
+        params["game_versions"] = json.dumps([str(v) for v in game_versions])
     url = f"{API}/project/{project_id}/version"
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
     try:
-        raw_versions = _request_json(url)
+        raw_versions = _request_json(url, cache_ttl=_CACHE_TTL)
     except urllib.error.HTTPError:
-        return []
+        if params:
+            try:
+                raw_versions = _request_json(f"{API}/project/{project_id}/version", cache_ttl=_CACHE_TTL)
+            except urllib.error.HTTPError:
+                return []
+        else:
+            return []
 
     out: list[ModrinthVersion] = []
     for ver in raw_versions:
@@ -321,7 +466,7 @@ def get_version(version_id: str) -> dict[str, Any] | None:
     """Fetch a single Modrinth version object by id."""
     url = f"{API}/version/{version_id}"
     try:
-        data = _request_json(url)
+        data = _request_json(url, cache_ttl=_CACHE_TTL)
     except urllib.error.HTTPError:
         return None
     if isinstance(data, dict):
@@ -391,23 +536,55 @@ def resolve_required_dependencies(
     return resolved
 
 
+def _is_real_loader(loader: str) -> bool:
+    """Whether a loader name is a real Modrinth loader (not a Hosty pseudo-loader)."""
+    loader_l = str(loader or "").strip().lower()
+    return bool(loader_l) and loader_l not in _PSEUDO_LOADERS
+
+
 def find_compatible_versions(
     project_id: str,
     game_version: str,
     loader: str = "fabric",
     limit: int = 8,
 ) -> list[ModrinthVersion]:
-    """Return compatible versions, preferring exact MC+loader, then loader only."""
+    """Return compatible versions, preferring exact MC+loader, then loader only.
+
+    Server-side filters are used as a fast path; every step re-applies the
+    same local filters, and the final unfiltered pass reproduces the original
+    selection exactly, so results never depend on server filter support.
+    """
+    loader_l = str(loader or "").lower()
+    use_loader_filter = _is_real_loader(loader)
+    use_game_filter = bool(game_version)
+
+    def _exact(candidates: list[ModrinthVersion]) -> list[ModrinthVersion]:
+        return [v for v in candidates if game_version in v.game_versions and loader_l in [x.lower() for x in v.loaders]]
+
+    def _loader_only(candidates: list[ModrinthVersion]) -> list[ModrinthVersion]:
+        return [v for v in candidates if loader_l in [x.lower() for x in v.loaders]]
+
+    if use_loader_filter and use_game_filter:
+        candidates = get_project_versions(project_id, loaders=[loader_l], game_versions=[game_version])
+        exact = _exact(candidates)
+        if exact:
+            return exact[:limit]
+
+    if use_loader_filter:
+        candidates = get_project_versions(project_id, loaders=[loader_l])
+        loader_only = _loader_only(candidates)
+        if loader_only:
+            return loader_only[:limit]
+
     all_versions = get_project_versions(project_id)
     if not all_versions:
         return []
 
-    loader_l = loader.lower()
-    exact = [v for v in all_versions if game_version in v.game_versions and loader_l in [x.lower() for x in v.loaders]]
+    exact = _exact(all_versions)
     if exact:
         return exact[:limit]
 
-    loader_only = [v for v in all_versions if loader_l in [x.lower() for x in v.loaders]]
+    loader_only = _loader_only(all_versions)
     if loader_only:
         return loader_only[:limit]
 
@@ -450,15 +627,35 @@ def find_compatible_plugin_versions(
     Bukkit-family loader. Falls back to any game-version match, then to the
     newest version overall.
     """
-    all_versions = get_project_versions(project_id)
-    if not all_versions:
-        return []
 
     def _is_plugin(version: ModrinthVersion) -> bool:
         loaders = [str(x).lower() for x in (version.loaders or [])]
         if not loaders:
             return True
         return any(x in BUKKIT_FAMILY_LOADERS for x in loaders)
+
+    use_game_filter = bool(game_version)
+    if use_game_filter:
+        candidates = get_project_versions(
+            project_id,
+            loaders=list(BUKKIT_FAMILY_LOADERS),
+            game_versions=[game_version],
+        )
+        plugins = [v for v in candidates if _is_plugin(v)] or candidates
+        exact = [v for v in plugins if game_version in (v.game_versions or [])]
+        if exact:
+            return exact[:limit]
+
+    candidates = get_project_versions(project_id, loaders=list(BUKKIT_FAMILY_LOADERS))
+    plugins = [v for v in candidates if _is_plugin(v)] or candidates
+    if plugins:
+        exact = [v for v in plugins if game_version in (v.game_versions or [])]
+        if exact:
+            return exact[:limit]
+
+    all_versions = get_project_versions(project_id)
+    if not all_versions:
+        return []
 
     plugins = [v for v in all_versions if _is_plugin(v)] or all_versions
     exact = [v for v in plugins if game_version in (v.game_versions or [])]

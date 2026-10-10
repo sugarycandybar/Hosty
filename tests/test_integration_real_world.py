@@ -137,31 +137,17 @@ def test_modrinth_search_routing_for_paper():
 
     captured_facets = {}
 
-    def fake_request(req, **kw):
-        # urlopen is called with a urllib.request.Request
-        url = req.full_url if hasattr(req, "full_url") else str(req)
-        # Capture the facets query param
+    def fake_pooled(url, timeout=30.0):
+        # API requests go through the pooled keep-alive connection first;
+        # capture the facets query param from the request URL.
         from urllib.parse import parse_qs, urlparse
 
         qs = parse_qs(urlparse(url).query)
-        facets = qs.get("facets", [""])[0]
-        captured_facets["facets"] = facets
+        captured_facets["facets"] = qs.get("facets", [""])[0]
+        return {"hits": [], "total_hits": 0}
 
-        class FakeResp:
-            def read(self):
-                return b'{"hits": [], "total_hits": 0}'
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *a):
-                return False
-
-        return FakeResp()
-
-    with patch("hosty.shared.backend.modrinth_client.urllib.request.urlopen", side_effect=fake_request):
-        with patch("hosty.shared.backend.modrinth_client.make_ssl_context", return_value=None):
-            modrinth_client.search_mods("test", loader="paper")
+    with patch("hosty.shared.backend.modrinth_client._request_json_pooled", side_effect=fake_pooled):
+        modrinth_client.search_mods("test", loader="paper")
 
     assert "project_type:plugin" in captured_facets["facets"]
     assert "categories:paper" in captured_facets["facets"]

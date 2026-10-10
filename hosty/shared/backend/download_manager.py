@@ -12,8 +12,6 @@ from collections.abc import Callable
 from datetime import UTC
 from pathlib import Path
 
-import requests
-
 from hosty.shared.utils.constants import (
     ARCLIGHT_MINECRAFT_PATH,
     ARCLIGHT_PLATFORMS,
@@ -41,7 +39,11 @@ from hosty.shared.utils.constants import (
     normalize_arclight_platform,
     normalize_loader_type,
 )
+from hosty.shared.utils.net import lazy_requests
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
+
+# Imported lazily on first network use to keep app startup fast.
+requests = lazy_requests()
 
 MOJANG_VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
 

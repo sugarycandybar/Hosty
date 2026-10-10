@@ -126,6 +126,22 @@ class ServerManager(EventEmitter):
         - elif icon_path is empty but ``server-icon.png`` was placed manually,
           adopt it.
         """
+        # Cheap pre-check first: a server dir with neither a legacy icon nor
+        # a canonical icon is a guaranteed no-op, so skip the expensive
+        # PIL/GdkPixbuf import entirely when nothing needs migration. (Names
+        # mirror LEGACY_ICON_FILENAME/SERVER_ICON_FILENAME in image_utils.)
+        candidates = []
+        for info in self._servers.values():
+            try:
+                root = info.server_dir
+                if not root.exists():
+                    continue
+                if (root / "icon.png").is_file() or (root / "server-icon.png").is_file():
+                    candidates.append(info)
+            except Exception:
+                continue
+        if not candidates:
+            return
         try:
             from hosty.shared.utils.image_utils import (
                 SERVER_ICON_FILENAME,
@@ -135,11 +151,9 @@ class ServerManager(EventEmitter):
         except Exception:
             return
         changed = False
-        for info in self._servers.values():
+        for info in candidates:
             try:
                 root = info.server_dir
-                if not root.exists():
-                    continue
                 canonical = root / SERVER_ICON_FILENAME
                 migrated = migrate_legacy_server_icon(str(root))
                 if migrated and Path(migrated).exists():
@@ -885,7 +899,10 @@ class ServerManager(EventEmitter):
 
         def best_version(project_id: str, kind: str):
             try:
-                versions = modrinth_client.get_project_versions(project_id)
+                versions = modrinth_client.get_project_versions(
+                    project_id,
+                    game_versions=[target_mc_version] if target_mc_version else None,
+                )
             except Exception:
                 return None
             if not versions:
@@ -909,10 +926,50 @@ class ServerManager(EventEmitter):
             exact = [v for v in candidates if target_mc_version in (v.game_versions or [])]
             return exact[0] if exact else False
 
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _lookup(item: tuple[str, str]):
+            kind, project_id = item
+            try:
+                return best_version(project_id, kind)
+            except Exception:
+                # One project's network failure must not fail the whole scan.
+                return None
+
+        # Resolve every project's best version concurrently (order-preserving);
+        # plan assembly below stays sequential and deterministic.
+        lookup_order = (
+            [
+                ("modpacks", str(project_id))
+                for project_id, meta in self._tracked_modpack_state(root).items()
+                if isinstance(meta, dict)
+            ]
+            + [
+                ("mods", str(project_id))
+                for project_id, meta in self._tracked_mod_state(root).items()
+                if isinstance(meta, dict)
+            ]
+            + [
+                ("plugins", str(project_id))
+                for project_id, meta in self._tracked_plugin_state(root).items()
+                if isinstance(meta, dict)
+            ]
+            + [
+                ("datapacks", str(project_id))
+                for project_id, meta in self._tracked_datapack_state(root).items()
+                if isinstance(meta, dict)
+            ]
+        )
+        lookups: dict[tuple[str, str], object] = {}
+        if lookup_order:
+            with ThreadPoolExecutor(max_workers=8, thread_name_prefix="hosty-scan") as pool:
+                for item, version in zip(lookup_order, pool.map(_lookup, lookup_order)):
+                    lookups[item] = version
+
         for project_id, meta in self._tracked_modpack_state(root).items():
             if not isinstance(meta, dict):
                 continue
-            version = best_version(str(project_id), "modpacks")
+            version = lookups.get(("modpacks", str(project_id)))
             if version is False:
                 entry = self._incompatible_entry(str(project_id), meta, target_mc_version, "modpack")
                 entry["filename"] = ", ".join([str(Path(str(f)).name) for f in (meta.get("mods") or [])])
@@ -929,7 +986,7 @@ class ServerManager(EventEmitter):
         for project_id, meta in self._tracked_mod_state(root).items():
             if not isinstance(meta, dict):
                 continue
-            version = best_version(str(project_id), "mods")
+            version = lookups.get(("mods", str(project_id)))
             if version is False:
                 plan["incompatible"]["mods"].append(
                     self._incompatible_entry(str(project_id), meta, target_mc_version, "mod")
@@ -944,7 +1001,7 @@ class ServerManager(EventEmitter):
         for project_id, meta in self._tracked_plugin_state(root).items():
             if not isinstance(meta, dict):
                 continue
-            version = best_version(str(project_id), "plugins")
+            version = lookups.get(("plugins", str(project_id)))
             if version is False:
                 plan["incompatible"]["plugins"].append(
                     self._incompatible_entry(str(project_id), meta, target_mc_version, "plugin")
@@ -959,7 +1016,7 @@ class ServerManager(EventEmitter):
         for project_id, meta in self._tracked_datapack_state(root).items():
             if not isinstance(meta, dict):
                 continue
-            version = best_version(str(project_id), "datapacks")
+            version = lookups.get(("datapacks", str(project_id)))
             if version is False:
                 plan["incompatible"]["datapacks"].append(
                     self._incompatible_entry(str(project_id), meta, target_mc_version, "datapack")

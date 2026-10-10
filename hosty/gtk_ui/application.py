@@ -136,7 +136,9 @@ class HostyApplication(Adw.Application):
 
         if not hasattr(self, "_autostarted_once"):
             self._autostarted_once = True
-            self._server_manager.autostart_servers()
+            # Start autostart servers after the window is presented so a
+            # cold start with JVM launches never delays the first frame.
+            GLib.idle_add(self._autostart_servers_delayed)
 
         if self._activate_in_background:
             self._activate_in_background = False
@@ -274,6 +276,14 @@ class HostyApplication(Adw.Application):
         self.set_accels_for_action("app.shortcuts", ["<Primary>question"])
         self.set_accels_for_action("app.quit", ["<Primary>q"])
         self.set_accels_for_action("win.close-window", ["<Primary>w"])
+
+    def _autostart_servers_delayed(self):
+        """Idle callback: run autostart once (return False removes it)."""
+        try:
+            self._server_manager.autostart_servers()
+        except Exception:
+            pass
+        return False
 
     def _on_new_server(self, action, param):
         """Show create server dialog."""

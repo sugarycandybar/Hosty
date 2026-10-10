@@ -15,10 +15,12 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
-import requests
-
 from hosty.shared.utils.constants import JRES_DIR, get_adoptium_jre_download_info, get_required_java_version
+from hosty.shared.utils.net import lazy_requests
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
+
+# Imported lazily on first network use to keep app startup fast.
+requests = lazy_requests()
 
 logger = logging.getLogger(__name__)
 

@@ -11,8 +11,40 @@ from __future__ import annotations
 
 import ssl
 import sys
+from typing import Any
 
-__all__ = ["make_ssl_context"]
+__all__ = ["make_ssl_context", "lazy_requests"]
+
+
+class _LazyRequests:
+    """Proxy for the ``requests`` package that imports it on first use.
+
+    Importing requests (with urllib3) costs ~150-250ms, so backend modules
+    use this instead of a top-level ``import requests`` to keep app startup
+    fast. Attribute access, ``isinstance`` checks against
+    ``requests.exceptions.*``, and ``unittest.mock.patch`` of the module
+    attribute all behave exactly like the real package.
+    """
+
+    def __init__(self) -> None:
+        self._module: Any | None = None
+
+    def _load(self) -> Any:
+        module = self._module
+        if module is None:
+            import requests
+
+            module = requests
+            self._module = module
+        return module
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._load(), name)
+
+
+def lazy_requests() -> Any:
+    """Return a lazily-imported ``requests`` proxy (see _LazyRequests)."""
+    return _LazyRequests()
 
 
 def _windows_store_pems() -> list[str]:
