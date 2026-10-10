@@ -47,13 +47,13 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
 
         self._toolbar_view = Adw.ToolbarView()
 
-        header, close_btn, _primary = make_dialog_header(
+        header, close_btn, self._save_btn = make_dialog_header(
             cancel_label=_("Close"),
             primary_label=_("Save"),
         )
-        # Manage dialog applies actions from its own buttons; the header
-        # primary just saves the port like "Update Local Port".
-        _primary.set_visible(False)
+        # Disabled until the port actually differs from the current one.
+        self._save_btn.set_sensitive(False)
+        self._save_btn.connect("clicked", self._on_save_port)
         close_btn.connect("clicked", lambda *_: self.close())
 
         self._toolbar_view.add_top_bar(header)
@@ -71,6 +71,7 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         self._port_spin = Gtk.SpinButton.new_with_range(1.0, 65535.0, 1.0)
         self._port_spin.set_value(float(local_port))
         self._port_spin.set_valign(Gtk.Align.CENTER)
+        self._port_spin.connect("value-changed", self._on_port_value_changed)
         local_port_row.add_suffix(self._port_spin)
         group.add(local_port_row)
 
@@ -92,11 +93,6 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         action_box.set_margin_end(24)
         action_box.set_halign(Gtk.Align.CENTER)
 
-        # Update Local Port button
-        save_port_btn = make_action_button(_("Update Local Port"), style="suggested-action")
-        save_port_btn.connect("clicked", self._on_save_port)
-        action_box.append(save_port_btn)
-
         # Regenerate button
         regen_btn = make_action_button(_("Regenerate Domain"))
         regen_btn.connect("clicked", self._on_regenerate)
@@ -117,6 +113,9 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
 
         self._toolbar_view.set_content(scrolled)
         self.set_child(self._toolbar_view)
+
+    def _on_port_value_changed(self, _spin):
+        self._save_btn.set_sensitive(int(self._port_spin.get_value()) != self._local_port)
 
     def _on_save_port(self, *_args):
         new_port = int(self._port_spin.get_value())
