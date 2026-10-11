@@ -111,7 +111,7 @@ class MetricCard(Gtk.Box):
     def __init__(self, title, subtitle_text, unit, color_rgb=(0.22, 0.53, 0.91), max_value=100.0):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add_css_class("card")
-        self.set_margin_bottom(16)
+        self.set_hexpand(True)
 
         self._unit = unit
         self._max_value = max_value
@@ -190,37 +190,28 @@ class PerformanceView(Gtk.Box):
 
         self._scrolled = Gtk.ScrolledWindow()
         self._scrolled.set_vexpand(True)
+        self._scrolled.set_hexpand(True)
         self._scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        content.set_margin_top(24)
-        content.set_margin_bottom(24)
-        content.set_margin_start(24)
-        content.set_margin_end(24)
+        self._page = Adw.PreferencesPage()
 
         # CPU Metric
-        cpu_title = Gtk.Label(label=_("CPU Usage"), xalign=0)
-        cpu_title.add_css_class("title-4")
-        cpu_title.set_margin_bottom(4)
-        content.append(cpu_title)
+        cpu_group = Adw.PreferencesGroup(title=_("CPU Usage"))
         self._cpu_card = MetricCard("CPU", _("Total Usage"), "%", (0.22, 0.53, 0.91), 100.0)
-        content.append(self._cpu_card)
+        cpu_group.add(self._cpu_card)
+        self._page.add(cpu_group)
 
         # RAM Metric
-        ram_title = Gtk.Label(label=_("Memory Usage"), xalign=0)
-        ram_title.add_css_class("title-4")
-        ram_title.set_margin_bottom(4)
-        content.append(ram_title)
+        ram_group = Adw.PreferencesGroup(title=_("Memory Usage"))
         self._ram_card = MetricCard("RAM", _("Allocated RAM Consumed"), "GB", (0.48, 0.42, 0.94), 100.0)
-        content.append(self._ram_card)
+        ram_group.add(self._ram_card)
+        self._page.add(ram_group)
 
         # TPS Metric
-        tps_title = Gtk.Label(label=_("Ticks Per Second"), xalign=0)
-        tps_title.add_css_class("title-4")
-        tps_title.set_margin_bottom(4)
-        content.append(tps_title)
+        tps_group = Adw.PreferencesGroup(title=_("Ticks Per Second"))
         self._tps_card = MetricCard("TPS", _("Server Ticks"), "t/s", (0.97, 0.65, 0.14), 20.0)
-        content.append(self._tps_card)
+        tps_group.add(self._tps_card)
+        self._page.add(tps_group)
 
         # Process Info group
         self._info_group = Adw.PreferencesGroup(title=_("Process Information"))
@@ -236,13 +227,17 @@ class PerformanceView(Gtk.Box):
         self._ram_alloc_row.set_activatable(False)
         self._info_group.add(self._ram_alloc_row)
 
-        content.append(self._info_group)
+        self._page.add(self._info_group)
 
-        self._scrolled.set_child(content)
+        self._scrolled.set_child(self._page)
         self.append(self._scrolled)
         self.reset()
 
     def scroll_to_top(self):
+        try:
+            self._page.scroll_to_top()
+        except Exception:
+            pass
         vadj = self._scrolled.get_vadjustment()
         if vadj:
             vadj.set_value(vadj.get_lower())

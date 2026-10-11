@@ -910,7 +910,7 @@ class ServerManager(EventEmitter):
             loader = effective_mod_loader(info.loader_type, info.arclight_platform)
             loader_l = loader.lower()
             if kind == "datapacks":
-                candidates = [v for v in versions if not (v.loaders or [])]
+                candidates = [v for v in versions if modrinth_client.is_datapack_version(v)]
             elif kind == "plugins":
                 candidates = [
                     v

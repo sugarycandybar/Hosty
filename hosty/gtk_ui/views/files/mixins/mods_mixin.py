@@ -164,6 +164,21 @@ class ModsMixin:
         state = self._read_datapack_state()
         return pid in state.get("datapacks", {})
 
+    def _is_mod_present(self, project_id: str, installed_names) -> bool:
+        """Whether any recognized build of a tracked mod is on disk.
+
+        True when the recorded file is present locally (any version — the
+        caller already ruled out an exact current-file match).
+        """
+        pid = str(project_id).strip()
+        if not pid:
+            return False
+        names = {str(n).lower() for n in (installed_names or set())}
+        state = self._read_individual_mod_state()
+        record = (state.get("mods", {}) or {}).get(pid) or {}
+        recorded_file = str(record.get("filename", "")).strip().lower()
+        return bool(recorded_file) and recorded_file in names
+
     def _make_datapack_row(self, project_id: str, meta: dict) -> Adw.ActionRow:
         title = str(meta.get("title", "")).strip() or project_id
         filename = str(meta.get("filename", "")).strip()
@@ -1041,7 +1056,7 @@ class ModsMixin:
             progress_bar.set_fraction(0.0)
             progress_label.set_label("")
             progress_status_row.set_title(_("Updating"))
-            progress_status_row.set_description(_("Updating"))
+            progress_status_row.set_description("")
             stack.set_visible_child_name("progress")
 
             def on_progress(frac: float, message: str) -> None:
@@ -1258,8 +1273,9 @@ class ModsMixin:
                     project_id,
                     game_versions=[mc_version] if mc_version else None,
                 )
-                # Filter to only datapack versions (no loaders)
-                datapack_versions = [v for v in versions if not v.loaders or len(v.loaders) == 0]
+                # Datapack versions carry loaders == ["datapack"] (older ones
+                # may be untagged).
+                datapack_versions = [v for v in versions if modrinth_client.is_datapack_version(v)]
                 compatible = [v for v in datapack_versions if not mc_version or mc_version in (v.game_versions or [])]
                 if not compatible:
                     # Fall back to any datapack version without MC version requirement

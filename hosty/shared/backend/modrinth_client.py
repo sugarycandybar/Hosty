@@ -34,10 +34,23 @@ _API_HOST = "api.modrinth.com"
 _CACHE_TTL = 180.0
 _CACHE_MAX_ENTRIES = 400
 
+# Loader tag Modrinth puts on datapack versions. Older datapack versions may
+# carry no loader tags at all, so both shapes count as datapack versions.
+DATAPACK_LOADERS = ("datapack",)
+
 # Loader names that are Hosty-internal pseudo-loaders, never real Modrinth
-# loaders. Version lookups with these must behave exactly like an unfiltered
-# "newest overall" lookup (see find_compatible_versions).
+# loaders. "plugin" lookups delegate to the Bukkit-family matcher; "datapack"
+# matches DATAPACK_LOADERS (see find_compatible_versions).
 _PSEUDO_LOADERS = frozenset({"datapack", "plugin"})
+
+
+def is_datapack_version(version: ModrinthVersion) -> bool:
+    """Whether a version is a datapack (tagged or legacy untagged)."""
+    loaders = [str(x).lower() for x in (version.loaders or [])]
+    if not loaders:
+        return True
+    return any(x in DATAPACK_LOADERS for x in loaders)
+
 
 _cache_lock = threading.Lock()
 _json_cache: dict[str, tuple[float, Any]] = {}
@@ -542,6 +555,51 @@ def _is_real_loader(loader: str) -> bool:
     return bool(loader_l) and loader_l not in _PSEUDO_LOADERS
 
 
+def find_compatible_datapack_versions(
+    project_id: str,
+    game_version: str,
+    limit: int = 8,
+) -> list[ModrinthVersion]:
+    """Return datapack versions, preferring MC matches, then any datapack.
+
+    Datapack versions carry ``loaders == ["datapack"]`` (older ones may be
+    untagged). Server-side filters are a fast path; local filters are always
+    re-applied so results never depend on server filter support.
+    """
+    use_game_filter = bool(game_version)
+
+    def _dps(candidates: list[ModrinthVersion]) -> list[ModrinthVersion]:
+        return [v for v in candidates if is_datapack_version(v)]
+
+    if use_game_filter:
+        candidates = get_project_versions(project_id, loaders=list(DATAPACK_LOADERS), game_versions=[game_version])
+        exact = [v for v in _dps(candidates) if game_version in v.game_versions]
+        if exact:
+            return exact[:limit]
+
+    candidates = get_project_versions(project_id, loaders=list(DATAPACK_LOADERS))
+    dps = _dps(candidates)
+    if dps:
+        if use_game_filter:
+            exact = [v for v in dps if game_version in v.game_versions]
+            if exact:
+                return exact[:limit]
+        return dps[:limit]
+
+    all_versions = get_project_versions(project_id)
+    if not all_versions:
+        return []
+
+    dps = _dps(all_versions)
+    if dps:
+        if use_game_filter:
+            exact = [v for v in dps if game_version in v.game_versions]
+            if exact:
+                return exact[:limit]
+        return dps[:limit]
+    return all_versions[:1]
+
+
 def find_compatible_versions(
     project_id: str,
     game_version: str,
@@ -557,6 +615,11 @@ def find_compatible_versions(
     loader_l = str(loader or "").lower()
     use_loader_filter = _is_real_loader(loader)
     use_game_filter = bool(game_version)
+
+    if loader_l == "datapack":
+        return find_compatible_datapack_versions(project_id, game_version, limit=limit)
+    if loader_l == "plugin":
+        return find_compatible_plugin_versions(project_id, game_version, limit=limit)
 
     def _exact(candidates: list[ModrinthVersion]) -> list[ModrinthVersion]:
         return [v for v in candidates if game_version in v.game_versions and loader_l in [x.lower() for x in v.loaders]]

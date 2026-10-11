@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: hosty 1.7.6\n"
 "Report-Msgid-Bugs-To: https://github.com/sugarycandybar/Hosty/issues\n"
-"POT-Creation-Date: 2026-10-10 09:50-0400\n"
+"POT-Creation-Date: 2026-10-10 12:34-0400\n"
 "PO-Revision-Date: 2026-06-22 12:04+0200\n"
 "Last-Translator: KOXXPL <80292506+KOXXPL@users.noreply.github.com>\n"
 "Language-Team: Polish\n"
@@ -41,20 +41,20 @@ msgstr "Wprowadź nową nazwę serwera:"
 #: hosty/gtk_ui/dialogs/preferences.py:335
 #: hosty/gtk_ui/views/connect/mixins/players_mixin.py:233
 #: hosty/gtk_ui/views/connect/mixins/players_mixin.py:261
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:738
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:760
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1578
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:734
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:756
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1574
 #: hosty/gtk_ui/views/files/mixins/backups_mixin.py:282
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:211
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:832
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:945
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1865
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2057
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:219
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:840
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:953
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1874
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2066
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:221
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:274
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:330
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:937
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1122
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1046
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1231
 #: hosty/gtk_ui/views/properties_view.py:497
 #: hosty/gtk_ui/views/properties_view.py:748
 #: hosty/gtk_ui/views/properties_view.py:1114
@@ -94,11 +94,11 @@ msgid "All server files will be permanently deleted."
 msgstr "Wszystkie pliki serwera zostaną bezodwrotnie usunięte."
 
 #: hosty/gtk_ui/application.py:449
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:739
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:212
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:833
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1866
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2058
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:735
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:220
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:841
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1875
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2067
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:331
 #: hosty/gtk_ui/views/sidebar.py:368
 msgid "Delete"
@@ -192,7 +192,7 @@ msgstr "Dodać tunel {}?"
 
 #: hosty/gtk_ui/dialogs/add_playit_tunnel.py:44
 #: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:52
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1017
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1025
 msgid "Close"
 msgstr ""
 
@@ -882,7 +882,7 @@ msgstr ""
 #: hosty/gtk_ui/dialogs/preferences.py:255
 #: hosty/gtk_ui/views/files/main_view.py:112
 #: hosty/gtk_ui/views/files/main_view.py:191
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:125
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:145
 msgid "Mods"
 msgstr "Mody"
 
@@ -932,11 +932,11 @@ msgid "Copy token"
 msgstr ""
 
 #: hosty/gtk_ui/dialogs/preferences.py:320
-#: hosty/gtk_ui/views/connect/main_view.py:322
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1623
+#: hosty/gtk_ui/views/connect/main_view.py:318
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1619
 #: hosty/gtk_ui/views/files/main_view.py:720
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:888
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:910
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:896
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:918
 #: hosty/gtk_ui/views/server_detail.py:418
 #: hosty/gtk_ui/views/server_detail.py:472
 #: hosty/gtk_ui/views/server_detail.py:479
@@ -958,7 +958,7 @@ msgid ""
 msgstr ""
 
 #: hosty/gtk_ui/dialogs/preferences.py:336
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:761
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:757
 msgid "Regenerate"
 msgstr "Wygeneruj ponownie"
 
@@ -1034,17 +1034,17 @@ msgstr "[Hosty] Brak połączonego procesu serwera\n"
 #: hosty/gtk_ui/views/connect/main_view.py:126
 #: hosty/gtk_ui/views/connect/main_view.py:148
 #: hosty/gtk_ui/views/connect/main_view.py:170
-#: hosty/gtk_ui/views/connect/main_view.py:200
+#: hosty/gtk_ui/views/connect/main_view.py:196
 #: hosty/gtk_ui/views/connect/mixins/local_ip_mixin.py:64
 #: hosty/gtk_ui/views/connect/mixins/local_ip_mixin.py:74
 #: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:348
 #: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:352
 #: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:356
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:387
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:428
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:455
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:535
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:602
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:386
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:427
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:454
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:532
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:598
 msgid "Not available"
 msgstr "Niedostępne"
 
@@ -1081,12 +1081,12 @@ msgstr "Agent"
 
 #: hosty/gtk_ui/views/connect/main_view.py:117
 #: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:347
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:403
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:402
 msgid "Stopped"
 msgstr "Zatrzymano"
 
 #: hosty/gtk_ui/views/connect/main_view.py:119
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:388
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:387
 msgid "Start Agent"
 msgstr "Uruchom agenta"
 
@@ -1100,8 +1100,8 @@ msgid "Copy Java tunnel domain"
 msgstr "Skopiuj domenę tunelu Java"
 
 #: hosty/gtk_ui/views/connect/main_view.py:138
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:364
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:475
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:363
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:474
 msgid "Add Java tunnel"
 msgstr "Dodaj tunel Java"
 
@@ -1116,8 +1116,8 @@ msgid "Copy bedrock tunnel domain"
 msgstr "Skopiuj domenę tunelu Bedrock"
 
 #: hosty/gtk_ui/views/connect/main_view.py:160
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:370
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:504
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:369
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:503
 msgid "Add Bedrock tunnel"
 msgstr "Dodaj tunel Bedrock"
 
@@ -1127,34 +1127,34 @@ msgstr "Dodaj tunel Bedrock"
 msgid "Voice Chat tunnel"
 msgstr "Dodaj tunel czatu głosowego"
 
-#: hosty/gtk_ui/views/connect/main_view.py:179
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:376
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:554
+#: hosty/gtk_ui/views/connect/main_view.py:175
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:375
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:550
 msgid "Add Voice Chat tunnel"
 msgstr "Dodaj tunel czatu głosowego"
 
-#: hosty/gtk_ui/views/connect/main_view.py:190
+#: hosty/gtk_ui/views/connect/main_view.py:186
 msgid "Playit settings"
 msgstr "Ustawienia Playit"
 
-#: hosty/gtk_ui/views/connect/main_view.py:194
+#: hosty/gtk_ui/views/connect/main_view.py:190
 msgid "Start with server"
 msgstr "Uruchom razem z serwerem"
 
-#: hosty/gtk_ui/views/connect/main_view.py:195
+#: hosty/gtk_ui/views/connect/main_view.py:191
 msgid "Automatically start and stop with this server"
 msgstr "Automatyczny start i stop z tym serwerem"
 
-#: hosty/gtk_ui/views/connect/main_view.py:200
+#: hosty/gtk_ui/views/connect/main_view.py:196
 #, fuzzy
 msgid "Tunnels"
 msgstr "Szczegóły tunelu"
 
-#: hosty/gtk_ui/views/connect/main_view.py:205
+#: hosty/gtk_ui/views/connect/main_view.py:201
 msgid "Open playit dashboard"
 msgstr "Otwórz panel Playit"
 
-#: hosty/gtk_ui/views/connect/main_view.py:211
+#: hosty/gtk_ui/views/connect/main_view.py:207
 msgid "Set Up Playit Again"
 msgstr "Skonfiguruj Playit ponownie"
 
@@ -1244,7 +1244,7 @@ msgstr[2] "{count} graczy"
 #: hosty/gtk_ui/views/connect/mixins/players_mixin.py:152
 #: hosty/gtk_ui/views/connect/mixins/players_mixin.py:154
 #: hosty/gtk_ui/views/connect/mixins/players_mixin.py:301
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1492
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1488
 #: hosty/gtk_ui/views/files/main_view.py:534
 #: hosty/gtk_ui/views/files/main_view.py:661
 #: hosty/gtk_ui/views/files/mixins/backups_mixin.py:115
@@ -1252,17 +1252,17 @@ msgstr[2] "{count} graczy"
 #: hosty/gtk_ui/views/files/mixins/backups_mixin.py:221
 #: hosty/gtk_ui/views/files/mixins/backups_mixin.py:303
 #: hosty/gtk_ui/views/files/mixins/backups_mixin.py:404
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:852
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1036
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1604
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:860
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1044
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1613
 #: hosty/gtk_ui/views/files/mixins/players_mixin.py:129
 #: hosty/gtk_ui/views/files/mixins/players_mixin.py:130
 #: hosty/gtk_ui/views/files/mixins/players_mixin.py:217
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:192
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:254
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:294
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:720
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1440
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:820
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1557
 msgid "No server selected"
 msgstr "Nie wybrano serwera"
 
@@ -1377,107 +1377,107 @@ msgid "Unbanned {}"
 msgstr "Odbanowano {}"
 
 #: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:321
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:787
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1057
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1243
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1292
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1341
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1646
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:783
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1053
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1239
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1288
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1337
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1642
 msgid "A tunnel operation is already in progress"
 msgstr "Operacja na tunelu jest już w trakcie"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:397
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:396
 msgid "Running"
 msgstr "Działa"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:398
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:397
 #: hosty/gtk_ui/views/server_detail.py:321
 msgid "Stop"
 msgstr "Zatrzymaj"
 
 #. Start/Stop button -- use standard Adwaita suggested-action / destructive-action
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:404
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:403
 #: hosty/gtk_ui/views/server_detail.py:79
 #: hosty/gtk_ui/views/server_detail.py:327
 msgid "Start"
 msgstr "Uruchom"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:423
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:450
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:531
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:422
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:449
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:529
 #, fuzzy
 msgid "Tunnel missing"
 msgstr "Szczegóły tunelu"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:463
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:462
 msgid "Manage Java tunnel"
 msgstr "Zarządzaj tunelem Java"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:469
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:468
 #, fuzzy
 msgid "Repair Java tunnel"
 msgstr "Dodaj tunel Java"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:492
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:491
 msgid "Manage Bedrock tunnel"
 msgstr "Zarządzaj tunelem Bedrock"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:498
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:497
 #, fuzzy
 msgid "Repair Bedrock tunnel"
 msgstr "Dodaj tunel Bedrock"
 
 #. Voice chat is fully automatic via the mod: show status, never
 #. the domain/port (nothing to copy).
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:527
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:526
 msgid "Configured"
 msgstr ""
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:542
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:538
 msgid "Manage Voice Chat tunnel"
 msgstr "Zarządzaj tunelem czatu głosowego"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:548
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:544
 #, fuzzy
 msgid "Repair Voice Chat tunnel"
 msgstr "Dodaj tunel czatu głosowego"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:587
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:583
 msgid "Starting..."
 msgstr "Uruchamianie..."
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:605
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:601
 #, python-brace-format
 msgid "{} of {} used"
 msgstr ""
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:659
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:655
 msgid "Java tunnel domain copied"
 msgstr "Domena tunelu Java skopiowana"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:684
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:680
 msgid "Bedrock tunnel domain copied"
 msgstr "Domena tunelu Bedrock skopiowana"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:726
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:722
 msgid "Playit setup completed"
 msgstr "Konfiguracja Playit powiodła się"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:730
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1319
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:726
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1428
 msgid "Could not open browser"
 msgstr "Nie udało się otworzyć przeglądarki"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:730
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:726
 msgid "Unable to open playit dashboard."
 msgstr "Nie udało się otworzyć panelu Playit"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:734
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:730
 #, python-brace-format
 msgid "Delete {} tunnel?"
 msgstr "Usunąć tunel {}?"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:736
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:732
 msgid ""
 "This will remove the current tunnel domain for this server. You can add a "
 "new tunnel again later."
@@ -1485,12 +1485,12 @@ msgstr ""
 "To usunie obecną domenę tunelu dla tego serwera. Możesz znowu dodać tunel "
 "później."
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:753
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:749
 #, python-brace-format
 msgid "Regenerate {} tunnel?"
 msgstr "Wygenerować ponownie tunel {}?"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:756
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:752
 msgid ""
 "This will replace the current tunnel domain with a new one. Players using "
 "the old domain will no longer be able to connect."
@@ -1498,162 +1498,162 @@ msgstr ""
 "To zastąpi obecną domenę tunelu nową. Gracze używający starej domeny nie "
 "będą mogli się już połączyć."
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:784
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:901
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1054
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1650
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:780
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:897
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1050
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1646
 msgid "Playit startup is already in progress"
 msgstr "Startowanie Playit jest już w trakcie"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:826
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:822
 msgid "Could not update Java tunnel"
 msgstr "Nie udało się zaktualizować tunelu Java"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:840
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:836
 #, python-brace-format
 msgid "Java port changed to {}"
 msgstr "Port Java został zmieniony na {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:872
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:868
 msgid "Could not create Java tunnel"
 msgstr "Nie udało się stworzyć tunelu Java"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:873
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:869
 #, fuzzy, python-brace-format
 msgid "{} Java port restored to {}."
 msgstr "Port Java został zmieniony na {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:882
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:878
 msgid "Minecraft Java (TCP)"
 msgstr "Minecraft Java (TCP)"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:904
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:900
 msgid "Java tunnel operation is already in progress"
 msgstr "Operacja na tunelu Java jest już w trakcie"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:907
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:903
 msgid "Bedrock tunnel creation is already in progress"
 msgstr "Operacja tworzenia tunelu Bedrock jest już w trakcie"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:950
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:946
 msgid "Could not update Bedrock tunnel"
 msgstr "Nie udało się zaktualizować tunelu Bedrock"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:972
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:968
 #, python-brace-format
 msgid "Bedrock port changed to {}"
 msgstr "Port Bedrock został zmieniony na {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1015
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1011
 msgid "Could not create Bedrock tunnel"
 msgstr "Nie udało się stworzyć tunelu Bedrock"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1016
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1012
 #, fuzzy, python-brace-format
 msgid "{} Bedrock port restored to {}."
 msgstr "Port Bedrock został zmieniony na {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1025
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1021
 msgid "Minecraft Bedrock (UDP)"
 msgstr "Minecraft Bedrock (UDP)"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1060
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1056
 msgid "Voice Chat tunnel creation is already in progress"
 msgstr "Operacja tworzenia tunelu czatu głosowego jest już w trakcie"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1121
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1117
 #, fuzzy, python-brace-format
 msgid "{}. Restart the server to apply voice chat settings."
 msgstr "Uruchom serwer ponownie, aby zastosować zmiany"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1125
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1121
 msgid "Could not update Voice Chat tunnel"
 msgstr "Nie udało się zaktualizować tunelu czatu głosowego"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1148
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1144
 #, python-brace-format
 msgid "Voice Chat port changed to {}"
 msgstr "Port czatu głosowego został zmieniony na {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1202
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1198
 msgid "Could not create Voice Chat tunnel"
 msgstr "Nie udało się stworzyć tunelu czatu głosowego"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1203
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1199
 #, fuzzy, python-brace-format
 msgid "{} Voice Chat port restored to {}."
 msgstr "Port czatu głosowego został zmieniony na {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1212
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1208
 msgid "Simple Voice Chat (UDP)"
 msgstr "Simple Voice Chat (UDP)"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1270
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1266
 msgid "Java tunnel already missing"
 msgstr "Już brakuje tunelu Java"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1272
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1268
 msgid "Could not delete Java tunnel"
 msgstr "Nie udało się usunąć tunelu Java"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1319
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1315
 msgid "Bedrock tunnel already missing"
 msgstr "Już brakuje tunelu Java"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1321
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1317
 msgid "Could not delete Bedrock tunnel"
 msgstr "Nie udało się usunąć tunelu Bedrock"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1368
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1364
 msgid "Voice Chat tunnel already missing"
 msgstr "Już brakuje tunelu czatu głosowego"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1370
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1366
 msgid "Could not delete Voice Chat tunnel"
 msgstr "Nie udało się usunąć tunelu czatu głosowego"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1514
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1510
 #, python-brace-format
 msgid "{} is not available for Minecraft {}"
 msgstr "{} jest niedostępne dla Minecraft {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1561
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1618
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1053
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1557
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1614
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1162
 #, python-brace-format
 msgid "Installed {}"
 msgstr "Zainstalowano {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1565
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1561
 #, python-brace-format
 msgid "Add {} tunnel?"
 msgstr "Dodać tunel {}?"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1573
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1569
 #, python-brace-format
 msgid ""
 "This tunnel needs {}. Hosty can install compatible {} versions automatically."
 msgstr ""
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1579
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1575
 msgid "Install Mods"
 msgstr "Zainstaluj mody"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1594
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1590
 #, python-brace-format
 msgid "Installing {} mod support..."
 msgstr "Instalowanie wsparcia modów dla {}..."
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1605
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1601
 #, python-brace-format
 msgid "Could not install {}: {}"
 msgstr "Nie udało się zainstalować {}: {}"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1621
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1617
 msgid "Some mods were not installed"
 msgstr "Niektóre mody nie zostały zainstalowane"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1622
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1618
 #, python-brace-format
 msgid ""
 "{}\n"
@@ -1664,23 +1664,23 @@ msgstr ""
 "\n"
 "Hosty wciąż utworzy tunel."
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1729
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1725
 msgid "Playit start failed unexpectedly; please try again."
 msgstr ""
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1737
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1733
 msgid "Playit agent started"
 msgstr "Agent Playit działa"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1739
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1735
 msgid "Could not start playit"
 msgstr "Nie udało się wystartować Playit"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1760
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1756
 msgid "Playit agent stopped"
 msgstr "Agent Playit zatrzymany"
 
-#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1762
+#: hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1758
 msgid "Could not stop playit"
 msgstr "Nie udało się zatrzymać Playit"
 
@@ -1713,8 +1713,8 @@ msgid "Open plugins folder"
 msgstr "Otwórz folder z modami"
 
 #: hosty/gtk_ui/views/files/main_view.py:127
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:64
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:74
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:84
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:94
 msgid "Modrinth"
 msgstr "Modrinth"
 
@@ -1758,7 +1758,7 @@ msgstr ""
 
 #. Arclight runs mods and Bukkit plugins side by side.
 #: hosty/gtk_ui/views/files/main_view.py:189
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:131
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:151
 msgid "Plugins"
 msgstr ""
 
@@ -1937,16 +1937,16 @@ msgstr "Proszę czekać aż obecna kopia zostanie zakończona."
 #: hosty/gtk_ui/views/files/mixins/backups_mixin.py:163
 #: hosty/gtk_ui/views/files/mixins/backups_mixin.py:218
 #: hosty/gtk_ui/views/files/mixins/backups_mixin.py:258
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:205
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:826
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:918
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1833
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2051
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:213
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:834
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:926
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1842
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2060
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:189
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:251
 #: hosty/gtk_ui/views/files/mixins/worlds_mixin.py:320
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:707
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1427
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:807
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1544
 #: hosty/shared/backend/server_manager.py:2298
 #: hosty/shared/backend/server_manager.py:2338
 #: hosty/shared/backend/server_manager.py:2439
@@ -2070,195 +2070,195 @@ msgstr "Kopia zapasowa \"{}\""
 msgid "Select a server to open backups."
 msgstr "Wybierz serwer, aby otworzyć kopie zapasowe."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:182
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:184
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:764
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:766
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:797
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:799
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1995
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1997
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:190
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:192
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:772
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:774
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:805
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:807
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2004
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2006
 #, python-brace-format
 msgid "version {}"
 msgstr "Wersja {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:190
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:198
 msgid "Open datapack page"
 msgstr "Otwórz stronę datapacka"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:195
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:203
 msgid "Delete datapack"
 msgstr "Usuń datapack"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:205
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:213
 msgid "Stop the server before deleting a datapack."
 msgstr "Zatrzymaj serwer przed usunięciem datapacka."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:209
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:217
 msgid "Delete datapack?"
 msgstr "Usunąć datapack?"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:210
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:218
 #, python-brace-format
 msgid "Remove \"{}\" from this server?"
 msgstr "Usunąć \"{}\" z tego serwera?"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:240
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:248
 msgid " (file deleted)"
 msgstr " (plik usunięty)"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:241
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:249
 #, python-brace-format
 msgid "Deleted {}{}"
 msgstr "Usunięto {}{}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:761
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:490
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:778
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1416
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1629
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:769
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:590
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:878
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1533
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1795
 msgid "Dependency"
 msgstr "Zależności"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:774
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:782
 msgid "Open mod page"
 msgstr "Otwórz stronę moda"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:781
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:789
 msgid "Delete mod"
 msgstr "Usuń mod"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:795
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:893
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:803
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:901
 #, python-brace-format
 msgid "{} managed mods"
 msgstr "Liczba zarządzanych modów: {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:805
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:813
 msgid "View managed mods"
 msgstr "Zobacz zarządzane mody"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:810
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:818
 msgid "Open modpack page"
 msgstr "Otwórz stronę paczki modów"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:815
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:823
 msgid "Delete modpack"
 msgstr "Usuń paczkę modów"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:826
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:834
 msgid "Stop the server before deleting a modpack."
 msgstr "Zatrzymaj serwer przed usunięciem paczki modów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:830
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:838
 msgid "Delete modpack?"
 msgstr "Usunąć paczkę modów?"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:831
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:839
 #, python-brace-format
 msgid "Remove \"{}\" and delete its managed mod files from this server?"
 msgstr "Usunąć \"{}\" wraz z zarządzanymi plikami modów z tego serwera?"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:852
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:860
 msgid "Select a server before deleting a modpack."
 msgstr "Wybierz serwer przed usunięciem paczki modów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:873
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:881
 #, python-brace-format
 msgid "Deleted {} ({} mod files removed)"
 msgstr "Usunięto {} (wraz z {} plikami)"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:887
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:895
 msgid "No tracked mod files for this modpack yet."
 msgstr "Brak śledzonych plików modów dla tej paczki modów"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:915
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:923
 msgid "Mod update check already running"
 msgstr "Sprawdzanie aktualizacji modów już trwa"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:918
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:926
 msgid "Stop the server before checking for mod updates."
 msgstr "Zatrzymaj ten serwer przed sprawdzeniem aktualizacji modów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:921
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:710
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1430
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:929
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:810
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1547
 msgid "Unknown version"
 msgstr "Nieznana wersja"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:921
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:929
 msgid "Could not determine Minecraft version for this server."
 msgstr "Nie udało się ustalić wersji Minecrafta dla tego serwera."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:941
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:949
 #, fuzzy
 msgid "Updates"
 msgstr "Zaktualizuj"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:946
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1473
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1475
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:468
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:586
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:836
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:886
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:938
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:947
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1006
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1060
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1123
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1132
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1177
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:954
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1482
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1484
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:568
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:686
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:945
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:995
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1047
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1056
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1115
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1169
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1232
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1241
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1286
 msgid "Install"
 msgstr "Zainstaluj"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:956
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:964
 #: hosty/gtk_ui/views/properties_view.py:459
 msgid "Checking for updates..."
 msgstr "Sprawdzanie aktualizacji..."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:969
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:977
 msgid "Select all"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:974
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:982
 msgid "Unselect all"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:991
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1043
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1044
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:999
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1051
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1052
 #, fuzzy
 msgid "Updating"
 msgstr "Zaktualizuj"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:992
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1000
 #: hosty/gtk_ui/views/properties_view.py:564
 msgid "Preparing update"
 msgstr "Przygotowywanie aktualizacji"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1031
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1039
 #, fuzzy
 msgid "Select at least one update to install"
 msgstr "Wybierz serwer, aby zaktualizować modów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1036
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1044
 msgid "Select a server before updating mods."
 msgstr "Wybierz serwer przed aktualizacją modów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1061
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1069
 msgid "Nothing was updated"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1062
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1070
 msgid "No updates could be applied."
 msgstr ""
 
 #. Translators: e.g. "1 update applied", "3 updates applied"
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1066
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1078
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1807
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1811
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1074
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1086
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1816
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1820
 #, python-brace-format
 msgid "{count} update applied."
 msgid_plural "{count} updates applied."
@@ -2267,8 +2267,8 @@ msgstr[1] "Zastosowano {count} aktualizacje."
 msgstr[2] "Zastosowano {count} aktualizacji."
 
 #. Translators: e.g. "1 failed", "3 failed"
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1070
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1815
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1078
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1824
 #, python-brace-format
 msgid "{count} failed."
 msgid_plural "{count} failed."
@@ -2276,11 +2276,11 @@ msgstr[0] "{count} nieudana."
 msgstr[1] "{count} nieudane."
 msgstr[2] "{count} nieudanych."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1073
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1081
 msgid "Updates finished with errors"
 msgstr "Aktualizacje zakończone z błędami"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1085
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1093
 #, python-brace-format
 msgid ""
 "{count} update was skipped because dependencies are managed by a modpack."
@@ -2296,11 +2296,11 @@ msgstr[2] ""
 "{count} aktualizacji zostało pominiętych, ponieważ zależnościami zarządza "
 "modpack."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1094
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1102
 msgid "All updates installed"
 msgstr "Zainstalowano wszystkie aktualizacje"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1104
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1112
 #, python-brace-format
 msgid "{count} modpack"
 msgid_plural "{count} modpacks"
@@ -2309,7 +2309,7 @@ msgstr[1] "{count} modpacki"
 msgstr[2] "{count} modpacków"
 
 #. Translators: e.g. "1 mod", "3 mods"
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1109
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1117
 #, python-brace-format
 msgid "{count} mod"
 msgid_plural "{count} mods"
@@ -2317,7 +2317,7 @@ msgstr[0] "{count} mod"
 msgstr[1] "{count} mody"
 msgstr[2] "{count} modów"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1114
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1122
 #, python-brace-format
 msgid "{count} datapack"
 msgid_plural "{count} datapacks"
@@ -2325,7 +2325,7 @@ msgstr[0] "{count} datapack"
 msgstr[1] "{count} datapacki"
 msgstr[2] "{count} datapacków"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1120
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1128
 #, python-brace-format
 msgid "{count} plugin"
 msgid_plural "{count} plugins"
@@ -2334,72 +2334,72 @@ msgstr[1] "{count} pluginy"
 msgstr[2] "{count} pluginów"
 
 #. Translators: {items} is a comma-separated list like "1 modpack, 3 mods"
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1124
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1132
 #, python-brace-format
 msgid "Updating {items}."
 msgstr "Aktualizowanie {items}."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1126
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1134
 msgid "Updating selected items."
 msgstr "Aktualizowanie wybranych elementów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1434
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1440
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1443
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1449
 msgid "You're up to date"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1435
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1444
 #, python-brace-format
 msgid "No safe updates found ({} blocked by modpack-managed dependencies)"
 msgstr ""
 "Nie znaleziono bezpiecznych aktualizacji (Liczba zablokowanych przez "
 "zależności paczek modów: {})"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1441
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1450
 #, fuzzy
 msgid "All tracked mods, plugins and datapacks are up to date"
 msgstr "Wszystkie śledzone mody i datapacki są aktualne"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1449
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1458
 #, python-brace-format
 msgid "{} → {}"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1477
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1486
 #, fuzzy, python-brace-format
 msgid "Install ({})"
 msgstr "Zainstalowano {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1506
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1515
 #, fuzzy, python-brace-format
 msgid "Modpacks ({})"
 msgstr "Paczki modów"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1519
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1528
 #, fuzzy, python-brace-format
 msgid "Mods ({})"
 msgstr "Mody"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1532
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1541
 #, python-brace-format
 msgid "Plugins ({})"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1545
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1554
 #, fuzzy, python-brace-format
 msgid "Datapacks ({})"
 msgstr "Datapacki"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1557
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1566
 msgid "Notes"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1561
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1570
 #, fuzzy
 msgid "Skipped updates"
 msgstr "Liczba zastosowanych aktualizacji: {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1563
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1572
 #, python-brace-format
 msgid ""
 "{count} standalone update was skipped because dependencies are managed by a "
@@ -2417,39 +2417,39 @@ msgstr[2] ""
 "{count} samodzielnych aktualizacji zostało pominiętych, ponieważ "
 "zależnościami zarządza modpack."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1604
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1613
 msgid "Select a server to update mods."
 msgstr "Wybierz serwer, aby zaktualizować modów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1675
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1684
 #, python-brace-format
 msgid "Updating modpack {}/{}: {}"
 msgstr "Aktualizowanie paczki modów {}/{}: {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1738
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1747
 #, python-brace-format
 msgid "Updating standalone mod {}/{}: {}"
 msgstr "Aktualizowanie samodzielnego moda {}/{}: {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1767
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1776
 #, python-brace-format
 msgid "Updating datapack {}/{}: {}"
 msgstr "Aktualizowanie datapacka {}/{}: {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1794
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1803
 #, fuzzy, python-brace-format
 msgid "Updating plugin {}/{}: {}"
 msgstr "Aktualizowanie paczki modów {}/{}: {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1833
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1842
 msgid "Stop the server before removing mods."
 msgstr "Zatrzymaj serwer przed usunięciem modów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1856
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1865
 msgid "Delete dependency mod?"
 msgstr "Usunąć zależności moda?"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1858
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1867
 #, python-brace-format
 msgid ""
 "The following mods depend on \"{}\":\n"
@@ -2464,55 +2464,55 @@ msgstr ""
 "\n"
 "{}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1859
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1868
 msgid "Are you sure you want to proceed?"
 msgstr "Czy na pewno chcesz kontynuować?"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1863
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1872
 msgid "Delete mod?"
 msgstr "Usunąć moda?"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1864
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2056
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:1873
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2065
 #, python-brace-format
 msgid "Remove “{}”?"
 msgstr "Usunąć „{}”?"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2004
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2013
 #, fuzzy
 msgid "Open plugin page"
 msgstr "Otwórz stronę Modrinth"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2011
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2020
 #, fuzzy
 msgid "Delete plugin"
 msgstr "Usuń tunel"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2030
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2039
 msgid "File missing"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2034
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2043
 #, fuzzy
 msgid "Remove plugin record"
 msgstr "Usunięto rekord elementu wyłączonego"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2047
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2056
 #, fuzzy, python-brace-format
 msgid "Removed {}"
 msgstr "Przywrócono {}"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2051
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2060
 #, fuzzy
 msgid "Stop the server before removing plugins."
 msgstr "Zatrzymaj serwer przed usunięciem modów."
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2055
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2064
 #, fuzzy
 msgid "Delete plugin?"
 msgstr "Usuń tunel"
 
-#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2067
+#: hosty/gtk_ui/views/files/mixins/mods_mixin.py:2076
 #, python-brace-format
 msgid "plugin \"{}\""
 msgstr ""
@@ -2700,197 +2700,217 @@ msgstr "Usunąć wymiar \"{}\"? Tej operacji nie można cofnąć."
 msgid "dimension \"{}\""
 msgstr "wymiar \"{}\""
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:101
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:269
+#. Tracked but a different file than the newest
+#. compatible one: it is installed, just stale.
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:51
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:55
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:887
+#: hosty/gtk_ui/views/properties_view.py:824
+#: hosty/gtk_ui/views/properties_view.py:875
+#: hosty/gtk_ui/views/properties_view.py:891
+#: hosty/gtk_ui/views/properties_view.py:943
+msgid "Update"
+msgstr "Zaktualizuj"
+
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:52
+#, fuzzy
+msgid "Downgrade"
+msgstr "Pobrania"
+
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:121
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:292
 msgid "Search mods…"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:115
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:135
 msgid "Filters"
 msgstr "Filtry"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:126
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:146
 msgid "Modpacks"
 msgstr "Paczki modów"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:127
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:147
 msgid "Datapacks"
 msgstr "Datapacki"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:133
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:153
 msgid "Any category"
 msgstr "Dowolna kategoria"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:134
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:154
 msgid "Optimization"
 msgstr "Optymalizacja"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:135
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:155
 msgid "Utility"
 msgstr "Narzędzia"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:136
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:156
 msgid "Technology"
 msgstr "Technologia"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:137
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:157
 msgid "Adventure"
 msgstr "Przygoda"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:138
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:158
 msgid "Decoration"
 msgstr "Dekoracja"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:139
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:159
 msgid "Magic"
 msgstr "Magia"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:140
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:160
 msgid "Storage"
 msgstr "Pamięć"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:141
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:161
 msgid "Worldgen"
 msgstr "Worldgen"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:142
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:162
 msgid "Library"
 msgstr "Biblioteka"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:145
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:165
 msgid "Relevance"
 msgstr "Istotność"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:146
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:166
 msgid "Downloads"
 msgstr "Pobrania"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:147
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:167
 msgid "Follows"
 msgstr "Obserwujący"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:148
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:168
 msgid "Newest"
 msgstr "Najnowsze"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:149
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:169
 msgid "Recently updated"
 msgstr "Ostatnio zaktualizowane"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:196
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:216
 msgid "Type"
 msgstr "Rodzaj"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:201
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:221
 msgid "Category"
 msgstr "Kategoria"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:206
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:226
 msgid "Sort by"
 msgstr "Sortuj według"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:263
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:286
 msgid "Search modpacks…"
 msgstr ""
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:265
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:288
 msgid "Search datapacks…"
 msgstr "Szukaj datapacków..."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:267
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:290
 #, fuzzy
 msgid "Search plugins…"
 msgstr "Szukaj datapacków..."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:294
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:371
 msgid "Could not fetch Modrinth results."
 msgstr "Nie udało się pobrać wyników Modrinth."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:301
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:380
 msgid "No results"
 msgstr "Brak wyników"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:472
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:474
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:476
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:480
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:485
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:490
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:604
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:606
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:608
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:610
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:778
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:823
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:871
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:982
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1002
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1043
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1416
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1629
+#. Plain label (not an image): the selection checkmark updater
+#. only strips trailing images, so the badge survives.
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:572
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:574
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:576
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:580
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:585
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:590
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:704
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:706
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:708
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:710
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:878
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:932
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:980
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1091
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1111
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1152
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1533
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1739
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1795
 msgid "Installed"
 msgstr "Zainstalowano"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:707
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1427
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:807
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1544
 msgid "Stop the server before installing mods."
 msgstr "Zatrzymaj serwer przed zainstalowaniem modów."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:710
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1430
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:810
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1547
 msgid "Could not read Minecraft version for this server."
 msgstr "Nie udało się odczytać wersji Minecraft dla tego serwera."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:715
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1435
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:815
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1552
 msgid "No compatible version"
 msgstr "Brak kompatybilnej wersji"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:715
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1435
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:815
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1552
 msgid "No compatible server version is available."
 msgstr "Brak kompatybilnej wersji serwera."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:720
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1440
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:820
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1557
 msgid "Select a server before installing mods."
 msgstr "Wybierz serwer przed zainstalowaniem modów."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:723
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1443
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:823
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1560
 msgid "Installing…"
 msgstr "Instalowanie…"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:831
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:940
 #, fuzzy, python-brace-format
 msgid "Installed plugin {}"
 msgstr "Zainstalowano {}"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:838
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:888
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1004
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1008
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1062
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:947
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:997
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1113
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1117
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1171
 msgid "Install failed"
 msgstr "Instalacja nieudana"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:880
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1052
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:989
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1161
 #, python-brace-format
 msgid "Installed {} required dependencies"
 msgstr "Zainstalowano {} wymaganych zależności"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:881
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:990
 #, python-brace-format
 msgid "Installed datapack {}"
 msgstr "Zainstalowano datapack {}"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:931
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1118
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1040
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1227
 msgid "Install required dependencies?"
 msgstr "Zainstalować wymagane zależności?"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:933
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1042
 #, python-brace-format
 msgid ""
 "This datapack requires additional dependencies:\n"
@@ -2905,21 +2925,21 @@ msgstr ""
 "\n"
 "Zainstalować je również?"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:979
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1012
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1088
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1121
 msgid "Installing..."
 msgstr "Instalowanie..."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:996
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1105
 #, python-brace-format
 msgid "Installed modpack ({} files)"
 msgstr "Zainstalowano paczka modów ({} plików)"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1055
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1164
 msgid "Restart the server for mod changes to apply"
 msgstr "Uruchom serwer ponownie, aby zastosować zmiany modów"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1120
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1229
 #, python-brace-format
 msgid ""
 "This mod requires additional dependencies:\n"
@@ -2934,35 +2954,28 @@ msgstr ""
 "\n"
 "Zainstalować je również?"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1288
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1397
 msgid "Versions"
 msgstr "Wersje"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1297
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1406
 msgid "Loading versions…"
 msgstr "Ładowanie wersji…"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1304
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1413
 msgid "Open in Modrinth"
 msgstr "Otwórz w Modrinth"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1319
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1428
 msgid "Unable to open the Modrinth page."
 msgstr "Nie udało się otworzyć strony Modrinth."
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1399
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1408
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1612
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1621
-msgid "Replace"
-msgstr "Zastąp"
-
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1463
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1580
 #, python-brace-format
 msgid "{} downloads · {} follows"
 msgstr "{} Pobrań · {} Obserwujących"
 
-#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1545
+#: hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1662
 msgid "No compatible versions"
 msgstr "Brak kompatybilnych wersji"
 
@@ -3229,13 +3242,6 @@ msgstr "Wybierz wersję Minecraft"
 #, fuzzy
 msgid "No newer builds available"
 msgstr "Brak nowszych wersji Minecrafta"
-
-#: hosty/gtk_ui/views/properties_view.py:824
-#: hosty/gtk_ui/views/properties_view.py:875
-#: hosty/gtk_ui/views/properties_view.py:891
-#: hosty/gtk_ui/views/properties_view.py:943
-msgid "Update"
-msgstr "Zaktualizuj"
 
 #: hosty/gtk_ui/views/properties_view.py:828
 msgid "Checking installed mods and datapacks..."
@@ -4454,6 +4460,9 @@ msgstr "Stwórz kopię zapasową świata"
 #: packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml.in:153
 msgid "Monitor server performance"
 msgstr ""
+
+#~ msgid "Replace"
+#~ msgstr "Zastąp"
 
 #~ msgid "Share with friends"
 #~ msgstr "Podziel się ze znajomymi"

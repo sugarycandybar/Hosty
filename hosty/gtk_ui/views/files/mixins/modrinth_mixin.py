@@ -34,6 +34,68 @@ class ModrinthMixin:
             getattr(self._server_info, "arclight_platform", ""),
         )
 
+    @staticmethod
+    def _update_direction_label(installed_version_id: str, chosen_version_id: str, ordered_version_ids) -> str:
+        """Return Update/Downgrade for a tracked version that differs.
+
+        ``ordered_version_ids`` is newest-first: a chosen version earlier in
+        the list is newer. Unknown direction defaults to Update (the common
+        stale-install case).
+        """
+        installed = str(installed_version_id or "").strip()
+        chosen = str(chosen_version_id or "").strip()
+        if installed and chosen and installed != chosen and ordered_version_ids:
+            try:
+                ordered = list(ordered_version_ids)
+                if ordered.index(chosen) < ordered.index(installed):
+                    return _("Update")
+                return _("Downgrade")
+            except ValueError:
+                pass
+        return _("Update")
+
+    def _decide_row_install_button(
+        self,
+        hit,
+        best,
+        installed_names,
+        *,
+        is_modpack: bool,
+        is_datapack: bool,
+        is_plugin: bool,
+        btn_label: str,
+    ) -> tuple:
+        """Single source of truth for search-row install buttons.
+
+        Installed means present on disk in any recognized form (current
+        file, tracked older file, or slug-matching file) — never a version
+        judgment; Update/Downgrade precision lives on the detail page.
+        Returns (label, sensitive).
+        """
+        pid = str(getattr(hit, "project_id", "") or "")
+        names = {str(n).lower() for n in (installed_names or set())}
+        if is_modpack and self._is_modpack_installed(pid):
+            return (_("Installed"), False)
+        if is_datapack and self._is_datapack_installed(pid):
+            return (_("Installed"), False)
+        if is_plugin and self._is_plugin_installed(pid):
+            return (_("Installed"), False)
+        if best is None:
+            return (btn_label, False)
+        best_file = str(getattr(best, "filename", "") or "")
+        if (not is_modpack) and (not is_datapack) and best_file and best_file.lower() in names:
+            if self._dependency_dependents(best_file):
+                return (_("Dependency"), False)
+            return (_("Installed"), False)
+        if (
+            (not is_modpack)
+            and (not is_datapack)
+            and (not is_plugin)
+            and (self._is_mod_present(pid, names) or self._looks_installed(hit, names))
+        ):
+            return (_("Installed"), False)
+        return (btn_label, True)
+
     def _is_plugin_search_available(self) -> bool:
         """True when the server runs Bukkit plugins alongside mods (Arclight)."""
         from hosty.shared.utils.constants import LOADER_ARCLIGHT, normalize_loader_type
@@ -222,7 +284,10 @@ class ModrinthMixin:
         results.set_margin_top(2)
 
         page_size = 20
-        state = {"offset": 0, "total": 0, "busy": False, "all_loaded": False}
+        # Start loading the next page this far before the bottom so results
+        # are ready before the user gets there.
+        prefetch_px = 1000
+        state = {"offset": 0, "total": 0, "busy": False, "all_loaded": False, "more_spinner_row": None, "generation": 0}
 
         def selected_category() -> str:
             idx = selected_cat_idx[0]
@@ -287,19 +352,77 @@ class ModrinthMixin:
                 return set()
             return {p.name.lower() for p in plugins_dir.glob("*.jar")}
 
-        def finish_search(hits, total, err, version, qtxt, appending: bool):
+        def hide_more_spinner():
+            row = state.get("more_spinner_row")
+            state["more_spinner_row"] = None
+            if row is not None:
+                try:
+                    results.remove(row)
+                except Exception:
+                    pass
+
+        def show_more_spinner():
+            hide_more_spinner()
+            row = Gtk.ListBoxRow()
+            row.set_activatable(False)
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            box.set_halign(Gtk.Align.CENTER)
+            box.set_margin_top(12)
+            box.set_margin_bottom(12)
+            spinner = Gtk.Spinner()
+            spinner.start()
+            box.append(spinner)
+            row.set_child(box)
+            results.append(row)
+            state["more_spinner_row"] = row
+
+        def restore_scroll(saved_value: float) -> None:
+            # Appending must never move the viewport: keep the exact position
+            # (clamped), so list growth below never yanks what you are reading.
+            adj = sw.get_vadjustment()
+            upper = adj.get_upper()
+            page = adj.get_page_size()
+            adj.set_value(max(0.0, min(saved_value, max(0.0, upper - page))))
+
+        def append_result_row(row) -> None:
+            # Insert before the loading footer (if present) so the list only
+            # ever grows downward; removing-then-readding the footer would
+            # shrink first and visibly jump.
+            spinner = state.get("more_spinner_row")
+            if spinner is not None:
+                try:
+                    index = spinner.get_index()
+                    if index >= 0:
+                        results.insert(row, index)
+                        return
+                except Exception:
+                    pass
+            results.append(row)
+
+        def finish_search(hits, total, err, version, qtxt, appending: bool, generation: int):
+            # Drop late results from a superseded search (e.g. typed query A
+            # finishing after query B already reset the list).
+            if generation != state["generation"]:
+                return
             set_busy(False)
+            adj = sw.get_vadjustment()
+            saved_value = adj.get_value()
             if err:
+                hide_more_spinner()
                 if not appending:
                     results.append(self._empty_listbox_row(_("Could not fetch Modrinth results.")))
+                restore_scroll(saved_value)
                 return
             state["total"] = int(total)
             if not appending:
+                hide_more_spinner()
                 clear_results()
             if not hits:
                 if not appending:
                     results.append(self._empty_listbox_row(_("No results")))
                 state["all_loaded"] = True
+                hide_more_spinner()
+                restore_scroll(saved_value)
                 return
 
             if total <= state["offset"] + len(hits):
@@ -309,15 +432,23 @@ class ModrinthMixin:
             installed_plugins = installed_plugin_names()
             for h in hits:
                 if self._is_plugin_hit(h):
-                    results.append(self._make_modrinth_row(h, version, installed_plugins))
+                    append_result_row(self._make_modrinth_row(h, version, installed_plugins))
                 else:
-                    results.append(self._make_modrinth_row(h, version, installed))
+                    append_result_row(self._make_modrinth_row(h, version, installed))
+            if state["all_loaded"]:
+                hide_more_spinner()
+            restore_scroll(saved_value)
+            # Still inside the prefetch zone (e.g. tall viewport)? Keep going.
+            maybe_prefetch()
 
         def do_search(reset: bool = False):
             if reset:
                 state["offset"] = 0
                 state["all_loaded"] = False
+                state["generation"] = state.get("generation", 0) + 1
+                hide_more_spinner()
                 clear_results()
+            generation = state.get("generation", 0)
             q = entry.get_text().strip()
             mc_version = self._server_info.mc_version if self._server_info else ""
             qtxt = q
@@ -341,13 +472,19 @@ class ModrinthMixin:
                         project_type=project_type,
                     )
                     GLib.idle_add(
-                        lambda h=hits, t=total, v=mc_version, qq=qtxt, a=not reset: finish_search(h, t, None, v, qq, a)
+                        lambda h=hits, t=total, v=mc_version, qq=qtxt, a=not reset, g=generation: finish_search(
+                            h, t, None, v, qq, a, g
+                        )
                     )
                 except Exception as ex:
                     GLib.idle_add(
-                        lambda e=str(ex), v=mc_version, qq=qtxt, a=not reset: finish_search([], 0, e, v, qq, a)
+                        lambda e=str(ex), v=mc_version, qq=qtxt, a=not reset, g=generation: finish_search(
+                            [], 0, e, v, qq, a, g
+                        )
                     )
 
+            if not reset:
+                show_more_spinner()
             threading.Thread(target=thread_fn, daemon=True).start()
 
         def do_search_more(*_):
@@ -356,12 +493,17 @@ class ModrinthMixin:
             state["offset"] += page_size
             do_search(reset=False)
 
-        def on_scroll(*_):
+        def maybe_prefetch():
+            if state["busy"] or state["all_loaded"]:
+                return
             adj = sw.get_vadjustment()
             if adj.get_upper() <= adj.get_page_size():
                 return
-            if adj.get_value() + adj.get_page_size() >= adj.get_upper() - 300:
+            if adj.get_value() + adj.get_page_size() >= adj.get_upper() - prefetch_px:
                 do_search_more()
+
+        def on_scroll(*_):
+            maybe_prefetch()
 
         def trigger_search(*_):
             update_search_hint()
@@ -467,29 +609,18 @@ class ModrinthMixin:
                 is_plugin = bool(getattr(row, "_is_plugin", False)) or self._is_plugin_hit(hit)
                 btn_label = getattr(row, "_install_btn_label", _("Install"))
                 best_version = getattr(row, "_best_version", [None])
-
-                if is_modpack and self._is_modpack_installed(hit.project_id):
-                    _set_row_btn(_("Installed"), False)
-                elif is_datapack and self._is_datapack_installed(hit.project_id):
-                    _set_row_btn(_("Installed"), False)
-                elif is_plugin and self._is_plugin_installed(hit.project_id):
-                    _set_row_btn(_("Installed"), False)
-                elif is_plugin:
-                    first = best_version[0]
-                    if first and first.filename.lower() in installed_plugin_names:
-                        _set_row_btn(_("Installed"), False)
-                    else:
-                        _set_row_btn(btn_label, True)
-                elif not is_modpack and not is_datapack:
-                    if self._looks_installed(hit, installed_names):
-                        _set_row_btn(_("Installed"), False)
-                    else:
-                        first = best_version[0]
-                        if first and first.filename.lower() in installed_names:
-                            dependents = self._dependency_dependents(first.filename)
-                            _set_row_btn(_("Dependency") if dependents else _("Installed"), False)
-                        else:
-                            _set_row_btn(btn_label, True)
+                best = (best_version or [None])[0]
+                names = installed_plugin_names if is_plugin else installed_names
+                label, sensitive = self._decide_row_install_button(
+                    hit,
+                    best,
+                    names,
+                    is_modpack=is_modpack,
+                    is_datapack=is_datapack,
+                    is_plugin=is_plugin,
+                    btn_label=btn_label,
+                )
+                _set_row_btn(label, sensitive)
             i += 1
 
     def _configure_known_mod_after_download(self, hit, as_plugin: bool = False) -> None:
@@ -756,28 +887,16 @@ class ModrinthMixin:
                 best_version[0] = versions[0]
 
                 def ui_update():
-                    first = best_version[0]
-                    if not first:
-                        _set_row_btn(sensitive=False)
-                        return
-
-                    is_installed = False
-                    if is_modpack and self._is_modpack_installed(hit.project_id):
-                        is_installed = True
-                    elif is_datapack and self._is_datapack_installed(hit.project_id):
-                        is_installed = True
-                    elif is_plugin and self._is_plugin_installed(hit.project_id):
-                        is_installed = True
-                    elif (not is_modpack) and (not is_datapack) and first.filename.lower() in installed_names:
-                        is_installed = True
-
-                    if is_installed:
-                        dependents = (
-                            self._dependency_dependents(first.filename) if not (is_modpack or is_datapack) else []
-                        )
-                        _set_row_btn(_("Dependency") if dependents else _("Installed"), False)
-                    else:
-                        _set_row_btn(btn_label, True)
+                    label, sensitive = self._decide_row_install_button(
+                        hit,
+                        best_version[0],
+                        installed_names,
+                        is_modpack=is_modpack,
+                        is_datapack=is_datapack,
+                        is_plugin=is_plugin,
+                        btn_label=btn_label,
+                    )
+                    _set_row_btn(label, sensitive)
 
                 GLib.idle_add(ui_update)
 
@@ -1396,7 +1515,11 @@ class ModrinthMixin:
                     if installed_state.get("version_id", "") == chosen.version_id:
                         is_installed = True
                     else:
-                        label = _("Replace")
+                        label = self._update_direction_label(
+                            installed_state.get("version_id", ""),
+                            chosen.version_id,
+                            [v.version_id for v in version_objs],
+                        )
                 elif chosen.filename.lower() in installed_names:
                     is_installed = True
             elif not is_modpack and not is_datapack:
@@ -1405,7 +1528,11 @@ class ModrinthMixin:
                     if installed_state.get("version_id", "") == chosen.version_id:
                         is_installed = True
                     else:
-                        label = _("Replace")
+                        label = self._update_direction_label(
+                            installed_state.get("version_id", ""),
+                            chosen.version_id,
+                            [v.version_id for v in version_objs],
+                        )
                 elif chosen.filename.lower() in installed_names:
                     is_installed = True
 
@@ -1563,6 +1690,39 @@ class ModrinthMixin:
         version_objs.clear()
         version_objs.extend(chosen_for_labels)
 
+        # Installed version id for the badge below (selection keeps the
+        # check icon; the badge shows what is actually on disk).
+        installed_version_id = ""
+        try:
+            if is_modpack:
+                installed_version_id = str(
+                    (self._modpack_entries().get(hit.project_id, {}) or {}).get("version_id", "")
+                )
+            elif is_datapack:
+                installed_version_id = str(
+                    (self._read_datapack_state().get("datapacks", {}).get(hit.project_id, {}) or {}).get(
+                        "version_id", ""
+                    )
+                )
+            elif is_plugin:
+                installed_version_id = str(
+                    (self._read_plugin_state().get("plugins", {}).get(hit.project_id, {}) or {}).get("version_id", "")
+                )
+            else:
+                installed_version_id = str(
+                    (self._read_individual_mod_state().get("mods", {}).get(hit.project_id, {}) or {}).get(
+                        "version_id", ""
+                    )
+                )
+        except Exception:
+            installed_version_id = ""
+        installed_version_id = installed_version_id.strip()
+
+        def _row_is_installed(version) -> bool:
+            if installed_version_id and str(version.version_id or "").strip() == installed_version_id:
+                return True
+            return not installed_version_id and str(version.filename or "").lower() in installed_names
+
         for i, name in enumerate(names):
             lbl = Gtk.Label(label=name, xalign=0.0)
             lbl.set_hexpand(True)
@@ -1582,6 +1742,14 @@ class ModrinthMixin:
             row_box.set_margin_bottom(8)
             row_box.append(lbl)
             row_box.append(gv_lbl)
+
+            if _row_is_installed(chosen_for_labels[i]):
+                # Plain label (not an image): the selection checkmark updater
+                # only strips trailing images, so the badge survives.
+                installed_lbl = Gtk.Label(label=_("Installed"))
+                installed_lbl.add_css_class("caption")
+                installed_lbl.add_css_class("dim-label")
+                row_box.append(installed_lbl)
 
             if i == 0:
                 chk = Gtk.Image.new_from_icon_name("object-select-symbolic")
@@ -1609,7 +1777,11 @@ class ModrinthMixin:
                 if installed_state.get("version_id", "") == first.version_id:
                     is_installed = True
                 else:
-                    label = _("Replace")
+                    label = self._update_direction_label(
+                        installed_state.get("version_id", ""),
+                        first.version_id,
+                        [v.version_id for v in version_objs],
+                    )
             elif first.filename.lower() in installed_names:
                 is_installed = True
         elif not is_modpack and not is_datapack:
@@ -1618,7 +1790,11 @@ class ModrinthMixin:
                 if installed_state.get("version_id", "") == first.version_id:
                     is_installed = True
                 else:
-                    label = _("Replace")
+                    label = self._update_direction_label(
+                        installed_state.get("version_id", ""),
+                        first.version_id,
+                        [v.version_id for v in version_objs],
+                    )
             elif first.filename.lower() in installed_names:
                 is_installed = True
 

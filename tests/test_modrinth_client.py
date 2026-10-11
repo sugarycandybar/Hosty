@@ -48,6 +48,7 @@ VERSIONS = [
     _raw_version("v-old-fabric", "demo", "1.0", ["1.20.1"], ["fabric"]),
     _raw_version("v-new-paper", "demo", "2.0", ["1.21.1"], ["paper"]),
     _raw_version("v-noloader", "demo", "3.0", ["1.21.1"], []),
+    _raw_version("v-dp", "demo", "9.9", ["1.21.1"], ["datapack"]),
 ]
 
 
@@ -119,12 +120,37 @@ def test_unfiltered_fallback_for_unknown_loader(transport: FakeTransport):
     assert best.version_id == "v-new-fabric"
 
 
-def test_pseudo_loader_does_single_unfiltered_request(transport: FakeTransport):
+def test_datapack_loader_matches_datapack_versions(transport: FakeTransport):
     best = modrinth_client.find_compatible_version("demo", "1.21.1", loader="datapack")
     assert best is not None
-    assert best.version_id == "v-new-fabric"  # newest overall, as before
+    assert best.version_id == "v-dp"
     assert len(transport.pooled_calls) == 1
-    assert "loaders" not in transport.pooled_calls[0]
+    assert "loaders" in transport.pooled_calls[0]
+
+
+def test_datapack_loader_falls_back_without_mc_match(transport: FakeTransport):
+    best = modrinth_client.find_compatible_version("demo", "1.19.4", loader="datapack")
+    assert best is not None
+    assert best.version_id == "v-dp"
+
+
+def test_plugin_loader_uses_plugin_matcher(transport: FakeTransport):
+    best = modrinth_client.find_compatible_version("demo", "1.21.1", loader="plugin")
+    assert best is not None
+    assert best.version_id == "v-new-paper"
+
+
+def _raw_version_to_model(version_id: str, loaders: list[str]):
+    raw = _raw_version(version_id, "demo", "1.0", ["1.21.1"], loaders)
+    model = modrinth_client._version_to_model(raw)
+    assert model is not None
+    return model
+
+
+def test_is_datapack_version():
+    assert modrinth_client.is_datapack_version(_raw_version_to_model("x", ["datapack"])) is True
+    assert modrinth_client.is_datapack_version(_raw_version_to_model("x", [])) is True
+    assert modrinth_client.is_datapack_version(_raw_version_to_model("x", ["fabric"])) is False
 
 
 def test_results_identical_without_server_filter_support(monkeypatch: pytest.MonkeyPatch):

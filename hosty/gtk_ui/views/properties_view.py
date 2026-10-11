@@ -892,7 +892,7 @@ class PropertiesView(Gtk.Box):
             stack.set_visible_child_name("progress")
             progress_bar.set_fraction(0.0)
             progress_row.set_title(_("Updating Server"))
-            progress_row.set_description(_("Updating server"))
+            progress_row.set_description("")
             progress_detail.set_label("")
 
             def progress(frac, message):
