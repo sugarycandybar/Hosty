@@ -41,8 +41,27 @@ def show_preferences_window(
     win = Adw.PreferencesDialog()
     win.set_search_enabled(True)
 
-    def show_pref_toast(message: str) -> None:
-        win.add_toast(Adw.Toast(title=message))
+    def show_pref_toast(message: str, important: bool = False) -> None:
+        prev = getattr(win, "_hosty_last_transient_toast", None)
+        if prev is not None:
+            try:
+                setattr(win, "_hosty_last_transient_toast", None)
+                prev.dismiss()
+            except Exception:
+                pass
+        toast = Adw.Toast(title=message)
+        if not important:
+            try:
+                setattr(win, "_hosty_last_transient_toast", toast)
+
+                def _on_dismissed(dismissed_toast):
+                    if getattr(win, "_hosty_last_transient_toast", None) is dismissed_toast:
+                        setattr(win, "_hosty_last_transient_toast", None)
+
+                toast.connect("dismissed", _on_dismissed)
+            except Exception:
+                pass
+        win.add_toast(toast)
 
     page = Adw.PreferencesPage(title=_("General"), icon_name="preferences-system-symbolic")
 

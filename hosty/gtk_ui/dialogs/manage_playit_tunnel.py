@@ -45,6 +45,7 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
 
         self._tunnel_name = tunnel_name
         self._local_port = local_port
+        self._last_transient_toast = None
 
         self._toolbar_view = Adw.ToolbarView()
 
@@ -81,7 +82,12 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         copy_port_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
         copy_port_btn.add_css_class("flat")
         copy_port_btn.set_tooltip_text(_("Copy Playit port"))
-        copy_port_btn.connect("clicked", self._on_copy_value, str(remote_port))
+        copy_port_btn.connect(
+            "clicked",
+            lambda btn, text=str(remote_port): self._on_copy_value(
+                btn, text, _("Playit port copied")
+            ),
+        )
         port_row.add_suffix(copy_port_btn)
         group.add(port_row)
 
@@ -90,7 +96,12 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         copy_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
         copy_domain_btn.add_css_class("flat")
         copy_domain_btn.set_tooltip_text(_("Copy Playit domain"))
-        copy_domain_btn.connect("clicked", self._on_copy_value, display_domain)
+        copy_domain_btn.connect(
+            "clicked",
+            lambda btn, text=display_domain: self._on_copy_value(
+                btn, text, _("Playit domain copied")
+            ),
+        )
         copy_domain_btn.set_visible(bool(display_domain.strip()))
         domain_row.add_suffix(copy_domain_btn)
         group.add(domain_row)
@@ -124,22 +135,64 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         scrolled.set_child(content_box)
 
         self._toolbar_view.set_content(scrolled)
-        self.set_child(self._toolbar_view)
+        # Adw.Dialog has no built-in toast support (unlike
+        # Adw.PreferencesDialog), so wrap content in a ToastOverlay.
+        self._toast_overlay = Adw.ToastOverlay()
+        self._toast_overlay.set_child(self._toolbar_view)
+        self.set_child(self._toast_overlay)
 
     def _on_port_value_changed(self, _spin):
         self._save_btn.set_sensitive(int(self._port_spin.get_value()) != self._local_port)
 
-    def _on_copy_value(self, _button, text: str):
+    def _show_toast(self, message: str, important: bool = False) -> None:
+        """Show a toast inside the dialog.
+
+        Transient toasts are dismissed when a newer toast arrives;
+        important ones keep their full duration.
+        """
+        prev = getattr(self, "_last_transient_toast", None)
+        if prev is not None:
+            try:
+                self._last_transient_toast = None
+                prev.dismiss()
+            except Exception:
+                pass
+        toast = Adw.Toast(title=message)
+        if not important:
+            try:
+                self._last_transient_toast = toast
+
+                def _on_dismissed(dismissed_toast):
+                    if getattr(self, "_last_transient_toast", None) is dismissed_toast:
+                        self._last_transient_toast = None
+
+                toast.connect("dismissed", _on_dismissed)
+            except Exception:
+                pass
+        overlay = getattr(self, "_toast_overlay", None)
+        if overlay is not None:
+            overlay.add_toast(toast)
+        else:
+            # Fallback for libadwaita versions where Adw.Dialog
+            # provides its own toast support.
+            try:
+                self.add_toast(toast)  # type: ignore[attr-defined]
+            except AttributeError:
+                pass
+
+    def _on_copy_value(self, _button, text: str, toast_message: str | None = None):
         text = str(text or "").strip()
         if not text:
             return
         try:
             display = Gdk.Display.get_default()
             if not display:
+                self._show_toast(_("Could not access clipboard"))
                 return
             display.get_clipboard().set(text)
+            self._show_toast(toast_message or _("Copied to clipboard"))
         except Exception:
-            pass
+            self._show_toast(_("Could not access clipboard"))
 
     def _on_save_port(self, *_args):
         new_port = int(self._port_spin.get_value())

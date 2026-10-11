@@ -337,6 +337,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         button_label: str | None = None,
         on_button=None,
         timeout: int = 3,
+        important: bool = False,
     ):
         root = self.get_root()
         if root and hasattr(root, "show_toast"):
@@ -345,4 +346,5 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
                 button_label=button_label,
                 on_button=on_button,
                 timeout=timeout,
+                important=important,
             )

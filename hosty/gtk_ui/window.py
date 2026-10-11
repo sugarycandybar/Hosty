@@ -51,6 +51,7 @@ class HostyWindow(Adw.ApplicationWindow):
 
         # Toast overlay wraps everything
         self._toast_overlay = Adw.ToastOverlay()
+        self._last_transient_toast = None
 
         # OverlaySplitView. Pinning keeps the sidebar visible side-by-side
         # instead of overlaying it when collapsed, which squeezes phone
@@ -446,14 +447,38 @@ class HostyWindow(Adw.ApplicationWindow):
         button_label: str | None = None,
         on_button=None,
         timeout: int = 3,
+        important: bool = False,
     ):
         """Show a toast notification."""
+        is_important = bool(important) or button_label is not None
+
+        # Dismiss the previous transient toast (if any), whether it is
+        # currently shown or still queued behind an important toast.
+        prev = getattr(self, "_last_transient_toast", None)
+        if prev is not None:
+            self._last_transient_toast = None
+            try:
+                prev.dismiss()
+            except Exception:
+                pass
+
         toast = Adw.Toast(title=message)
         toast.set_timeout(max(1, int(timeout)))
         if button_label:
             toast.set_button_label(button_label)
             if on_button:
                 toast.connect("button-clicked", lambda *_args: on_button())
+        if not is_important:
+            self._last_transient_toast = toast
+
+            def _on_dismissed(dismissed_toast):
+                if self._last_transient_toast is dismissed_toast:
+                    self._last_transient_toast = None
+
+            try:
+                toast.connect("dismissed", _on_dismissed)
+            except Exception:
+                pass
         self._toast_overlay.add_toast(toast)
 
     def pause_playit_auto_start_for_running_server(self, server_id: str):

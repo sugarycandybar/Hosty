@@ -65,6 +65,7 @@ class PropertiesView(Gtk.Box):
         self._ram_row: Adw.SpinRow | None = None
         self._suppress_changes = False
         self._app_toast_overlay = toast_overlay
+        self._last_transient_toast = None
         self._java_item_rows: list[dict] = []
 
         # Restart banner
@@ -367,12 +368,44 @@ class PropertiesView(Gtk.Box):
         """Handle entry row apply/confirmation."""
         self._show_toast(_("Property updated"))
 
-    def _show_toast(self, message: str, timeout: int = 2):
-        """Show a toast notification."""
+    def _show_toast(self, message: str, timeout: int = 2, important: bool = False):
+        """Show a toast notification.
+
+        Transient toasts are dismissed when a newer toast arrives;
+        important ones keep their full duration.
+        """
+        root = self.get_root()
+        if root and hasattr(root, "show_toast"):
+            try:
+                root.show_toast(message, timeout=timeout, important=important)
+                return
+            except TypeError:
+                # Fallback for roots without the `important` parameter.
+                root.show_toast(message, timeout=timeout)
+                return
         if not self._app_toast_overlay:
             return
+        if not important:
+            prev = getattr(self, "_last_transient_toast", None)
+            if prev is not None:
+                self._last_transient_toast = None
+                try:
+                    prev.dismiss()
+                except Exception:
+                    pass
         toast = Adw.Toast(title=message)
         toast.set_timeout(timeout)
+        if not important:
+            self._last_transient_toast = toast
+
+            def _on_dismissed(dismissed_toast):
+                if self._last_transient_toast is dismissed_toast:
+                    self._last_transient_toast = None
+
+            try:
+                toast.connect("dismissed", _on_dismissed)
+            except Exception:
+                pass
         self._app_toast_overlay.add_toast(toast)
 
     def _add_entry_row(self, group, title, key, default):

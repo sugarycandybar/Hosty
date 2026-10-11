@@ -20,12 +20,27 @@ function escapeHtml(text) {
     .replace(/"/g, "&quot;");
 }
 
-function toast(text, kind = "") {
+let lastTransientToast = null;
+
+function toast(text, kind = "", important = false) {
+  const isImportant = Boolean(important) || kind === "error";
+  if (lastTransientToast) {
+    lastTransientToast.remove();
+    lastTransientToast = null;
+  }
   const el = document.createElement("div");
   el.className = "toast " + kind;
   el.textContent = text;
   $("toasts").appendChild(el);
-  setTimeout(() => el.remove(), 5000);
+  if (!isImportant) {
+    lastTransientToast = el;
+  }
+  setTimeout(() => {
+    el.remove();
+    if (lastTransientToast === el) {
+      lastTransientToast = null;
+    }
+  }, 5000);
 }
 
 /* ---------- screens ---------- */
