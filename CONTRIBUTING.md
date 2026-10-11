@@ -16,12 +16,11 @@ Hosty uses `gettext`. Mark UI strings with `_("...")` and counts with
 The easiest way to contribute a translation is Weblate, which proposes the
 `.po` changes as a pull request.
 
-Manually:
+Manually (only needed to preview string changes locally):
 
 ```bash
 meson setup build
-meson compile -C build hosty-pot        # refresh po/hosty.pot
-meson compile -C build hosty-update-po  # merge into po/*.po
+meson compile -C build hosty-update-po  # refreshes po/hosty.pot and merges po/*.po
 msginit -l <locale> -i po/hosty.pot -o po/<locale>.po  # new language only
 ```
 
