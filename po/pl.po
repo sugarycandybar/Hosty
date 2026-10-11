@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: hosty 1.7.6\n"
 "Report-Msgid-Bugs-To: https://github.com/sugarycandybar/Hosty/issues\n"
-"POT-Creation-Date: 2026-10-11 03:26+0000\n"
+"POT-Creation-Date: 2026-10-11 13:43+0000\n"
 "PO-Revision-Date: 2026-06-22 12:04+0200\n"
 "Last-Translator: KOXXPL <80292506+KOXXPL@users.noreply.github.com>\n"
 "Language-Team: Polish\n"
@@ -432,12 +432,12 @@ msgid "Java {} needed - will be downloaded automatically"
 msgstr "Wymagana Java {} zostanie pobrana automatycznie"
 
 #: hosty/gtk_ui/dialogs/create_server.py:657
-#: hosty/gtk_ui/dialogs/icon_picker.py:110
+#: hosty/gtk_ui/dialogs/icon_picker.py:127
 msgid "Select Server Icon"
 msgstr "Wybierz ikonę serwera"
 
 #: hosty/gtk_ui/dialogs/create_server.py:660
-#: hosty/gtk_ui/dialogs/icon_picker.py:114
+#: hosty/gtk_ui/dialogs/icon_picker.py:131
 msgid "Images"
 msgstr "Obrazy"
 
@@ -580,17 +580,23 @@ msgstr "Zmień ikonę serwera"
 msgid "Apply"
 msgstr "Zastosuj"
 
-#: hosty/gtk_ui/dialogs/icon_picker.py:83
-msgid "Preview:"
+#: hosty/gtk_ui/dialogs/icon_picker.py:70
+#, fuzzy
+msgid "Preview (in-game):"
 msgstr "Podgląd:"
 
+#: hosty/gtk_ui/dialogs/icon_picker.py:100
+#, fuzzy
+msgid "Sidebar:"
+msgstr "Przełącz pasek boczny"
+
 #. File chooser button
-#: hosty/gtk_ui/dialogs/icon_picker.py:93
+#: hosty/gtk_ui/dialogs/icon_picker.py:110
 msgid "Choose Image…"
 msgstr "Wybierz obraz..."
 
 #. Info
-#: hosty/gtk_ui/dialogs/icon_picker.py:98
+#: hosty/gtk_ui/dialogs/icon_picker.py:115
 msgid "Select a PNG, JPG, or WebP image."
 msgstr "Wybierz obraz w formacie PNG, JPG lub WebP."
 
@@ -627,43 +633,43 @@ msgstr "Port Playit"
 msgid "Copy Playit port"
 msgstr "Port Playit"
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:88
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:87
 #, fuzzy
 msgid "Playit port copied"
 msgstr "Port Playit"
 
 #. Playit Domain
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:95
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:93
 msgid "Playit Domain"
 msgstr "Domena Playit"
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:98
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:96
 #, fuzzy
 msgid "Copy Playit domain"
 msgstr "Domena Playit"
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:102
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:99
 #, fuzzy
 msgid "Playit domain copied"
 msgstr "Domena Playit"
 
 #. Regenerate button
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:120
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:116
 msgid "Regenerate Domain"
 msgstr "Wygeneruj domenę ponownie"
 
 #. Delete button
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:125
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:121
 msgid "Delete Tunnel"
 msgstr "Usuń tunel"
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:190
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:195
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:186
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:191
 #: hosty/gtk_ui/views/connect/mixins/local_ip_mixin.py:87
 msgid "Could not access clipboard"
 msgstr "Nie udało się uzyskać dostępu do schowka"
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:193
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:189
 #, fuzzy
 msgid "Copied to clipboard"
 msgstr "Nie udało się uzyskać dostępu do schowka"

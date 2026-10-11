@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: hosty\n"
 "Report-Msgid-Bugs-To: https://github.com/sugarycandybar/Hosty/issues\n"
-"POT-Creation-Date: 2026-10-11 03:26+0000\n"
+"POT-Creation-Date: 2026-10-11 13:43+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -422,12 +422,12 @@ msgid "Java {} needed - will be downloaded automatically"
 msgstr ""
 
 #: hosty/gtk_ui/dialogs/create_server.py:657
-#: hosty/gtk_ui/dialogs/icon_picker.py:110
+#: hosty/gtk_ui/dialogs/icon_picker.py:127
 msgid "Select Server Icon"
 msgstr ""
 
 #: hosty/gtk_ui/dialogs/create_server.py:660
-#: hosty/gtk_ui/dialogs/icon_picker.py:114
+#: hosty/gtk_ui/dialogs/icon_picker.py:131
 msgid "Images"
 msgstr ""
 
@@ -570,17 +570,21 @@ msgstr ""
 msgid "Apply"
 msgstr ""
 
-#: hosty/gtk_ui/dialogs/icon_picker.py:83
-msgid "Preview:"
+#: hosty/gtk_ui/dialogs/icon_picker.py:70
+msgid "Preview (in-game):"
+msgstr ""
+
+#: hosty/gtk_ui/dialogs/icon_picker.py:100
+msgid "Sidebar:"
 msgstr ""
 
 #. File chooser button
-#: hosty/gtk_ui/dialogs/icon_picker.py:93
+#: hosty/gtk_ui/dialogs/icon_picker.py:110
 msgid "Choose Image…"
 msgstr ""
 
 #. Info
-#: hosty/gtk_ui/dialogs/icon_picker.py:98
+#: hosty/gtk_ui/dialogs/icon_picker.py:115
 msgid "Select a PNG, JPG, or WebP image."
 msgstr ""
 
@@ -615,40 +619,40 @@ msgstr ""
 msgid "Copy Playit port"
 msgstr ""
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:88
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:87
 msgid "Playit port copied"
 msgstr ""
 
 #. Playit Domain
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:95
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:93
 msgid "Playit Domain"
 msgstr ""
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:98
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:96
 msgid "Copy Playit domain"
 msgstr ""
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:102
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:99
 msgid "Playit domain copied"
 msgstr ""
 
 #. Regenerate button
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:120
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:116
 msgid "Regenerate Domain"
 msgstr ""
 
 #. Delete button
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:125
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:121
 msgid "Delete Tunnel"
 msgstr ""
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:190
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:195
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:186
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:191
 #: hosty/gtk_ui/views/connect/mixins/local_ip_mixin.py:87
 msgid "Could not access clipboard"
 msgstr ""
 
-#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:193
+#: hosty/gtk_ui/dialogs/manage_playit_tunnel.py:189
 msgid "Copied to clipboard"
 msgstr ""
 
