@@ -10,7 +10,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from pathlib import Path
 
-from gi.repository import Adw, Gdk, GdkPixbuf, Gio, GLib, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from hosty.gtk_ui.dialogs.dialog_common import (
     apply_dialog_size,
@@ -60,27 +60,44 @@ class IconPickerDialog(Adw.Dialog):
         toolbar.add_top_bar(header)
 
         # Content
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        content.set_margin_top(16)
-        content.set_margin_bottom(16)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        content.set_margin_top(12)
+        content.set_margin_bottom(12)
         content.set_margin_start(24)
         content.set_margin_end(24)
+        content.set_valign(Gtk.Align.START)
+        content.set_vexpand(False)
+        preview_label = Gtk.Label(label=_("Preview (in-game):"))
+        preview_label.add_css_class("dim-label")
+        preview_label.set_halign(Gtk.Align.CENTER)
+        preview_label.set_valign(Gtk.Align.START)
+        preview_label.set_vexpand(False)
+        content.append(preview_label)
 
-        # Preview area
+        # Fixed-size slot so loading the paintable can't change the
+        # allocation and push the widgets below it down.
         preview_frame = Gtk.Frame()
+        preview_frame.set_size_request(128, 128)
         preview_frame.set_halign(Gtk.Align.CENTER)
-
-        self._preview = Gtk.Picture()
-        self._preview.set_size_request(200, 200)
-        self._preview.set_content_fit(Gtk.ContentFit.COVER)
+        preview_frame.set_valign(Gtk.Align.START)
+        preview_frame.set_hexpand(False)
+        preview_frame.set_vexpand(False)
+        self._preview = Gtk.Image()
+        self._preview.set_pixel_size(128)
+        self._preview.set_halign(Gtk.Align.CENTER)
+        self._preview.set_valign(Gtk.Align.CENTER)
+        self._preview.set_hexpand(False)
+        self._preview.set_vexpand(False)
         preview_frame.set_child(self._preview)
         content.append(preview_frame)
 
-        # Result preview (small avatar)
+        # Result preview (small avatar, as shown in the sidebar)
         result_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         result_box.set_halign(Gtk.Align.CENTER)
+        result_box.set_valign(Gtk.Align.START)
+        result_box.set_vexpand(False)
 
-        result_label = Gtk.Label(label=_("Preview:"))
+        result_label = Gtk.Label(label=_("Sidebar:"))
         result_label.add_css_class("dim-label")
         result_box.append(result_label)
 
@@ -140,18 +157,13 @@ class IconPickerDialog(Adw.Dialog):
             pass
 
     def _load_preview(self):
-        """Load and display the selected image."""
+        """Load and display the final 64x64 icon preview."""
         if not self._source_path:
             return
 
         try:
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file(self._source_path)
-
-            # Show preview
-            texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-            self._preview.set_paintable(texture)
-
-            # Generate cropped preview
+            # Generate the exact 64x64 result first; the top preview
+            # shows that output, not the raw source image.
             self._generate_cropped_preview()
 
             self._apply_btn.set_sensitive(True)
@@ -160,21 +172,29 @@ class IconPickerDialog(Adw.Dialog):
             logger.warning("Failed to load image: %s", e)
 
     def _generate_cropped_preview(self):
-        """Generate a small cropped preview avatar."""
+        """Generate the final 64x64 icon preview and sidebar avatar."""
         try:
-            # Use PIL to do the crop
+            # Use PIL to do the same center-crop + resize as the final
+            # server-icon.png (64x64 per Minecraft spec).
             output_path = self._server_dir / "icon_preview.png"
             self._server_dir.mkdir(parents=True, exist_ok=True)
 
             convert_to_png(
                 self._source_path,
                 str(output_path),
-                size=128,
+                size=64,
             )
 
-            pixbuf = load_pixbuf(str(output_path), 48)
+            # Top preview: the 64x64 result, scaled up for visibility.
+            pixbuf = load_pixbuf(str(output_path), 128)
             if pixbuf:
                 texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+                self._preview.set_from_paintable(texture)
+
+            # Sidebar avatar preview.
+            avatar_pixbuf = load_pixbuf(str(output_path), 48)
+            if avatar_pixbuf:
+                texture = Gdk.Texture.new_for_pixbuf(avatar_pixbuf)
                 self._result_avatar.set_custom_image(texture)
 
         except Exception as e:

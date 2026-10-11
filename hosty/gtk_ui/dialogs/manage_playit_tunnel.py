@@ -84,9 +84,7 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         copy_port_btn.set_tooltip_text(_("Copy Playit port"))
         copy_port_btn.connect(
             "clicked",
-            lambda btn, text=str(remote_port): self._on_copy_value(
-                btn, text, _("Playit port copied")
-            ),
+            lambda btn, text=str(remote_port): self._on_copy_value(btn, text, _("Playit port copied")),
         )
         port_row.add_suffix(copy_port_btn)
         group.add(port_row)
@@ -98,9 +96,7 @@ class ManagePlayitTunnelDialog(Adw.Dialog):
         copy_domain_btn.set_tooltip_text(_("Copy Playit domain"))
         copy_domain_btn.connect(
             "clicked",
-            lambda btn, text=display_domain: self._on_copy_value(
-                btn, text, _("Playit domain copied")
-            ),
+            lambda btn, text=display_domain: self._on_copy_value(btn, text, _("Playit domain copied")),
         )
         copy_domain_btn.set_visible(bool(display_domain.strip()))
         domain_row.add_suffix(copy_domain_btn)
