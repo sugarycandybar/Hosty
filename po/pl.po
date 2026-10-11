@@ -4129,12 +4129,8 @@ msgid "Minecraft server manager"
 msgstr "Menedżer serwerów Minecraft"
 
 #: packaging/linux/io.github.sugarycandybar.Hosty.desktop.in:10
-msgid ""
-"minecraft;server;fabric;neoforge;forge;paper;mods;plugins;modrinth;java;"
-"hosting;multiplayer;mc;"
-msgstr ""
-"minecraft;server;fabric;neoforge;forge;paper;mods;plugins;modrinth;java;"
-"hosting;multiplayer;mc;serwer;serwery;"
+msgid "minecraft;server;fabric;neoforge;forge;paper;mods;plugins;modrinth;java;hosting;multiplayer;mc;"
+msgstr "minecraft;server;fabric;neoforge;forge;paper;mods;plugins;modrinth;java;hosting;multiplayer;mc;serwer;serwery;"
 
 #: packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml.in:5
 msgid "Host Minecraft servers"
