@@ -60,6 +60,12 @@ class BackupsMixin:
         page = Adw.PreferencesPage()
 
         actions = Adw.PreferencesGroup(title=_("Actions"))
+        open_row = Adw.ActionRow(title=_("Open backups folder"))
+        open_row.add_prefix(Gtk.Image.new_from_icon_name("folder-open-symbolic"))
+        open_row.set_activatable(True)
+        open_row.connect("activated", self._on_open_backups_folder)
+        actions.add(open_row)
+
         create_row = Adw.ActionRow(
             title=_("Create world backup"),
         )
@@ -83,11 +89,6 @@ class BackupsMixin:
         actions.add(full_row)
         self._full_backup_row = full_row
 
-        open_row = Adw.ActionRow(title=_("Open backups folder"))
-        open_row.add_prefix(Gtk.Image.new_from_icon_name("folder-open-symbolic"))
-        open_row.set_activatable(True)
-        open_row.connect("activated", self._on_open_backups_folder)
-        actions.add(open_row)
         page.add(actions)
 
         self._backups_group = Adw.PreferencesGroup(title=_("Available Backups"))
