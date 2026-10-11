@@ -71,6 +71,14 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._whitelist_rows: list[Gtk.Widget] = []
         self._banned_rows: list[Gtk.Widget] = []
 
+        # Currently open world subpage (if any), so actions like
+        # delete-dimension / reset / import can refresh it in place.
+        self._open_world_path: Path | None = None
+        self._open_world_info_group: Adw.PreferencesGroup | None = None
+        self._open_world_info_rows: list[Gtk.Widget] = []
+        self._open_world_dims_group: Adw.PreferencesGroup | None = None
+        self._open_world_dim_rows: list[Gtk.Widget] = []
+
         self._nav = Adw.NavigationView()
         self._nav.set_vexpand(True)
         self._nav.set_hexpand(True)

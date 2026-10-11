@@ -1424,7 +1424,7 @@ class ModrinthMixin:
         open_btn.add_css_class("pill")
         open_btn.set_halign(Gtk.Align.START)
 
-        def on_open_page(*_):
+        def on_open_page(*args):
             slug = hit.slug or hit.project_id
             if is_modpack:
                 route = "modpack"

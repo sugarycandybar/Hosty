@@ -399,7 +399,7 @@ class BackupsMixin:
             on_refresh=self._refresh_backup_list,
         )
 
-    def _on_open_backups_folder(self, *_):
+    def _on_open_backups_folder(self, *args):
         bdir = self._backups_dir()
         if not bdir:
             self._alert(_("No server selected"), _("Select a server to open backups."))

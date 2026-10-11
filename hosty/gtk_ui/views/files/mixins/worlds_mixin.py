@@ -81,35 +81,103 @@ class WorldsMixin:
         else:
             self._nav.push(page)
 
-    def _build_world_page(self, path: Path, show_controls: bool = False) -> Gtk.Widget:
-        page = Adw.PreferencesPage()
+    def _populate_world_info_rows(self, path: Path) -> None:
+        """(Re)populate the open world page's info group for ``path``."""
+        group = getattr(self, "_open_world_info_group", None)
+        rows = getattr(self, "_open_world_info_rows", None)
+        if group is None or rows is None:
+            return
+        self._clear_group_rows(group, rows)
 
-        # World Info
         seed, wtype = get_world_info(path)
         if not seed:
             seed = self._configured_world_seed()
         if not wtype:
             wtype = self._configured_world_type()
 
-        if seed or wtype:
-            info_group = Adw.PreferencesGroup(title=_("World Info"))
+        if seed:
+            seed_row = Adw.ActionRow(title=_("World Seed"), subtitle=seed)
+            copy_btn = self._icon_button(
+                "edit-copy-symbolic",
+                _("Copy world seed"),
+                lambda *_p, s=seed: self._copy_world_seed(s),
+            )
+            seed_row.add_suffix(copy_btn)
+            group.add(seed_row)
+            rows.append(seed_row)
 
-            if seed:
-                seed_row = Adw.ActionRow(title=_("World Seed"), subtitle=seed)
-                copy_btn = self._icon_button(
-                    "edit-copy-symbolic",
-                    _("Copy world seed"),
-                    lambda *_p, s=seed: self._copy_world_seed(s),
+        if wtype:
+            display_type = LEVEL_TYPE_NAMES.get(wtype, wtype)
+            type_row = Adw.ActionRow(title=_("World Type"), subtitle=display_type)
+            group.add(type_row)
+            rows.append(type_row)
+
+        group.set_visible(bool(rows))
+
+    def _populate_world_dim_rows(self, path: Path) -> None:
+        """(Re)populate the open world page's dimensions group for ``path``."""
+        group = getattr(self, "_open_world_dims_group", None)
+        rows = getattr(self, "_open_world_dim_rows", None)
+        if group is None or rows is None:
+            return
+        self._clear_group_rows(group, rows)
+
+        dims = _world_dimension_dirs(path)
+        if not dims:
+            none_row = Adw.ActionRow(title=_("No dimension folders found"))
+            none_row.set_activatable(False)
+            group.add(none_row)
+            rows.append(none_row)
+            return
+
+        world_root = path.resolve()
+        for label, dim_path in dims:
+            dim_row = Adw.ActionRow(title=label)
+            dim_row.set_activatable(False)
+
+            if dim_path.resolve() != world_root:
+                delete_btn = self._icon_button(
+                    "user-trash-symbolic",
+                    _("Delete {}").format(label),
+                    lambda *_p, w=path, p=dim_path, n=label: self._confirm_delete_dimension(w, p, n),
+                    destructive=True,
                 )
-                seed_row.add_suffix(copy_btn)
-                info_group.add(seed_row)
+                dim_row.add_suffix(delete_btn)
 
-            if wtype:
-                display_type = LEVEL_TYPE_NAMES.get(wtype, wtype)
-                type_row = Adw.ActionRow(title=_("World Type"), subtitle=display_type)
-                info_group.add(type_row)
+            group.add(dim_row)
+            rows.append(dim_row)
 
-            page.add(info_group)
+    def _refresh_open_world_page(self, path: Path | None = None) -> None:
+        """Refresh the open world subpage in place (info + dimensions).
+
+        Only refreshes when the given ``path`` matches the open page
+        (or when no path is given and any world page is open).
+        """
+        try:
+            open_path = getattr(self, "_open_world_path", None)
+            if open_path is None:
+                return
+            if path is not None:
+                try:
+                    if Path(path).resolve() != Path(open_path).resolve():
+                        return
+                except Exception:
+                    return
+            self._populate_world_info_rows(open_path)
+            self._populate_world_dim_rows(open_path)
+        except Exception:
+            pass
+
+    def _build_world_page(self, path: Path, show_controls: bool = False) -> Gtk.Widget:
+        page = Adw.PreferencesPage()
+
+        # World Info (refreshed in place by reset/import via
+        # _refresh_open_world_page).
+        self._open_world_path = path
+        self._open_world_info_group = Adw.PreferencesGroup(title=_("World Info"))
+        self._open_world_info_rows = []
+        page.add(self._open_world_info_group)
+        self._populate_world_info_rows(path)
 
         # Actions
         actions_group = Adw.PreferencesGroup(title=_("Actions"))
@@ -141,31 +209,12 @@ class WorldsMixin:
 
         page.add(actions_group)
 
-        # Dimensions
-        dims_group = Adw.PreferencesGroup(title=_("Dimensions"))
-        dims = _world_dimension_dirs(path)
-        if not dims:
-            none_row = Adw.ActionRow(title=_("No dimension folders found"))
-            none_row.set_activatable(False)
-            dims_group.add(none_row)
-        else:
-            world_root = path.resolve()
-            for label, dim_path in dims:
-                dim_row = Adw.ActionRow(title=label)
-                dim_row.set_activatable(False)
-
-                if dim_path.resolve() != world_root:
-                    delete_btn = self._icon_button(
-                        "user-trash-symbolic",
-                        _("Delete {}").format(label),
-                        lambda *_p, w=path, p=dim_path, n=label: self._confirm_delete_dimension(w, p, n),
-                        destructive=True,
-                    )
-                    dim_row.add_suffix(delete_btn)
-
-                dims_group.add(dim_row)
-
-        page.add(dims_group)
+        # Dimensions (refreshed in place by delete/reset/import via
+        # _refresh_open_world_page).
+        self._open_world_dims_group = Adw.PreferencesGroup(title=_("Dimensions"))
+        self._open_world_dim_rows = []
+        page.add(self._open_world_dims_group)
+        self._populate_world_dim_rows(path)
 
         sw = Gtk.ScrolledWindow()
         sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -240,13 +289,14 @@ class WorldsMixin:
             if ok:
                 self._toast(_("World reset"))
                 self._rebuild_lists()
+                self._refresh_open_world_page(path)
             else:
                 self._alert(_("Could not reset world"), msg)
 
         dialog.connect("response", on_response)
         dialog.present(self.get_root())
 
-    def _on_import_world(self, *_):
+    def _on_import_world(self, *args):
         if self._is_running():
             self._alert(_("Server is running"), _("Stop the server before importing a world."))
             return
@@ -283,6 +333,7 @@ class WorldsMixin:
             if ok:
                 self._toast(_("Imported world {}").format(msg))
                 self._rebuild_lists()
+                self._refresh_open_world_page()
             else:
                 self._alert(_("Could not import world"), msg)
 
@@ -335,10 +386,16 @@ class WorldsMixin:
 
         def on_response(_d, response):
             if response == "delete":
+                # Refresh both the worlds list and the open world page
+                # (covers delete now and undo later: both call on_refresh).
+                def on_dimension_changed():
+                    self._rebuild_lists()
+                    self._refresh_open_world_page(world_path)
+
                 self._soft_delete_with_undo(
                     dim_path,
                     _('dimension "{}"').format(name),
-                    on_refresh=self._rebuild_lists,
+                    on_refresh=on_dimension_changed,
                 )
 
         dialog.connect("response", on_response)
