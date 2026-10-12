@@ -24,6 +24,7 @@ def show_about_dialog(parent):
     )
     about.set_website(APP_WEBSITE)
     about.set_issue_url(APP_WEBSITE + "/issues")
+    about.add_link(_("Translations"), "https://hosted.weblate.org/projects/hosty/hosty/")
     about.add_acknowledgement_section(
         _("Acknowledgements"),
         [
