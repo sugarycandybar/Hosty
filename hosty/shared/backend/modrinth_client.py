@@ -92,6 +92,7 @@ class ModpackInstallResult:
     downloaded_files: int
     extracted_override_files: int
     managed_mod_files: list[str]
+    mod_file_details: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 def _version_to_model(ver: dict[str, Any]) -> ModrinthVersion | None:
@@ -434,6 +435,27 @@ def get_project(project_id: str) -> dict[str, Any] | None:
     return None
 
 
+def get_projects(project_ids: list[str] | tuple[str, ...]) -> dict[str, dict[str, Any]]:
+    """Fetch several Modrinth projects in one request, keyed by project id.
+
+    Best-effort: any failure yields an empty mapping.
+    """
+    ids = [str(pid).strip() for pid in (project_ids or []) if str(pid).strip()]
+    if not ids:
+        return {}
+    url = f"{API}/projects?ids=" + urllib.parse.quote(json.dumps(ids))
+    try:
+        data = _request_json(url, cache_ttl=_CACHE_TTL)
+    except Exception:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    if isinstance(data, list):
+        for proj in data:
+            if isinstance(proj, dict) and proj.get("id"):
+                out[str(proj["id"])] = proj
+    return out
+
+
 def get_project_versions(
     project_id: str,
     *,
@@ -485,6 +507,78 @@ def get_version(version_id: str) -> dict[str, Any] | None:
     if isinstance(data, dict):
         return data
     return None
+
+
+def lookup_version_by_hash(sha512_hex: str) -> dict[str, Any] | None:
+    """Fetch the Modrinth version object for a file hash, or None.
+
+    Returns None when no Modrinth version ships a file with this hash
+    (e.g. externally hosted files). Other failures raise.
+    """
+    digest = str(sha512_hex or "").strip().lower()
+    if not digest:
+        return None
+    url = f"{API}/version_file/{digest}?algorithm=sha512"
+    try:
+        data = _request_json(url, cache_ttl=_CACHE_TTL)
+    except urllib.error.HTTPError:
+        return None
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+def resolve_mod_file_details(files: list[tuple[str, str]]) -> dict[str, dict[str, str]]:
+    """Resolve per-file Modrinth identity via sha512 hash lookup.
+
+    ``files`` is ``[(filename, sha512_hex), ...]``. Returns
+    ``{filename_lower: {"project_id", "version_id", "version_number",
+    "title"}}``, skipping files with no Modrinth match. Best-effort:
+    per-file failures are skipped, and title lookup degrades to "".
+    """
+    items = [
+        (str(name).strip().lower(), str(digest).strip().lower())
+        for name, digest in (files or [])
+        if str(name).strip() and str(digest).strip()
+    ]
+    if not items:
+        return {}
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _one(item: tuple[str, str]):
+        name, digest = item
+        try:
+            raw = lookup_version_by_hash(digest)
+        except Exception:
+            return None
+        if not isinstance(raw, dict):
+            return None
+        return (name, raw)
+
+    found: dict[str, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="hosty-filelookup") as pool:
+        for result in pool.map(_one, items):
+            if result is not None:
+                found[result[0]] = result[1]
+    if not found:
+        return {}
+
+    project_ids = sorted(
+        {str(v.get("project_id", "")).strip() for v in found.values() if str(v.get("project_id", "")).strip()}
+    )
+    titles = get_projects(project_ids)
+    out: dict[str, dict[str, str]] = {}
+    for name, raw in found.items():
+        pid = str(raw.get("project_id", "")).strip()
+        proj = titles.get(pid) or {}
+        out[name] = {
+            "project_id": pid,
+            "version_id": str(raw.get("id", "")).strip(),
+            "version_number": str(raw.get("version_number", "")).strip(),
+            "title": str(proj.get("title", "")).strip(),
+        }
+    return out
 
 
 def resolve_required_dependencies(
@@ -790,6 +884,7 @@ def install_modpack(
     downloaded = 0
     extracted = 0
     managed_mods: set[str] = set()
+    mod_file_hashes: dict[str, str] = {}
     with zipfile.ZipFile(io.BytesIO(pack_bytes)) as zf:
         try:
             manifest = json.loads(zf.read("modrinth.index.json").decode("utf-8"))
@@ -838,6 +933,12 @@ def install_modpack(
             if not _verify_hash(payload, hashes):
                 raise RuntimeError(f"Checksum mismatch for {rel_path}")
 
+            if rel_norm.lower().startswith("mods/") and rel_norm.lower().endswith(".jar"):
+                try:
+                    mod_file_hashes[Path(rel_norm).name.lower()] = hashlib.sha512(payload).hexdigest()
+                except Exception:
+                    pass
+
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(payload)
             downloaded += 1
@@ -859,15 +960,29 @@ def install_modpack(
 
                 target.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(zinfo, "r") as src:
-                    target.write_bytes(src.read())
+                    override_bytes = src.read()
+                target.write_bytes(override_bytes)
                 extracted += 1
 
                 rel_norm = rel.replace("\\", "/").lstrip("/")
                 if rel_norm.lower().startswith("mods/") and rel_norm.lower().endswith(".jar"):
                     managed_mods.add(Path(rel_norm).name.lower())
+                    try:
+                        mod_file_hashes[Path(rel_norm).name.lower()] = hashlib.sha512(override_bytes).hexdigest()
+                    except Exception:
+                        pass
+
+    # Best-effort per-file identity for nice names/versions (never fails installs).
+    mod_file_details: dict[str, dict[str, str]] = {}
+    if mod_file_hashes:
+        try:
+            mod_file_details = resolve_mod_file_details(sorted(mod_file_hashes.items()))
+        except Exception:
+            mod_file_details = {}
 
     return ModpackInstallResult(
         downloaded_files=downloaded,
         extracted_override_files=extracted,
         managed_mod_files=sorted(managed_mods),
+        mod_file_details=mod_file_details,
     )

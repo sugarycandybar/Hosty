@@ -17,6 +17,7 @@ from hosty.gtk_ui.dialogs.dialog_common import (
     make_dialog_header,
     wrap_in_scrolled,
 )
+from hosty.gtk_ui.dialogs.managed_mods import managed_mods_button, server_mod_metadata
 from hosty.shared.backend.config_manager import ConfigManager
 from hosty.shared.backend.server_manager import ServerInfo, ServerManager
 from hosty.shared.utils.constants import (
@@ -809,9 +810,23 @@ class PropertiesView(Gtk.Box):
             for item in items:
                 label = str(item.get("title") or item.get("filename") or _("Unknown"))
                 version = str(item.get("version_number") or item.get("version_id") or "").strip()
-                filename = str(item.get("filename") or item.get("current_filename") or "").strip()
-                subtitle = " · ".join([x for x in (version, filename) if x])
-                expander.add_row(Adw.ActionRow(title=label, subtitle=subtitle))
+                row = Adw.ActionRow(title=label, subtitle=version)
+                managed = item.get("mods")
+                if isinstance(managed, list):
+                    # Modpack files are one click away via the button below.
+                    row.add_suffix(
+                        managed_mods_button(
+                            self.get_root(),
+                            label,
+                            [str(m) for m in managed],
+                            server_mod_metadata(
+                                self._server_manager,
+                                getattr(self._server_info, "id", ""),
+                                str(item.get("project_id", "")).strip(),
+                            ),
+                        )
+                    )
+                expander.add_row(row)
             add_review_row(expander)
 
         def versions_worker():
@@ -865,6 +880,11 @@ class PropertiesView(Gtk.Box):
             add_review_row(loading_row)
 
             def worker():
+                try:
+                    if self._server_info is not None and self._server_manager is not None:
+                        self._server_manager.backfill_modpack_file_details(self._server_info.id)
+                except Exception:
+                    pass
                 plan = self._server_manager.scan_update_compatibility(
                     self._server_info.id,
                     selected_mc["value"],

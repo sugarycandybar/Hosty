@@ -3,6 +3,7 @@ ServerManager - CRUD operations for server instances.
 Handles persistence, creation workflow, and server lifecycle.
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -878,8 +879,134 @@ class ServerManager(EventEmitter):
             "title": str((meta or {}).get("title") or project_id),
             "filename": str((meta or {}).get("filename", "")),
             "project_id": str(project_id),
+            "version_number": str((meta or {}).get("version_number", "")).strip(),
+            "version_id": str((meta or {}).get("version_id", "")).strip(),
             "reason": _("No Modrinth {} release for Minecraft {}").format(kind_label, target_mc_version),
         }
+
+    @staticmethod
+    def _modpack_managed_names(meta: dict) -> list[str]:
+        """Managed mod filenames tracked for a modpack state entry."""
+        return [str(Path(str(f)).name) for f in ((meta or {}).get("mods") or [])]
+
+    def mod_file_metadata(self, server_id: str) -> dict[str, dict[str, str]]:
+        """Map lowercase mod filename -> {title, version, project_id} for tracked mods."""
+        info = self._servers.get(server_id)
+        if not info:
+            return {}
+        out: dict[str, dict[str, str]] = {}
+        for project_id, meta in self._tracked_mod_state(info.server_dir).items():
+            filename = str((meta or {}).get("filename", "")).strip().lower()
+            if not filename:
+                continue
+            version_number = str((meta or {}).get("version_number", "")).strip()
+            version_id = str((meta or {}).get("version_id", "")).strip()
+            out[filename] = {
+                "title": str((meta or {}).get("title", "")).strip() or filename,
+                "version": version_number or version_id[:8],
+                "project_id": str(project_id).strip(),
+            }
+        return out
+
+    def modpack_file_details(self, server_id: str, project_id: str) -> dict[str, dict[str, str]]:
+        """Normalized per-file metadata for one tracked modpack (may be empty)."""
+        info = self._servers.get(server_id)
+        if not info:
+            return {}
+        meta = self._tracked_modpack_state(info.server_dir).get(str(project_id).strip())
+        if not isinstance(meta, dict):
+            return {}
+        raw = meta.get("file_details")
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, dict[str, str]] = {}
+        for filename, det in raw.items():
+            if not isinstance(det, dict):
+                continue
+            key = str(filename).strip().lower()
+            if not key:
+                continue
+            version_number = str(det.get("version_number", "")).strip()
+            version_id = str(det.get("version_id", "")).strip()
+            out[key] = {
+                "title": str(det.get("title", "")).strip(),
+                "version": version_number or version_id[:8],
+                "project_id": str(det.get("project_id", "")).strip(),
+            }
+        return out
+
+    def backfill_modpack_file_details(self, server_id: str) -> bool:
+        """Resolve per-file Modrinth metadata for tracked packs missing it.
+
+        Hashes managed jars present on disk and looks them up (best-effort).
+        Returns True when persisted state changed. Each pack is attempted at
+        most once per process; callers must run this off the main thread.
+        """
+        from hosty.shared.backend import modrinth_client
+
+        info = self._servers.get(server_id)
+        if not info:
+            return False
+        root = info.server_dir
+        packs = self._tracked_modpack_state(root)
+        if not packs:
+            return False
+        attempted = getattr(self, "_file_details_backfill_attempted", None)
+        if attempted is None:
+            attempted = set()
+            try:
+                self._file_details_backfill_attempted = attempted
+            except Exception:
+                pass
+        mods_dir = root / content_dir_name(info.loader_type)
+        plugins_dir = root / "plugins"
+        changed = False
+        for project_id, meta in packs.items():
+            if not isinstance(meta, dict):
+                continue
+            key = (str(server_id), str(project_id))
+            if key in attempted:
+                continue
+            attempted.add(key)
+            mods = [str(m).strip() for m in (meta.get("mods") or []) if str(m).strip()]
+            details = meta.get("file_details")
+            details = dict(details) if isinstance(details, dict) else {}
+            have = {str(k).strip().lower() for k in details}
+            missing = [m for m in mods if m.lower() not in have]
+            if not missing:
+                continue
+            targets = []
+            for name in missing:
+                hit = None
+                for directory in (mods_dir, plugins_dir):
+                    try:
+                        if directory and directory.is_dir():
+                            hit = self._find_file_case_insensitive(directory, name)
+                            if hit is not None and hit.is_file():
+                                break
+                    except Exception:
+                        hit = None
+                if hit is None:
+                    continue
+                try:
+                    digest = hashlib.sha512(hit.read_bytes()).hexdigest()
+                except Exception:
+                    continue
+                targets.append((name.lower(), digest))
+            if not targets:
+                continue
+            try:
+                resolved = modrinth_client.resolve_mod_file_details(targets)
+            except Exception:
+                continue
+            if not resolved:
+                continue
+            details.update(resolved)
+            meta["file_details"] = details
+            changed = True
+        if changed:
+            self._write_json_file(root / ".hosty-modpacks.json", {"installed_projects": packs})
+        return changed
 
     def scan_update_compatibility(self, server_id: str, target_mc_version: str) -> dict:
         """Return compatible/incompatible tracked content for a target Minecraft version."""
@@ -905,6 +1032,15 @@ class ServerManager(EventEmitter):
                 )
             except Exception:
                 return None
+            if not versions and target_mc_version:
+                # The version-filtered query came back empty: retry unfiltered
+                # so a project with releases (but none for this Minecraft
+                # version) is reported as incompatible instead of unknown.
+                # Total lookup failure still yields unknown below.
+                try:
+                    versions = modrinth_client.get_project_versions(project_id)
+                except Exception:
+                    return None
             if not versions:
                 return None
             loader = effective_mod_loader(info.loader_type, info.arclight_platform)
@@ -972,15 +1108,19 @@ class ServerManager(EventEmitter):
             version = lookups.get(("modpacks", str(project_id)))
             if version is False:
                 entry = self._incompatible_entry(str(project_id), meta, target_mc_version, "modpack")
-                entry["filename"] = ", ".join([str(Path(str(f)).name) for f in (meta.get("mods") or [])])
+                # NOTE: filename stays the comma-joined managed list:
+                # delete_incompatible_component() splits it back apart.
+                entry["filename"] = ", ".join(self._modpack_managed_names(meta))
+                entry["mods"] = self._modpack_managed_names(meta)
                 plan["incompatible"]["modpacks"].append(entry)
             elif version is None:
-                plan["unknown"]["modpacks"].append(
-                    self._incompatible_entry(str(project_id), meta, target_mc_version, "modpack")
-                )
+                entry = self._incompatible_entry(str(project_id), meta, target_mc_version, "modpack")
+                entry["mods"] = self._modpack_managed_names(meta)
+                plan["unknown"]["modpacks"].append(entry)
             else:
                 entry = self._version_entry(str(project_id), meta, version)
-                entry["previous_mods"] = json.dumps([str(Path(str(f)).name) for f in (meta.get("mods") or [])])
+                entry["previous_mods"] = json.dumps(self._modpack_managed_names(meta))
+                entry["mods"] = self._modpack_managed_names(meta)
                 plan["compatible"]["modpacks"].append(entry)
 
         for project_id, meta in self._tracked_mod_state(root).items():
@@ -1128,6 +1268,7 @@ class ServerManager(EventEmitter):
                     "version_number": str(entry.get("version_number", "")),
                     "title": str(entry.get("title", "")),
                     "mods": sorted(new_mods),
+                    "file_details": dict(result.mod_file_details or {}),
                 }
                 self._write_json_file(root / ".hosty-modpacks.json", {"installed_projects": pack_state})
                 applied += 1

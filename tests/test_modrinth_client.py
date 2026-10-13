@@ -209,3 +209,138 @@ def test_pooled_failure_falls_back_to_direct(transport: FakeTransport):
     assert best is not None
     assert best.version_id == "v-new-fabric"
     assert transport.direct_calls
+
+
+_FAKE_HASH_A = "a" * 128
+_FAKE_HASH_B = "b" * 128
+_FAKE_HASH_MISSING = "c" * 128
+
+
+def _json_stub_factory(monkeypatch, fail_projects=False):
+    calls = []
+
+    def fake_request_json(url, timeout=30.0, cache_ttl=0.0):
+        calls.append(url)
+        if "/version_file/" in url:
+            if _FAKE_HASH_A in url:
+                return {"id": "ver-a", "project_id": "proj-a", "version_number": "1.0"}
+            raise urllib.error.HTTPError(url, 404, "not found", {}, None)
+        if url.startswith(modrinth_client.API + "/projects?ids="):
+            if fail_projects:
+                raise urllib.error.HTTPError(url, 500, "boom", {}, None)
+            return [
+                {"id": "proj-a", "title": "Mod A"},
+                {"id": "proj-b", "title": "Mod B"},
+            ]
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(modrinth_client, "_request_json", fake_request_json)
+    return calls
+
+
+def test_get_projects_batch(monkeypatch):
+    _json_stub_factory(monkeypatch)
+    out = modrinth_client.get_projects(["proj-a", "proj-b"])
+    assert out["proj-a"]["title"] == "Mod A"
+    assert out["proj-b"]["title"] == "Mod B"
+    assert modrinth_client.get_projects([]) == {}
+
+
+def test_get_projects_failure_is_empty(monkeypatch):
+    _json_stub_factory(monkeypatch, fail_projects=True)
+    assert modrinth_client.get_projects(["proj-a"]) == {}
+
+
+def test_lookup_version_by_hash_miss(monkeypatch):
+    _json_stub_factory(monkeypatch)
+    assert modrinth_client.lookup_version_by_hash(_FAKE_HASH_MISSING) is None
+    assert modrinth_client.lookup_version_by_hash("") is None
+
+
+def test_resolve_mod_file_details(monkeypatch):
+    _json_stub_factory(monkeypatch)
+    out = modrinth_client.resolve_mod_file_details(
+        [("A.JAR", _FAKE_HASH_A), ("gone.jar", _FAKE_HASH_MISSING), ("", _FAKE_HASH_B)]
+    )
+    assert out == {
+        "a.jar": {
+            "project_id": "proj-a",
+            "version_id": "ver-a",
+            "version_number": "1.0",
+            "title": "Mod A",
+        }
+    }
+
+
+def test_resolve_mod_file_details_titles_degrade(monkeypatch):
+    _json_stub_factory(monkeypatch, fail_projects=True)
+    out = modrinth_client.resolve_mod_file_details([("a.jar", _FAKE_HASH_A)])
+    assert out["a.jar"]["version_id"] == "ver-a"
+    assert out["a.jar"]["title"] == ""
+
+
+def test_install_modpack_captures_file_details(monkeypatch, tmp_path):
+    import hashlib
+    import io
+    import zipfile
+
+    mod_bytes = b"fake-mod-bytes"
+    mod_digest = hashlib.sha512(mod_bytes).hexdigest()
+    manifest = {
+        "files": [
+            {
+                "path": "mods/a.jar",
+                "hashes": {"sha512": mod_digest},
+                "env": {"server": "required"},
+                "downloads": ["https://cdn.example/data/proj-a/versions/ver-a/a.jar"],
+            },
+            {
+                "path": "mods/external.jar",
+                "hashes": {"sha512": hashlib.sha512(b"external").hexdigest()},
+                "env": {"server": "required"},
+                "downloads": ["https://example.com/external.jar"],
+            },
+        ]
+    }
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("modrinth.index.json", __import__("json").dumps(manifest))
+    pack_bytes = buf.getvalue()
+
+    def fake_download(url, timeout=120.0):
+        if url == "https://cdn.example/pack.mrpack":
+            return pack_bytes
+        if url == "https://cdn.example/data/proj-a/versions/ver-a/a.jar":
+            return mod_bytes
+        if url == "https://example.com/external.jar":
+            return b"external"
+        raise AssertionError(f"unexpected download {url}")
+
+    monkeypatch.setattr(modrinth_client, "_download_bytes", fake_download)
+    monkeypatch.setattr(
+        modrinth_client,
+        "get_version",
+        lambda vid: {"files": [{"url": "https://cdn.example/pack.mrpack", "filename": "pack.mrpack"}]},
+    )
+
+    def fake_request_json(url, timeout=30.0, cache_ttl=0.0):
+        if "/version_file/" in url:
+            if mod_digest in url:
+                return {"id": "ver-a", "project_id": "proj-a", "version_number": "1.0"}
+            raise urllib.error.HTTPError(url, 404, "not found", {}, None)
+        if url.startswith(modrinth_client.API + "/projects?ids="):
+            return [{"id": "proj-a", "title": "Mod A"}]
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(modrinth_client, "_request_json", fake_request_json)
+
+    result = modrinth_client.install_modpack("pack-version", tmp_path)
+    assert sorted(result.managed_mod_files) == ["a.jar", "external.jar"]
+    assert result.mod_file_details["a.jar"] == {
+        "project_id": "proj-a",
+        "version_id": "ver-a",
+        "version_number": "1.0",
+        "title": "Mod A",
+    }
+    assert "external.jar" not in result.mod_file_details
+    assert (tmp_path / "mods" / "a.jar").read_bytes() == mod_bytes

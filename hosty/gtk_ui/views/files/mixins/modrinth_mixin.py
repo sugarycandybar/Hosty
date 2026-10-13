@@ -1097,7 +1097,7 @@ class ModrinthMixin:
         if is_modpack:
             _set_btns(_("Installing..."))
 
-            def ui_ok_pack(downloaded_count: int, override_count: int, managed_mods: list[str]):
+            def ui_ok_pack(downloaded_count: int, override_count: int, managed_mods: list[str], file_details: dict):
                 _set_btns(_("Installed"), False)
                 self._record_modpack_install(
                     hit.project_id,
@@ -1111,6 +1111,7 @@ class ModrinthMixin:
                             if str(name).strip().lower().endswith(".jar")
                         }
                     ),
+                    file_details=file_details,
                 )
                 self._toast(_("Installed modpack ({} files)").format(downloaded_count))
                 self._end_mod_operation(op_token)
@@ -1151,7 +1152,8 @@ class ModrinthMixin:
                         result.extracted_override_files,
                         result.managed_mod_files,
                     )
-                    GLib.idle_add(lambda: ui_ok_pack(d, o, m))
+                    details = dict(result.mod_file_details or {})
+                    GLib.idle_add(lambda: ui_ok_pack(d, o, m, details))
                 except Exception as e:
                     GLib.idle_add(lambda m=str(e): ui_err_pack(m))
 

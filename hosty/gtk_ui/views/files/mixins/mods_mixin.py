@@ -24,6 +24,7 @@ from hosty.gtk_ui.dialogs.dialog_common import (
     build_progress_page,
     make_dialog_header,
 )
+from hosty.gtk_ui.dialogs.managed_mods import managed_mods_button, server_mod_metadata
 
 from ..utils import *
 
@@ -351,6 +352,13 @@ class ModsMixin:
                 "version_number": version_number,
                 "title": title,
                 "mods": mods,
+                "file_details": {
+                    str(k).strip().lower(): v
+                    for k, v in (value.get("file_details") or {}).items()
+                    if isinstance(v, dict) and str(k).strip()
+                }
+                if isinstance(value.get("file_details"), dict)
+                else {},
             }
 
         return out
@@ -458,6 +466,7 @@ class ModsMixin:
         version_number: str = "",
         title: str = "",
         mod_files: list[str] | None = None,
+        file_details: dict[str, dict[str, str]] | None = None,
     ) -> None:
         pid = str(project_id).strip()
         if not pid:
@@ -476,6 +485,7 @@ class ModsMixin:
             "version_number": str(version_number or "").strip(),
             "title": str(title or "").strip(),
             "mods": normalized_mods,
+            "file_details": {str(k).strip().lower(): v for k, v in (file_details or {}).items() if str(k).strip()},
         }
         self._write_modpack_state(state)
 
@@ -530,6 +540,9 @@ class ModsMixin:
                 "version_number": str(entry.get("version_number", "")).strip(),
                 "title": str(entry.get("title", "")).strip(),
                 "mods": mods,
+                "file_details": dict(entry.get("file_details") or {})
+                if isinstance(entry.get("file_details"), dict)
+                else {},
             }
         self._write_modpack_state({"installed_projects": projects_payload})
 
@@ -543,7 +556,19 @@ class ModsMixin:
             for project_id, entry in entries.items()
             if not str(entry.get("version_number", "")).strip() and str(entry.get("version_id", "")).strip()
         ]
-        if not missing:
+
+        def _needs_file_details(entry: dict) -> bool:
+            mods = [str(m).strip().lower() for m in (entry.get("mods") or []) if str(m).strip()]
+            if not mods:
+                return False
+            details = entry.get("file_details")
+            if not isinstance(details, dict):
+                return True
+            have = {str(k).strip().lower() for k in details}
+            return any(m not in have for m in mods)
+
+        needs_details = any(_needs_file_details(entry) for entry in entries.values() if isinstance(entry, dict))
+        if not missing and not needs_details:
             return
 
         self._modpack_version_enrich_busy = True
@@ -552,6 +577,17 @@ class ModsMixin:
             from concurrent.futures import ThreadPoolExecutor
 
             from hosty.shared.backend import modrinth_client
+
+            # Backfill per-file metadata first so the payload below is built
+            # from fresh state and never clobbers it.
+            try:
+                info = getattr(self, "_server_info", None)
+                manager = getattr(self, "_server_manager", None)
+                server_id = getattr(info, "id", "")
+                if manager is not None and server_id:
+                    manager.backfill_modpack_file_details(server_id)
+            except Exception:
+                pass
 
             latest_entries = self._modpack_entries()
             changed = False
@@ -594,6 +630,9 @@ class ModsMixin:
                         for m in (entry.get("mods") or [])
                         if str(m).strip().lower().endswith(".jar")
                     ],
+                    "file_details": dict(entry.get("file_details") or {})
+                    if isinstance(entry.get("file_details"), dict)
+                    else {},
                 }
 
             def finish_ui():
@@ -815,10 +854,11 @@ class ModsMixin:
         row.set_subtitle(" · ".join(subtitle_bits))
         row.set_activatable(False)
 
-        view_btn = self._icon_button(
-            "view-list-symbolic",
-            _("View managed mods"),
-            lambda *_p, t=title, m=mods: self._show_modpack_mods_dialog(t, m),
+        view_btn = managed_mods_button(
+            self.get_root(),
+            title,
+            mods,
+            server_mod_metadata(self._server_manager, getattr(self._server_info, "id", ""), project_id),
         )
         open_btn = self._icon_button(
             "web-browser-symbolic",
@@ -886,44 +926,6 @@ class ModsMixin:
 
         self._rebuild_lists()
         self._toast(_("Deleted {} ({} mod files removed)").format(title, removed_count))
-
-    def _show_modpack_mods_dialog(self, modpack_title: str, mods: list[str]) -> None:
-        d = Adw.AlertDialog()
-        d.set_heading(modpack_title)
-        cleaned = []
-        for item in mods:
-            name = str(item).strip()
-            if name.startswith("- "):
-                name = name[2:].strip()
-            if name:
-                cleaned.append(name)
-
-        if not cleaned:
-            d.set_body(_("No tracked mod files for this modpack yet."))
-            d.add_response("ok", _("OK"))
-            d.present(self.get_root())
-            return
-
-        cleaned = sorted(set(cleaned), key=str.lower)
-        d.set_body(_("{} managed mods").format(len(cleaned)))
-
-        listbox = Gtk.ListBox()
-        listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        listbox.add_css_class("boxed-list")
-        for name in cleaned:
-            row = Adw.ActionRow(title=name)
-            row.set_activatable(False)
-            row.add_prefix(Gtk.Image.new_from_icon_name("application-x-addon-symbolic"))
-            listbox.append(row)
-
-        sw = Gtk.ScrolledWindow()
-        sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        sw.set_min_content_height(360)
-        sw.set_child(listbox)
-        d.set_extra_child(sw)
-
-        d.add_response("ok", _("OK"))
-        d.present(self.get_root())
 
     def _on_check_mod_updates(self, *_args) -> None:
         if self._mods_update_busy:
@@ -1177,6 +1179,12 @@ class ModsMixin:
 
             from hosty.shared.backend import modrinth_client
 
+            try:
+                if self._server_info is not None and self._server_manager is not None:
+                    self._server_manager.backfill_modpack_file_details(self._server_info.id)
+            except Exception:
+                pass
+
             mc_version = self._server_info.mc_version if self._server_info else ""
             modpack_entries = self._modpack_entries()
             managed_mods = set(self._modpack_managed_mod_map().keys())
@@ -1193,6 +1201,14 @@ class ModsMixin:
                     project_id,
                     game_versions=[mc_version] if mc_version else None,
                 )
+                if not versions and mc_version:
+                    # Filtered query came back empty: retry unfiltered so a
+                    # server-side filter quirk can't hide an available update.
+                    # Total lookup failure still yields no update below.
+                    try:
+                        versions = modrinth_client.get_project_versions(project_id)
+                    except Exception:
+                        return None
                 compatible = [v for v in versions if mc_version in (v.game_versions or [])]
                 if not compatible:
                     return None
@@ -1501,7 +1517,11 @@ class ModsMixin:
                         state["selected"].discard(key)
                     refresh_primary()
 
-                def add_kind_group(title: str, items: list[tuple[str, str, str, str]]) -> None:
+                def add_kind_group(
+                    title: str,
+                    items: list[tuple[str, str, str, str]],
+                    row_suffix=None,
+                ) -> None:
                     group = Adw.PreferencesGroup(title=title)
                     for key, item_title, old_v, new_v in items:
                         row = Adw.ActionRow(title=item_title, subtitle=version_line(old_v, new_v))
@@ -1510,6 +1530,10 @@ class ModsMixin:
                         check.set_valign(Gtk.Align.CENTER)
                         check.connect("toggled", lambda c, k=key: on_item_toggled(k, c.get_active()))
                         row.add_prefix(check)
+                        if row_suffix is not None:
+                            suffix = row_suffix(key)
+                            if suffix is not None:
+                                row.add_suffix(suffix)
                         row.set_activatable(True)
                         row.connect("activated", lambda r, c=check: c.set_active(not c.get_active()))
                         group.add(row)
@@ -1518,6 +1542,27 @@ class ModsMixin:
                     state["review_groups"].append(group)
 
                 if modpack_updates:
+                    modpack_info = {
+                        f"modpack:{pid}": (
+                            str(entry.get("title", "")).strip() or pid,
+                            [str(m).strip() for m in (entry.get("mods") or []) if str(m).strip()],
+                            pid,
+                        )
+                        for pid, entry, _newer in modpack_updates
+                    }
+
+                    def modpack_suffix(key: str):
+                        info = modpack_info.get(key)
+                        if not info:
+                            return None
+                        title, mods, pid = info
+                        return managed_mods_button(
+                            self.get_root(),
+                            title,
+                            mods,
+                            server_mod_metadata(self._server_manager, getattr(self._server_info, "id", ""), pid),
+                        )
+
                     add_kind_group(
                         _("Modpacks ({})").format(len(modpack_updates)),
                         [
@@ -1529,6 +1574,7 @@ class ModsMixin:
                             )
                             for pid, entry, newer in modpack_updates
                         ],
+                        row_suffix=modpack_suffix,
                     )
                 if standalone_updates:
                     add_kind_group(
@@ -1684,6 +1730,7 @@ class ModsMixin:
                     version_number=newer_version.version_number,
                     title=pack_title,
                     mod_files=sorted(new_managed_mods),
+                    file_details=dict(result.mod_file_details or {}),
                 )
                 applied += 1
             except Exception:
