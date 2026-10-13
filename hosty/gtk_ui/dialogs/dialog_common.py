@@ -38,6 +38,64 @@ def apply_dialog_size(
     dialog.set_content_height(height)
 
 
+def add_ctrl_w_close(dialog: Adw.Dialog) -> Gtk.Shortcut:
+    """Make Ctrl+W close a dialog, matching GNOME conventions.
+
+    Presented dialogs are separate toplevels, so the main window's
+    ``win.close-window`` accelerator never reaches them -- without this,
+    Ctrl+W is a no-op while a dialog is focused.
+
+    Returns the added shortcut.
+    """
+    controller = Gtk.ShortcutController()
+    controller.set_scope(Gtk.ShortcutScope.MANAGED)
+    controller.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+
+    def _close(_widget: Gtk.Widget, _args) -> bool:
+        try:
+            dialog.close()
+        except Exception:
+            pass
+        return True
+
+    shortcut = Gtk.Shortcut.new(
+        Gtk.ShortcutTrigger.parse_string("<Primary>w"),
+        Gtk.CallbackAction.new(_close),
+    )
+    controller.add_shortcut(shortcut)
+    dialog.add_controller(controller)
+    return shortcut
+
+
+_dialog_present_orig = None
+
+
+def install_ctrl_w_for_dialogs() -> None:
+    """Make Ctrl+W close any presented dialog, from a single place.
+
+    Presented dialogs are separate toplevels, so the main window's
+    ``win.close-window`` accelerator never reaches them. Hooking
+    ``Adw.Dialog.present`` covers every current and future dialog without
+    per-dialog boilerplate. Safe to call multiple times.
+    """
+    global _dialog_present_orig
+    if _dialog_present_orig is not None:
+        return
+    _dialog_present_orig = Adw.Dialog.present
+
+    def _present_with_ctrl_w(self: Adw.Dialog, parent=None) -> None:
+        if not getattr(self, "_hosty_ctrl_w_installed", False):
+            try:
+                add_ctrl_w_close(self)
+            except Exception:
+                pass
+            else:
+                self._hosty_ctrl_w_installed = True
+        return _dialog_present_orig(self, parent)
+
+    Adw.Dialog.present = _present_with_ctrl_w
+
+
 def make_dialog_header(
     cancel_label: str = "Cancel",
     primary_label: str = "Next",
