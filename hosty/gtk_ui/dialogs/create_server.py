@@ -9,7 +9,8 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, GObject, Gtk
+gi.require_version("Gdk", "4.0")
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from hosty.gtk_ui.dialogs.dialog_common import (
     apply_dialog_size,
@@ -33,7 +34,7 @@ from hosty.shared.utils.constants import (
     get_required_java_version,
     normalize_arclight_platform,
 )
-from hosty.shared.utils.image_utils import prepare_server_icon
+from hosty.shared.utils.image_utils import load_pixbuf, prepare_server_icon
 
 OPTIMISATION_MODS = [
     ("lithium", _("Lithium")),
@@ -124,21 +125,31 @@ class CreateServerDialog(Adw.Dialog):
         self._name_entry = Adw.EntryRow(title=_("Server Name"))
         self._name_entry.set_text(_("My Server"))
         self._name_entry.connect("changed", self._validate)
+        self._name_entry.connect("changed", self._on_name_changed)
         info_group.add(self._name_entry)
 
         self._icon_row = Adw.ActionRow(
             title=_("Server Icon"),
-            subtitle=_("No icon selected"),
         )
+        self._icon_row.set_activatable(False)
+        self._icon_avatar = Adw.Avatar(size=42, text=self._name_entry.get_text().strip() or "?", show_initials=True)
+        self._icon_avatar.set_valign(Gtk.Align.CENTER)
+        self._icon_row.add_prefix(self._icon_avatar)
         self._choose_icon_btn = Gtk.Button(valign=Gtk.Align.CENTER)
-        self._choose_icon_btn.add_css_class("flat")
         self._choose_icon_btn.set_tooltip_text(_("Choose server icon"))
-        self._choose_icon_btn.set_valign(Gtk.Align.CENTER)
-        self._choose_icon_btn.set_child(Gtk.Image.new_from_icon_name("folder-symbolic"))
-
+        choose_icon_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        choose_icon_box.append(Gtk.Image.new_from_icon_name("folder-symbolic"))
+        self._choose_icon_label = Gtk.Label(label=_("(None)"))
+        choose_icon_box.append(self._choose_icon_label)
+        self._choose_icon_btn.set_child(choose_icon_box)
         self._choose_icon_btn.connect("clicked", self._on_choose_icon)
         self._icon_row.add_suffix(self._choose_icon_btn)
-        self._icon_row.set_activatable_widget(self._choose_icon_btn)
+        self._clear_icon_btn = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER)
+        self._clear_icon_btn.add_css_class("flat")
+        self._clear_icon_btn.set_tooltip_text(_("Remove icon"))
+        self._clear_icon_btn.connect("clicked", self._on_clear_icon)
+        self._clear_icon_btn.set_visible(False)
+        self._icon_row.add_suffix(self._clear_icon_btn)
         info_group.add(self._icon_row)
 
         page.add(info_group)
@@ -193,24 +204,25 @@ class CreateServerDialog(Adw.Dialog):
 
         self._world_import_row = Adw.ActionRow(
             title=_("Import world folder"),
-            subtitle=_("No world selected"),
         )
+        self._world_import_row.set_activatable(False)
         self._choose_world_btn = Gtk.Button(valign=Gtk.Align.CENTER)
-        self._choose_world_btn.add_css_class("flat")
         self._choose_world_btn.set_tooltip_text(_("Choose world folder"))
-        self._choose_world_btn.set_child(Gtk.Image.new_from_icon_name("folder-symbolic"))
+        choose_world_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        choose_world_box.append(Gtk.Image.new_from_icon_name("folder-symbolic"))
+        self._choose_world_label = Gtk.Label(label=_("(None)"))
+        choose_world_box.append(self._choose_world_label)
+        self._choose_world_btn.set_child(choose_world_box)
         self._choose_world_btn.connect("clicked", self._on_choose_world_folder)
         self._world_import_row.add_suffix(self._choose_world_btn)
 
-        self._remove_world_btn = Gtk.Button(valign=Gtk.Align.CENTER)
+        self._remove_world_btn = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER)
         self._remove_world_btn.add_css_class("flat")
         self._remove_world_btn.set_tooltip_text(_("Remove imported world"))
-        self._remove_world_btn.set_child(Gtk.Image.new_from_icon_name("window-close-symbolic"))
         self._remove_world_btn.connect("clicked", self._on_remove_world)
         self._remove_world_btn.set_visible(False)
         self._world_import_row.add_suffix(self._remove_world_btn)
 
-        self._world_import_row.set_activatable_widget(self._choose_world_btn)
         world_group.add(self._world_import_row)
 
         page.add(world_group)
@@ -679,9 +691,42 @@ class CreateServerDialog(Adw.Dialog):
             if not path:
                 return
             self._icon_source_path = path
-            self._icon_row.set_subtitle(Path(path).name)
+            self._choose_icon_label.set_label(Path(path).name)
+            self._clear_icon_btn.set_visible(True)
+            self._update_icon_avatar()
         except GLib.Error:
             return
+
+    def _update_icon_avatar(self) -> None:
+        """Refresh the row avatar preview from the selected icon file."""
+        if not self._icon_source_path:
+            try:
+                self._icon_avatar.set_custom_image(None)
+            except Exception:
+                pass
+            return
+        try:
+            # Load larger than the 42px avatar so the compositor downscales
+            # (smooth); loading straight at 42px looks pixelated.
+            pixbuf = load_pixbuf(self._icon_source_path, 128)
+            if pixbuf is None:
+                return
+            self._icon_avatar.set_custom_image(Gdk.Texture.new_for_pixbuf(pixbuf))
+        except Exception:
+            pass
+
+    def _on_name_changed(self, *_args) -> None:
+        """Keep the avatar initials in sync with the server name."""
+        try:
+            self._icon_avatar.set_text(self._name_entry.get_text().strip() or "?")
+        except Exception:
+            pass
+
+    def _on_clear_icon(self, *_args):
+        self._icon_source_path = ""
+        self._choose_icon_label.set_label(_("(None)"))
+        self._clear_icon_btn.set_visible(False)
+        self._update_icon_avatar()
 
     def _on_choose_world_folder(self, *_args):
         dialog = Gtk.FileDialog()
@@ -703,24 +748,13 @@ class CreateServerDialog(Adw.Dialog):
 
             self._world_import_source_path = path
 
-            msg_parts = [f"{Path(path).name}"]
+            self._choose_world_label.set_label(Path(path).name)
             if seed:
                 self._seed_entry.set_text(seed)
-                msg_parts.append(_("Seed imported"))
             if wtype and wtype in self._level_type_values:
                 self._level_type_row.set_selected(self._level_type_values.index(wtype))
-                msg_parts.append(_("Type imported"))
 
-            if len(msg_parts) == 1:
-                self._world_import_row.set_subtitle(
-                    _("{} - world type must match the selected World type").format(Path(path).name)
-                )
-            else:
-                self._world_import_row.set_subtitle(" · ".join(msg_parts))
-
-            self._choose_world_btn.set_visible(False)
             self._remove_world_btn.set_visible(True)
-            self._world_import_row.set_activatable_widget(self._remove_world_btn)
             self._seed_entry.set_sensitive(False)
             self._level_type_row.set_sensitive(False)
         except GLib.Error:
@@ -728,16 +762,14 @@ class CreateServerDialog(Adw.Dialog):
 
     def _on_remove_world(self, *_args):
         self._world_import_source_path = ""
-        self._world_import_row.set_subtitle(_("No world selected"))
+        self._choose_world_label.set_label(_("(None)"))
         self._seed_entry.set_text("")
         self._seed_entry.set_sensitive(True)
         default_level_type = str(DEFAULT_SERVER_PROPERTIES.get("level-type", "minecraft\\:normal"))
         if default_level_type in self._level_type_values:
             self._level_type_row.set_selected(self._level_type_values.index(default_level_type))
         self._level_type_row.set_sensitive(True)
-        self._choose_world_btn.set_visible(True)
         self._remove_world_btn.set_visible(False)
-        self._world_import_row.set_activatable_widget(self._choose_world_btn)
 
     def _on_page_changed(self, *_args):
         self._validate()
