@@ -81,21 +81,19 @@ def show_preferences_window(
     data_row.add_suffix(data_button)
     app_group.add(data_row)
 
-    bg_expander = Adw.ExpanderRow(
+    bg_row = Adw.SwitchRow(
         title=_("Run in background"),
     )
-    bg_expander.set_show_enable_switch(True)
-    bg_expander.set_enable_expansion(preferences.run_in_background_on_close)
+    bg_row.set_active(preferences.run_in_background_on_close)
 
     startup_row = Adw.SwitchRow(
         title=_("Open Hosty on startup"),
     )
     startup_row.set_active(preferences.open_on_startup)
     startup_row.set_sensitive(preferences.run_in_background_on_close)
-    bg_expander.add_row(startup_row)
 
     def on_bg_toggled(row, _pspec):
-        active = row.get_enable_expansion()
+        active = row.get_active()
         preferences.run_in_background_on_close = active
         startup_row.set_sensitive(active)
 
@@ -108,12 +106,12 @@ def show_preferences_window(
 
             def on_bg_response(success, bg, auto, err):
                 if not success or not bg:
-                    GLib.idle_add(row.set_enable_expansion, False)
+                    GLib.idle_add(row.set_active, False)
                     GLib.idle_add(preferences.__setattr__, "run_in_background_on_close", False)
 
             request_background(False, on_bg_response)
 
-    bg_expander.connect("notify::enable-expansion", on_bg_toggled)
+    bg_row.connect("notify::active", on_bg_toggled)
 
     def on_startup_toggled(row, _pspec):
         active = row.get_active()
@@ -130,7 +128,8 @@ def show_preferences_window(
 
     startup_row.connect("notify::active", on_startup_toggled)
 
-    app_group.add(bg_expander)
+    app_group.add(bg_row)
+    app_group.add(startup_row)
 
     prevent_sleep_row = Adw.SwitchRow(
         title=_("Prevent sleep while server is running"),
@@ -318,13 +317,6 @@ def show_preferences_window(
 
     token_row = Adw.PasswordEntryRow(title=_("Access token"))
     token_row.set_text(daemon_config.get("token", ""))
-    regenerate_button = Gtk.Button.new_from_icon_name("view-refresh-symbolic")
-    regenerate_button.add_css_class("flat")
-    regenerate_button.set_size_request(28, 28)
-    regenerate_button.set_valign(Gtk.Align.CENTER)
-    regenerate_button.set_tooltip_text(_("Regenerate token"))
-    regenerate_button.connect("clicked", lambda _b: _confirm_regenerate())
-    token_row.add_suffix(regenerate_button)
     copy_button = Gtk.Button.new_from_icon_name("edit-copy-symbolic")
     copy_button.add_css_class("flat")
     copy_button.set_size_request(28, 28)
@@ -333,6 +325,11 @@ def show_preferences_window(
     copy_button.connect("clicked", lambda _b: _copy_token())
     token_row.add_suffix(copy_button)
     remote_group.add(token_row)
+
+    regenerate_row = Adw.ButtonRow(title=_("Regenerate token"))
+    regenerate_row.connect("activated", lambda *_: _confirm_regenerate())
+    regenerate_group = Adw.PreferencesGroup()
+    regenerate_group.add(regenerate_row)
 
     def show_alert(title: str, body: str):
         dialog = Adw.AlertDialog.new(title, body)
@@ -443,6 +440,7 @@ def show_preferences_window(
         remote_switch.set_subtitle(remote_status_text())
 
     remote_page.add(remote_group)
+    remote_page.add(regenerate_group)
 
     win.add(page)
     win.add(remote_page)
