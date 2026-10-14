@@ -124,8 +124,9 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         group.add(self._tunnel_row)
 
         self._tunnel_domain_row = Adw.ActionRow(title=_("Java tunnel"), subtitle=_("Not available"))
+        self._tunnel_domain_row.add_css_class("property")
+        self._tunnel_domain_row.set_subtitle_selectable(True)
         self._tunnel_domain_row.set_activatable(False)
-        self._tunnel_domain_row.connect("activated", self._on_java_domain_row_activated)
         self._copy_tunnel_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
         self._copy_tunnel_domain_btn.add_css_class("flat")
         self._copy_tunnel_domain_btn.set_tooltip_text(_("Copy Java tunnel domain"))
@@ -146,8 +147,9 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         group.add(self._tunnel_domain_row)
 
         self._bedrock_domain_row = Adw.ActionRow(title=_("Bedrock tunnel"), subtitle=_("Not available"))
+        self._bedrock_domain_row.add_css_class("property")
+        self._bedrock_domain_row.set_subtitle_selectable(True)
         self._bedrock_domain_row.set_activatable(False)
-        self._bedrock_domain_row.connect("activated", self._on_bedrock_domain_row_activated)
         self._copy_bedrock_domain_btn = Gtk.Button(icon_name="edit-copy-symbolic", valign=Gtk.Align.CENTER)
         self._copy_bedrock_domain_btn.add_css_class("flat")
         self._copy_bedrock_domain_btn.set_tooltip_text(_("Copy bedrock tunnel domain"))
@@ -168,8 +170,8 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         group.add(self._bedrock_domain_row)
 
         self._voicechat_domain_row = Adw.ActionRow(title=_("Voice Chat tunnel"), subtitle=_("Not available"))
+        self._voicechat_domain_row.add_css_class("property")
         self._voicechat_domain_row.set_activatable(False)
-        self._voicechat_domain_row.connect("activated", self._on_voicechat_domain_row_activated)
         self._voicechat_tunnel_action_btn = Gtk.Button(icon_name="list-add-symbolic", valign=Gtk.Align.CENTER)
         self._voicechat_tunnel_action_btn.add_css_class("flat")
         self._voicechat_tunnel_action_btn.set_tooltip_text(_("Add Voice Chat tunnel"))

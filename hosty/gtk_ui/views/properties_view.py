@@ -94,6 +94,8 @@ class PropertiesView(Gtk.Box):
         general.add(self._autostart_row)
 
         self._version_row = Adw.ActionRow(title=_("Minecraft Version"), subtitle=_("Unknown"))
+        self._version_row.add_css_class("property")
+        self._version_row.set_subtitle_selectable(True)
 
         self._change_version_btn = Gtk.Button(icon_name="software-update-available-symbolic", valign=Gtk.Align.CENTER)
         self._change_version_btn.add_css_class("flat")

@@ -415,17 +415,14 @@ class PlayitMixin:
         java_missing = not java_endpoint and java_presence == "missing"
         if java_endpoint:
             self._tunnel_domain_row.set_subtitle(java_endpoint)
-            self._tunnel_domain_row.set_activatable(True)
             self._copy_tunnel_domain_btn.set_sensitive(True)
             self._copy_tunnel_domain_btn.set_visible(True)
         elif java_missing:
             self._tunnel_domain_row.set_subtitle(_("Tunnel missing"))
-            self._tunnel_domain_row.set_activatable(True)
             self._copy_tunnel_domain_btn.set_sensitive(False)
             self._copy_tunnel_domain_btn.set_visible(False)
         else:
             self._tunnel_domain_row.set_subtitle(_("Not available"))
-            self._tunnel_domain_row.set_activatable(True)
             self._copy_tunnel_domain_btn.set_sensitive(False)
             self._copy_tunnel_domain_btn.set_visible(False)
 
@@ -442,17 +439,14 @@ class PlayitMixin:
             else:
                 formatted_endpoint = bedrock_endpoint
             self._bedrock_domain_row.set_subtitle(formatted_endpoint)
-            self._bedrock_domain_row.set_activatable(True)
             self._copy_bedrock_domain_btn.set_sensitive(True)
             self._copy_bedrock_domain_btn.set_visible(True)
         elif bedrock_missing:
             self._bedrock_domain_row.set_subtitle(_("Tunnel missing"))
-            self._bedrock_domain_row.set_activatable(True)
             self._copy_bedrock_domain_btn.set_sensitive(False)
             self._copy_bedrock_domain_btn.set_visible(False)
         else:
             self._bedrock_domain_row.set_subtitle(_("Not available"))
-            self._bedrock_domain_row.set_activatable(True)
             self._copy_bedrock_domain_btn.set_sensitive(False)
             self._copy_bedrock_domain_btn.set_visible(False)
 
@@ -524,13 +518,10 @@ class PlayitMixin:
             # Voice chat is fully automatic via the mod: show status, never
             # the domain/port (nothing to copy).
             self._voicechat_domain_row.set_subtitle("✓ " + _("Configured"))
-            self._voicechat_domain_row.set_activatable(True)
         elif voicechat_missing:
             self._voicechat_domain_row.set_subtitle(_("Tunnel missing"))
-            self._voicechat_domain_row.set_activatable(True)
         else:
             self._voicechat_domain_row.set_subtitle(_("Not available"))
-            self._voicechat_domain_row.set_activatable(True)
 
         if voicechat_endpoint:
             self._voicechat_tunnel_action_btn.set_label("")
@@ -656,13 +647,6 @@ class PlayitMixin:
         except Exception:
             pass
 
-    def _on_java_domain_row_activated(self, *_args):
-        endpoint = str(self._cfg.get("java_endpoint", "")).strip()
-        if endpoint:
-            self._on_copy_tunnel_domain()
-            return
-        self._on_manage_java_tunnel()
-
     def _on_copy_bedrock_domain(self, *_args):
         endpoint = str(self._cfg.get("bedrock_endpoint", "")).strip()
         if not endpoint:
@@ -680,18 +664,6 @@ class PlayitMixin:
             self._toast(_("Bedrock tunnel domain copied"))
         except Exception:
             pass
-
-    def _on_bedrock_domain_row_activated(self, *_args):
-        endpoint = str(self._cfg.get("bedrock_endpoint", "")).strip()
-        if endpoint:
-            self._on_copy_bedrock_domain()
-            return
-        self._on_manage_bedrock_tunnel()
-
-    def _on_voicechat_domain_row_activated(self, *_args):
-        # Voice chat needs no domain copying (fully automatic via the mod):
-        # tapping the row always opens management.
-        self._on_manage_voicechat_tunnel()
 
     def _on_tunnel_toggle(self, *_args):
         if not self._server_manager:
