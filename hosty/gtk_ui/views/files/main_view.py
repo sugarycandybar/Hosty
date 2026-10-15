@@ -42,6 +42,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._open_mods_row: Adw.ActionRow | None = None
         self._open_plugins_row: Adw.ActionRow | None = None
         self._mods_update_busy = False
+        self._mods_auto_check_busy = False
         self._modpack_version_enrich_busy = False
         self._active_mod_operation_tokens: dict[str, str] = {}
         self._mod_operation_lock = threading.Lock()
@@ -144,11 +145,16 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._mods_group.add(modrinth_row)
 
         check_updates_row = Adw.ActionRow(
-            title=_("Check for updates"),
+            title=_("Mod updates"),
         )
-        check_updates_row.add_prefix(Gtk.Image.new_from_icon_name("software-update-available-symbolic"))
-        check_updates_row.set_activatable(True)
-        check_updates_row.connect("activated", self._on_check_mod_updates)
+        check_updates_row.add_css_class("property")
+        check_updates_row.set_activatable(False)
+        self._check_updates_btn = Gtk.Button(icon_name="software-update-available-symbolic", valign=Gtk.Align.CENTER)
+        self._check_updates_btn.add_css_class("flat")
+        self._check_updates_btn.set_tooltip_text(_("Check for updates"))
+        self._check_updates_btn.connect("clicked", self._on_check_mod_updates)
+        check_updates_row.add_suffix(self._check_updates_btn)
+        self._check_updates_row = check_updates_row
         self._mods_group.add(check_updates_row)
 
         # "Installed Mods" collapsible section (modpacks + standalone mods)
@@ -251,6 +257,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._disabled_snapshot = tuple()
         self._refresh_backups_row_subtitle()
         self._rebuild_lists()
+        self._auto_check_mod_updates()
 
     def refresh_worlds_if_changed(self, force: bool = False) -> None:
         """Refresh the Files lists when world or dimension folders changed on disk."""

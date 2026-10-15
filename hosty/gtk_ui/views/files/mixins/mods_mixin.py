@@ -927,18 +927,61 @@ class ModsMixin:
         self._rebuild_lists()
         self._toast(_("Deleted {} ({} mod files removed)").format(title, removed_count))
 
-    def _on_check_mod_updates(self, *_args) -> None:
-        if self._mods_update_busy:
-            self._toast(_("Mod update check already running"))
+    def _auto_check_mod_updates(self) -> None:
+        """Silently count available updates and reflect them on the check row.
+
+        Mirrors the Minecraft version row: the row shows the result and its
+        button opens the full review dialog (which always re-checks live).
+        """
+        if self._mods_update_busy or self._mods_auto_check_busy:
             return
         if self._is_running():
-            self._alert(_("Server is running"), _("Stop the server before checking for mod updates."))
             return
         if not self._server_info or not self._server_info.mc_version:
-            self._alert(_("Unknown version"), _("Could not determine Minecraft version for this server."))
+            return
+        row = getattr(self, "_check_updates_row", None)
+        if row is not None:
+            try:
+                row.set_subtitle(_("Checking for updates..."))
+            except Exception:
+                pass
+        self._on_check_mod_updates(silent=True)
+
+    def _refresh_updates_row(self, total: int) -> None:
+        """Reflect the auto-check count on the Check-for-updates row."""
+        row = getattr(self, "_check_updates_row", None)
+        if row is None:
+            return
+        try:
+            if total > 0:
+                row.set_subtitle(
+                    ngettext("{count} update available", "{count} updates available", total).format(count=total)
+                )
+            else:
+                row.set_subtitle(_("Up to date"))
+        except Exception:
+            pass
+
+    def _on_check_mod_updates(self, *_args, silent: bool = False) -> None:
+        if self._mods_update_busy or self._mods_auto_check_busy:
+            if not silent:
+                self._toast(_("Mod update check already running"))
+            return
+        if self._is_running():
+            if not silent:
+                self._alert(_("Server is running"), _("Stop the server before checking for mod updates."))
+            return
+        if not self._server_info or not self._server_info.mc_version:
+            if not silent:
+                self._alert(_("Unknown version"), _("Could not determine Minecraft version for this server."))
             return
 
-        self._mods_update_busy = True
+        if silent:
+            self._mods_auto_check_busy = True
+        else:
+            self._mods_update_busy = True
+
+        server_id = self._server_info.id
 
         state: dict = {
             "open": True,
@@ -1172,7 +1215,8 @@ class ModsMixin:
         cancel_btn.connect("clicked", on_cancel)
         primary_btn.connect("clicked", on_primary)
         dialog.connect("closed", on_closed)
-        dialog.present(self.get_root())
+        if not silent:
+            dialog.present(self.get_root())
 
         def worker():
             from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1445,6 +1489,23 @@ class ModsMixin:
 
             if refresh_needed:
                 GLib.idle_add(self._rebuild_lists)
+
+            if silent:
+                total = len(modpack_updates) + len(standalone_updates) + len(datapack_updates) + len(plugin_updates)
+
+                def auto_done():
+                    self._mods_auto_check_busy = False
+                    try:
+                        current = self._server_info
+                        if current is None or current.id != server_id:
+                            return False
+                    except Exception:
+                        return False
+                    self._refresh_updates_row(total)
+                    return False
+
+                GLib.idle_add(auto_done)
+                return
 
             def show_result():
                 if not state["open"]:
