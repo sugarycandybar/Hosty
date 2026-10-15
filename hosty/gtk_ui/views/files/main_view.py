@@ -107,8 +107,12 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
         backups_row = Adw.ActionRow(
             title=_("Backups"),
-            subtitle=_("0 backups"),
         )
+        backups_count = Gtk.Label(label=_("0 backups"))
+        backups_count.add_css_class("dim-label")
+        backups_count.set_valign(Gtk.Align.CENTER)
+        backups_row.add_suffix(backups_count)
+        backups_row._count_label = backups_count
         backups_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         backups_row.set_activatable(True)
         backups_row.connect("activated", self._push_backups_page)
@@ -150,6 +154,11 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         # "Installed Mods" collapsible section (modpacks + standalone mods)
         mods_expander = Adw.ExpanderRow(title=_("Installed Mods"))
         mods_expander.set_expanded(False)
+        mods_count = Gtk.Label()
+        mods_count.add_css_class("dim-label")
+        mods_count.set_valign(Gtk.Align.CENTER)
+        mods_expander.add_suffix(mods_count)
+        mods_expander._count_label = mods_count
         self._mods_expander = mods_expander
         self._mods_group.add(mods_expander)
 
@@ -157,17 +166,32 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         plugins_expander = Adw.ExpanderRow(title=_("Installed Plugins"))
         plugins_expander.set_expanded(False)
         plugins_expander.set_visible(False)
+        plugins_count = Gtk.Label()
+        plugins_count.add_css_class("dim-label")
+        plugins_count.set_valign(Gtk.Align.CENTER)
+        plugins_expander.add_suffix(plugins_count)
+        plugins_expander._count_label = plugins_count
         self._plugins_expander = plugins_expander
         self._mods_group.add(plugins_expander)
 
         # "Installed Datapacks" collapsible section
         datapacks_expander = Adw.ExpanderRow(title=_("Installed Datapacks"))
         datapacks_expander.set_expanded(False)
+        datapacks_count = Gtk.Label()
+        datapacks_count.add_css_class("dim-label")
+        datapacks_count.set_valign(Gtk.Align.CENTER)
+        datapacks_expander.add_suffix(datapacks_count)
+        datapacks_expander._count_label = datapacks_count
         self._datapacks_expander = datapacks_expander
         self._mods_group.add(datapacks_expander)
 
         disabled_expander = Adw.ExpanderRow(title=_("Disabled by Version Updates"))
         disabled_expander.set_expanded(False)
+        disabled_count = Gtk.Label()
+        disabled_count.add_css_class("dim-label")
+        disabled_count.set_valign(Gtk.Align.CENTER)
+        disabled_expander.add_suffix(disabled_count)
+        disabled_expander._count_label = disabled_count
         self._disabled_expander = disabled_expander
         self._mods_group.add(disabled_expander)
 
@@ -376,10 +400,10 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 info = self._add_info_row_to_expander(self._mods_expander, empty)
                 self._mod_rows.append(info)
 
-            # Update expander subtitle with count
+            # Update expander end count
             total_mods = len(entries) + len([j for j in jars if j.name.lower() not in managed_set])
             # Translators: number of installed items, e.g. "1 item", "3 items"
-            self._mods_expander.set_subtitle(
+            self._mods_expander._count_label.set_label(
                 ngettext("{count} item", "{count} items", total_mods).format(count=total_mods)
                 if total_mods
                 else _("None installed")
@@ -415,7 +439,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 info = self._add_info_row_to_expander(self._plugins_expander, _("No plugins installed"))
                 self._plugin_rows.append(info)
 
-            self._plugins_expander.set_subtitle(
+            self._plugins_expander._count_label.set_label(
                 # Translators: number of installed items, e.g. "1 item", "3 items"
                 ngettext("{count} item", "{count} items", plugin_count).format(count=plugin_count)
                 if plugin_count
@@ -469,7 +493,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                     if dp_file.name.lower() not in tracked_filenames:
                         untracked_count += 1
             real_count = len(dp_state) + untracked_count
-            self._datapacks_expander.set_subtitle(
+            self._datapacks_expander._count_label.set_label(
                 # Translators: number of installed items, e.g. "1 item", "3 items"
                 ngettext("{count} item", "{count} items", real_count).format(count=real_count)
                 if real_count
@@ -524,7 +548,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
 
             count = len(disabled_items)
             # Translators: number of disabled items, e.g. "1 item", "3 items"
-            self._disabled_expander.set_subtitle(
+            self._disabled_expander._count_label.set_label(
                 ngettext("{count} item", "{count} items", count).format(count=count) if count else _("None disabled")
             )
             # Only show the section when something was actually disabled.
@@ -536,15 +560,18 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
     def _refresh_backups_row_subtitle(self) -> None:
         if not self._backups_row:
             return
+        count_label = getattr(self._backups_row, "_count_label", None)
+        if count_label is None:
+            return
 
         bdir = self._backups_dir()
         if not bdir:
-            self._backups_row.set_subtitle(_("No server selected"))
+            count_label.set_label(_("No server selected"))
             return
 
         count = sum(1 for _f in bdir.glob("*.zip"))
         # Translators: number of backups, e.g. "1 backup", "3 backups"
-        self._backups_row.set_subtitle(ngettext("{count} backup", "{count} backups", count).format(count=count))
+        count_label.set_label(ngettext("{count} backup", "{count} backups", count).format(count=count))
 
     def _build_worlds_snapshot(self) -> tuple[tuple[str, tuple[str, ...]], ...]:
         root = self._server_dir()

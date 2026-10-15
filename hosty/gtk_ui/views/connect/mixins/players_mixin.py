@@ -54,17 +54,25 @@ class PlayersMixin:
 
         wl_show = Adw.ExpanderRow(
             title=_("Show all whitelisted"),
-            subtitle=_("No players"),
         )
         wl_show.set_expanded(False)
+        wl_count = Gtk.Label(label=_("No players"))
+        wl_count.add_css_class("dim-label")
+        wl_count.set_valign(Gtk.Align.CENTER)
+        wl_show.add_suffix(wl_count)
+        wl_show._count_label = wl_count
         whitelist_group.add(wl_show)
         self._whitelist_list_rows.append(wl_show)
 
         banned_show = Adw.ExpanderRow(
             title=_("Show all banned"),
-            subtitle=_("No players"),
         )
         banned_show.set_expanded(False)
+        ban_count = Gtk.Label(label=_("No players"))
+        ban_count.add_css_class("dim-label")
+        ban_count.set_valign(Gtk.Align.CENTER)
+        banned_show.add_suffix(ban_count)
+        banned_show._count_label = ban_count
         banned_group.add(banned_show)
         self._banned_list_rows.append(banned_show)
 
@@ -79,12 +87,12 @@ class PlayersMixin:
         # Translators: number of whitelisted players, e.g. "1 player", "3 players"
         wl_summary = ngettext("{count} player", "{count} players", whitelist_count).format(count=whitelist_count)
         for row in self._whitelist_list_rows:
-            row.set_subtitle(wl_summary)
+            row._count_label.set_label(wl_summary)
 
         # Translators: number of banned players, e.g. "1 player", "3 players"
         ban_summary = ngettext("{count} player", "{count} players", banned_count).format(count=banned_count)
         for row in self._banned_list_rows:
-            row.set_subtitle(ban_summary)
+            row._count_label.set_label(ban_summary)
 
     def _player_list_paths(self) -> tuple[Path | None, Path | None]:
         root = self._server_dir()
