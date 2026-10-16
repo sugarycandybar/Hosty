@@ -806,9 +806,13 @@ class PropertiesView(Gtk.Box):
                 return
             plan_count = len(items)
             # Translators: number of items, e.g. "1 item", "3 items"
-            expander = Adw.ExpanderRow(
-                title=title, subtitle=ngettext("{count} item", "{count} items", plan_count).format(count=plan_count)
+            expander = Adw.ExpanderRow(title=title)
+            count_label = Gtk.Label(
+                label=ngettext("{count} item", "{count} items", plan_count).format(count=plan_count)
             )
+            count_label.add_css_class("dim-label")
+            count_label.set_valign(Gtk.Align.CENTER)
+            expander.add_suffix(count_label)
             for item in items:
                 label = str(item.get("title") or item.get("filename") or _("Unknown"))
                 version = str(item.get("version_number") or item.get("version_id") or "").strip()
