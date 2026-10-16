@@ -196,6 +196,7 @@ class ServerDetailView(Gtk.Box):
     def _push_fullscreen_page(self, page):
         """Push a fullscreen page onto the outer nav, overlaying the tab bar."""
         self._outer_nav.push(page)
+        return self._outer_nav
 
     def load_server(self, server_info: ServerInfo):
         """Load a server's details into the view."""

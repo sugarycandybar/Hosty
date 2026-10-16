@@ -118,10 +118,6 @@ class ModrinthMixin:
         return Path(root) / content_dir_name(self._server_loader())
 
     def _push_modrinth_page(self, *_args) -> None:
-        self._modrinth_nav = Adw.NavigationView()
-        self._modrinth_nav.set_hexpand(True)
-        self._modrinth_nav.set_vexpand(True)
-
         search_page = Adw.NavigationPage(
             title=_("Modrinth"),
             child=self._build_modrinth_search_view(),
@@ -130,17 +126,30 @@ class ModrinthMixin:
             search_page.set_tag("modrinth-search")
         except Exception:
             pass
-        self._modrinth_nav.push(search_page)
-        self._modrinth_nav.connect("popped", lambda _nav, _page: self._refresh_modrinth_rows_install_state())
 
-        outer_page = Adw.NavigationPage(title=_("Modrinth"), child=self._modrinth_nav)
-        self._modrinth_page = outer_page
+        # Single NavigationView for search + detail pages: a nested nav
+        # swallows the swipe-back gesture on its root page, so touch
+        # swipe could never leave the Modrinth search page.
         if self._push_fullscreen_page_cb:
             if self._modrinth_header:
                 self._modrinth_header.set_show_end_title_buttons(True)
-            self._push_fullscreen_page_cb(outer_page)
+            host_nav = self._push_fullscreen_page_cb(search_page) or self._nav
         else:
-            self._nav.push(outer_page)
+            host_nav = self._nav
+        self._modrinth_nav = host_nav
+        if getattr(self, "_modrinth_popped_nav", None) is not host_nav:
+            host_nav.connect("popped", self._on_modrinth_page_popped)
+            self._modrinth_popped_nav = host_nav
+        host_nav.push(search_page)
+        self._modrinth_page = search_page
+
+    def _on_modrinth_page_popped(self, _nav, page) -> None:
+        try:
+            tag = page.get_tag()
+        except Exception:
+            tag = None
+        if tag == "modrinth-detail":
+            self._refresh_modrinth_rows_install_state()
 
     def _build_modrinth_search_view(self) -> Gtk.Widget:
         from hosty.shared.backend import modrinth_client
@@ -1638,6 +1647,10 @@ class ModrinthMixin:
         threading.Thread(target=load_detail, daemon=True).start()
 
         page = Adw.NavigationPage(title=hit.title, child=tv)
+        try:
+            page.set_tag("modrinth-detail")
+        except Exception:
+            pass
         return page
 
     def _populate_detail_versions(
