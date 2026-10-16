@@ -133,14 +133,18 @@ class ModrinthMixin:
         if self._push_fullscreen_page_cb:
             if self._modrinth_header:
                 self._modrinth_header.set_show_end_title_buttons(True)
+            # The callback presents the page itself; just reuse its nav.
             host_nav = self._push_fullscreen_page_cb(search_page) or self._nav
+            presented = True
         else:
             host_nav = self._nav
+            presented = False
         self._modrinth_nav = host_nav
         if getattr(self, "_modrinth_popped_nav", None) is not host_nav:
             host_nav.connect("popped", self._on_modrinth_page_popped)
             self._modrinth_popped_nav = host_nav
-        host_nav.push(search_page)
+        if not presented:
+            host_nav.push(search_page)
         self._modrinth_page = search_page
 
     def _on_modrinth_page_popped(self, _nav, page) -> None:

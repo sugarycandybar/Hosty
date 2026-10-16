@@ -38,6 +38,28 @@ def test_modrinth_has_no_nested_nav():
     assert "modrinth-search" in tags
 
 
+def test_fullscreen_path_pushes_exactly_once():
+    view = FilesView()
+    host_nav = Adw.NavigationView()
+    presented = []
+    pushes = []
+    orig_push = host_nav.push
+    host_nav.push = lambda page: pushes.append(page) or orig_push(page)
+
+    def fake_cb(page):
+        presented.append(page)
+        host_nav.push(page)
+        return host_nav
+
+    view._push_fullscreen_page_cb = fake_cb
+    view._push_modrinth_page()
+    assert presented == [view._modrinth_page]
+    assert pushes == [view._modrinth_page]
+    assert view._modrinth_nav is host_nav
+    pages = [w for w in _walk(host_nav) if isinstance(w, Adw.NavigationPage)]
+    assert len(pages) == 1
+
+
 def test_popped_refresh_only_for_detail_pages():
     view = FilesView()
     calls = []
