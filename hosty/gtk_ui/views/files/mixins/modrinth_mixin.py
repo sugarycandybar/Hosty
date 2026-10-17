@@ -218,12 +218,6 @@ class ModrinthMixin:
         entry.add_css_class("modrinth-search-entry")
         search_outer.append(entry)
 
-        search_spinner = Gtk.Spinner()
-        search_spinner.set_valign(Gtk.Align.CENTER)
-        search_spinner.set_margin_end(4)
-        search_spinner.set_visible(False)
-        search_outer.append(search_spinner)
-
         filter_btn = Gtk.MenuButton()
         filter_btn.set_icon_name("sliders-horizontal-symbolic")
         filter_btn.add_css_class("flat")
@@ -372,19 +366,13 @@ class ModrinthMixin:
             return sort_items[idx][1]
 
         def set_busy(busy: bool):
+            # Only tracks in-flight state (used to gate pagination/prefetch).
+            # The filter controls stay enabled while a search loads, and the
+            # loading indicator lives in the results list (see
+            # show_more_spinner) rather than in the search pill: a spinner
+            # there wedged the entry's clear button away from the filter
+            # button, so the two trailing controls looked separated.
             state["busy"] = busy
-            filter_btn.set_sensitive(not busy)
-            for btn in type_buttons:
-                btn.set_sensitive(not busy)
-            for btn in cat_buttons:
-                btn.set_sensitive(not busy)
-            for btn in sort_buttons:
-                btn.set_sensitive(not busy)
-            search_spinner.set_visible(busy)
-            if busy:
-                search_spinner.start()
-            else:
-                search_spinner.stop()
 
         def update_search_hint() -> None:
             ptype = selected_project_type()
@@ -617,6 +605,9 @@ class ModrinthMixin:
                 hide_more_spinner()
                 hide_load_error()
                 clear_results()
+                # Show loading feedback in the list itself so the search
+                # pill's clear/filter buttons stay put while the request runs.
+                show_more_spinner()
             generation = state.get("generation", 0)
             q = entry.get_text().strip()
             mc_version = self._server_info.mc_version if self._server_info else ""
