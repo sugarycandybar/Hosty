@@ -216,14 +216,17 @@ class PerformanceView(Gtk.Box):
         # Process Info group
         self._info_group = Adw.PreferencesGroup(title=_("Process Information"))
         self._pid_row = Adw.ActionRow(title=_("Process ID"), subtitle="-")
+        self._pid_row.add_css_class("property")
         self._pid_row.set_activatable(False)
         self._info_group.add(self._pid_row)
 
         self._uptime_row = Adw.ActionRow(title=_("Uptime"), subtitle="-")
+        self._uptime_row.add_css_class("property")
         self._uptime_row.set_activatable(False)
         self._info_group.add(self._uptime_row)
 
         self._ram_alloc_row = Adw.ActionRow(title=_("RAM Allocation"), subtitle="-")
+        self._ram_alloc_row.add_css_class("property")
         self._ram_alloc_row.set_activatable(False)
         self._info_group.add(self._ram_alloc_row)
 
