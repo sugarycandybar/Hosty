@@ -43,6 +43,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._open_plugins_row: Adw.ActionRow | None = None
         self._mods_update_busy = False
         self._mods_auto_check_busy = False
+        self._modrinth_icon_textures: dict[str, object] = {}
         self._modpack_version_enrich_busy = False
         self._active_mod_operation_tokens: dict[str, str] = {}
         self._mod_operation_lock = threading.Lock()

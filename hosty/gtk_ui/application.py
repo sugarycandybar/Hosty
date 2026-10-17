@@ -15,7 +15,7 @@ from pathlib import Path
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
 from hosty.daemon.host import DaemonHost, load_daemon_config
-from hosty.gtk_ui.dialogs.dialog_common import install_ctrl_w_for_dialogs
+from hosty.gtk_ui.dialogs.dialog_common import install_dialog_present_hooks
 from hosty.gtk_ui.window import HostyWindow
 from hosty.i18n import set_language, setup_gettext
 from hosty.shared.backend.server_manager import ServerManager
@@ -55,8 +55,9 @@ class HostyApplication(Adw.Application):
         setup_gettext()
 
         # Presented dialogs are separate toplevels unreachable by the main
-        # window's accelerators; this makes Ctrl+W close them instead.
-        install_ctrl_w_for_dialogs()
+        # window's accelerators; this makes Ctrl+W close them instead, and
+        # guards against a double-click opening the same dialog twice.
+        install_dialog_present_hooks()
 
         # Load custom CSS
         self._load_css()

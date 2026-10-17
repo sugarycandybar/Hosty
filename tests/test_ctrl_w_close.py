@@ -14,7 +14,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk  # noqa: E402
 
 from hosty.gtk_ui.dialogs import dialog_common as dialog_common_mod  # noqa: E402
-from hosty.gtk_ui.dialogs.dialog_common import add_ctrl_w_close, install_ctrl_w_for_dialogs  # noqa: E402
+from hosty.gtk_ui.dialogs.dialog_common import add_ctrl_w_close, install_dialog_present_hooks  # noqa: E402
 
 
 def test_ctrl_w_shortcut_trigger():
@@ -53,10 +53,10 @@ def test_ctrl_w_close_is_resilient():
 
 
 def test_install_hooks_present_idempotently():
-    """install_ctrl_w_for_dialogs() wires present() once; presenting attaches the shortcut."""
+    """The present hook wires once; presenting attaches the shortcut."""
     previous = Adw.Dialog.present
-    install_ctrl_w_for_dialogs()
-    install_ctrl_w_for_dialogs()
+    install_dialog_present_hooks()
+    install_dialog_present_hooks()
     try:
         assert Adw.Dialog.present is not previous
 
@@ -76,4 +76,5 @@ def test_install_hooks_present_idempotently():
         assert len(list(dialog.observe_controllers())) == controllers_before
     finally:
         Adw.Dialog.present = previous
-        dialog_common_mod._dialog_present_orig = None
+        dialog_common_mod._open_dialog_present_orig = None
+        dialog_common_mod._open_dialogs.clear()

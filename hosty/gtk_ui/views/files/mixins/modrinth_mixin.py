@@ -17,6 +17,36 @@ from gi.repository import Adw, Gdk, GdkPixbuf, GLib, Gtk, Pango
 
 from ..utils import *
 
+# Bound on concurrent modrinth icon fetches: rows used to spawn two
+# downloads each with no limit, stalling the main loop on page loads.
+_ICON_FETCH_SEMAPHORE = threading.Semaphore(6)
+
+# Cap for decoded icon textures kept in memory (48px each, tiny).
+_MODRINTH_ICON_CACHE_MAX = 400
+
+# Width below which result rows switch to their stacked layout.
+_MODRINTH_ROW_COMPACT_MIN_WIDTH = 550
+
+# Bound on concurrent compatible-version lookups (one per result row):
+# without it, fast scrolling stacks dozens of API bursts and trips
+# server-side rate limits, which then surface as failed pages.
+_VERSION_FETCH_SEMAPHORE = threading.Semaphore(8)
+
+# Cap on total loaded results: deep result sets have diminishing relevance
+# and unbounded lists cost memory, layout time, and API quota every scroll.
+_MODRINTH_MAX_RESULTS = 200
+
+
+def _modrinth_row_mode_for_width(width: int) -> str:
+    """Return the result-row layout for a list width ("compact"/"expanded")."""
+    try:
+        width = int(width)
+    except Exception:
+        return "compact"
+    if width <= 0 or width >= _MODRINTH_ROW_COMPACT_MIN_WIDTH:
+        return "compact"
+    return "expanded"
+
 
 class ModrinthMixin:
     def _server_loader(self) -> str:
@@ -64,6 +94,9 @@ class ModrinthMixin:
         is_datapack: bool,
         is_plugin: bool,
         btn_label: str,
+        installed_packs: set[str] | None = None,
+        installed_dps: set[str] | None = None,
+        installed_plugins: set[str] | None = None,
     ) -> tuple:
         """Single source of truth for search-row install buttons.
 
@@ -72,13 +105,21 @@ class ModrinthMixin:
         judgment; Update/Downgrade precision lives on the detail page.
         Returns (label, sensitive).
         """
-        pid = str(getattr(hit, "project_id", "") or "")
+        pid = str(getattr(hit, "project_id", "") or "").strip()
         names = {str(n).lower() for n in (installed_names or set())}
-        if is_modpack and self._is_modpack_installed(pid):
+
+        def _installed(kind: str) -> bool:
+            if kind == "modpack":
+                return pid in installed_packs if installed_packs is not None else self._is_modpack_installed(pid)
+            if kind == "datapack":
+                return pid in installed_dps if installed_dps is not None else self._is_datapack_installed(pid)
+            return pid in installed_plugins if installed_plugins is not None else self._is_plugin_installed(pid)
+
+        if is_modpack and _installed("modpack"):
             return (_("Installed"), False)
-        if is_datapack and self._is_datapack_installed(pid):
+        if is_datapack and _installed("datapack"):
             return (_("Installed"), False)
-        if is_plugin and self._is_plugin_installed(pid):
+        if is_plugin and _installed("plugin"):
             return (_("Installed"), False)
         if best is None:
             return (btn_label, False)
@@ -300,7 +341,17 @@ class ModrinthMixin:
         # Start loading the next page this far before the bottom so results
         # are ready before the user gets there.
         prefetch_px = 1000
-        state = {"offset": 0, "total": 0, "busy": False, "all_loaded": False, "more_spinner_row": None, "generation": 0}
+        state = {
+            "offset": 0,
+            "total": 0,
+            "busy": False,
+            "all_loaded": False,
+            "more_spinner_row": None,
+            "generation": 0,
+            "errors": 0,
+            "empty_streak": 0,
+            "error_row": None,
+        }
 
         def selected_category() -> str:
             idx = selected_cat_idx[0]
@@ -389,6 +440,45 @@ class ModrinthMixin:
             results.append(row)
             state["more_spinner_row"] = row
 
+        def hide_load_error():
+            row = state.get("error_row")
+            state["error_row"] = None
+            if row is not None:
+                try:
+                    results.remove(row)
+                except Exception:
+                    pass
+
+        def show_load_error(reason: str | None = None):
+            subtitle = _("Tap to retry")
+            if reason:
+                short = str(reason).strip()
+                if len(short) > 80:
+                    short = short[:77] + "…"
+                if short:
+                    subtitle = f"{short} · {_('Tap to retry')}"
+            existing = state.get("error_row")
+            if existing is not None:
+                try:
+                    existing.set_subtitle(subtitle)
+                except Exception:
+                    pass
+                return
+            row = Adw.ActionRow(
+                title=_("Couldn't load more results"),
+                subtitle=subtitle,
+            )
+            row.set_activatable(True)
+
+            def on_retry(*_args):
+                hide_load_error()
+                state["errors"] = 0
+                do_search_more()
+
+            row.connect("activated", on_retry)
+            results.append(row)
+            state["error_row"] = row
+
         def restore_scroll(saved_value: float) -> None:
             # Appending must never move the viewport: keep the exact position
             # (clamped), so list growth below never yanks what you are reading.
@@ -422,8 +512,14 @@ class ModrinthMixin:
             saved_value = adj.get_value()
             if err:
                 hide_more_spinner()
+                # Roll back so a retry fetches this same window instead of
+                # skipping it; consecutive failures surface a retry row.
+                state["offset"] = max(0, state["offset"] - page_size)
+                state["errors"] = int(state.get("errors", 0)) + 1
                 if not appending:
                     results.append(self._empty_listbox_row(_("Could not fetch Modrinth results.")))
+                elif state["errors"] >= 3:
+                    show_load_error(err if isinstance(err, str) else None)
                 restore_scroll(saved_value)
                 return
             state["total"] = int(total)
@@ -433,24 +529,79 @@ class ModrinthMixin:
             if not hits:
                 if not appending:
                     results.append(self._empty_listbox_row(_("No results")))
-                state["all_loaded"] = True
+                    state["all_loaded"] = True
+                    hide_more_spinner()
+                    restore_scroll(saved_value)
+                    return
+                # Appending an empty window: halt only if the server side is
+                # exhausted; otherwise skip ahead (bounded) so one empty
+                # window can't end pagination while more results exist.
                 hide_more_spinner()
+                if total <= state["offset"]:
+                    state["all_loaded"] = True
+                    restore_scroll(saved_value)
+                    return
+                state["empty_streak"] = int(state.get("empty_streak", 0)) + 1
+                if state["empty_streak"] > 5:
+                    state["all_loaded"] = True
+                    restore_scroll(saved_value)
+                    return
                 restore_scroll(saved_value)
+                maybe_prefetch()
                 return
+
+            state["empty_streak"] = 0
+            state["errors"] = 0
+            hide_load_error()
 
             if total <= state["offset"] + len(hits):
                 state["all_loaded"] = True
 
             installed = installed_mod_names()
             installed_plugins = installed_plugin_names()
+            # Snapshot install state once per page: per-row file reads here
+            # would stall the main thread while appending results.
+            installed_packs = set(self._modpack_entries())
+            installed_dps = set(self._read_datapack_state().get("datapacks", {}))
+            installed_plugin_ids = set(self._read_plugin_state().get("plugins", {}))
             for h in hits:
                 if self._is_plugin_hit(h):
-                    append_result_row(self._make_modrinth_row(h, version, installed_plugins))
+                    append_result_row(
+                        self._make_modrinth_row(
+                            h,
+                            version,
+                            installed_plugins,
+                            installed_packs=installed_packs,
+                            installed_dps=installed_dps,
+                            installed_plugins=installed_plugin_ids,
+                        )
+                    )
                 else:
-                    append_result_row(self._make_modrinth_row(h, version, installed))
+                    append_result_row(
+                        self._make_modrinth_row(
+                            h,
+                            version,
+                            installed,
+                            installed_packs=installed_packs,
+                            installed_dps=installed_dps,
+                            installed_plugins=installed_plugin_ids,
+                        )
+                    )
+            state["loaded"] = int(state.get("loaded", 0)) + len(hits)
+            if state["loaded"] >= _MODRINTH_MAX_RESULTS and not state.get("end_shown"):
+                state["end_shown"] = True
+                state["all_loaded"] = True
+                end_row = Adw.ActionRow(
+                    title=_("Showing first {count} results").format(count=_MODRINTH_MAX_RESULTS),
+                    subtitle=_("Refine your search to see more"),
+                )
+                end_row.set_activatable(False)
+                end_row.add_css_class("dim-label")
+                results.append(end_row)
             if state["all_loaded"]:
                 hide_more_spinner()
             restore_scroll(saved_value)
+            _apply_row_mode()
             # Still inside the prefetch zone (e.g. tall viewport)? Keep going.
             maybe_prefetch()
 
@@ -459,7 +610,12 @@ class ModrinthMixin:
                 state["offset"] = 0
                 state["all_loaded"] = False
                 state["generation"] = state.get("generation", 0) + 1
+                state["errors"] = 0
+                state["empty_streak"] = 0
+                state["loaded"] = 0
+                state["end_shown"] = False
                 hide_more_spinner()
+                hide_load_error()
                 clear_results()
             generation = state.get("generation", 0)
             q = entry.get_text().strip()
@@ -503,6 +659,10 @@ class ModrinthMixin:
         def do_search_more(*_):
             if state["busy"] or state["all_loaded"]:
                 return
+            if state.get("error_row") is not None:
+                # A failed page waits for an explicit tap-to-retry instead
+                # of burning requests on every scroll.
+                return
             state["offset"] += page_size
             do_search(reset=False)
 
@@ -517,6 +677,37 @@ class ModrinthMixin:
 
         def on_scroll(*_):
             maybe_prefetch()
+
+        # One width watcher for all rows (instead of a tick callback per
+        # row running every frame): flip each row's compact/expanded stack
+        # only when the narrow/wide threshold is crossed.
+        row_mode = {"compact": True}
+
+        def _apply_row_mode() -> None:
+            try:
+                name = _modrinth_row_mode_for_width(results.get_width())
+            except Exception:
+                return
+            if (name == "compact") == row_mode["compact"]:
+                return
+            row_mode["compact"] = name == "compact"
+            index = 0
+            while True:
+                row = results.get_row_at_index(index)
+                if row is None:
+                    break
+                try:
+                    stack = row.get_child()
+                    if isinstance(stack, Gtk.Stack) and stack.get_visible_child_name() != name:
+                        stack.set_visible_child_name(name)
+                except Exception:
+                    pass
+                index += 1
+
+        def on_row_width_changed(*_args):
+            _apply_row_mode()
+
+        results.connect("notify::width", on_row_width_changed)
 
         def trigger_search(*_):
             update_search_hint()
@@ -677,17 +868,44 @@ class ModrinthMixin:
                 platform=platform,
             )
 
-    def _load_icon_async(self, image: Gtk.Image, url: str, size: int = 44) -> None:
+    def _load_icon_async(self, images, url: str, size: int = 44) -> None:
+        """Fetch a project icon and apply it to one or more Gtk.Images.
+
+        Textures are cached in memory (bounded) so the two layouts of a
+        row share a single fetch, and rebuilds never re-download. Fetches
+        are pooled so a page of results can't stall the loop.
+        """
+        if isinstance(images, Gtk.Image):
+            images = [images]
+        images = [im for im in (images or []) if im is not None]
+        if not images or not url:
+            return
+        try:
+            cache = getattr(self, "_modrinth_icon_textures", None)
+            if cache is None:
+                cache = {}
+                self._modrinth_icon_textures = cache
+            texture = cache.get(url)
+            if texture is not None:
+                for im in images:
+                    try:
+                        im.set_from_paintable(texture)
+                    except Exception:
+                        pass
+                return
+        except Exception:
+            pass
+
         def worker():
             try:
                 from hosty.shared.backend import modrinth_client
 
-                path = modrinth_client.get_icon_path(url)
-                if not path:
-                    return
-
-                with open(path, "rb") as f:
-                    data = f.read()
+                with _ICON_FETCH_SEMAPHORE:
+                    path = modrinth_client.get_icon_path(url)
+                    if not path:
+                        return
+                    with open(path, "rb") as f:
+                        data = f.read()
 
                 loader = GdkPixbuf.PixbufLoader.new()
                 loader.write(data)
@@ -698,8 +916,26 @@ class ModrinthMixin:
                 scaled = pixbuf.scale_simple(size, size, GdkPixbuf.InterpType.BILINEAR) or pixbuf
                 texture = Gdk.Texture.new_for_pixbuf(scaled)
 
+                try:
+                    cache = getattr(self, "_modrinth_icon_textures", None)
+                    if cache is None:
+                        cache = {}
+                        self._modrinth_icon_textures = cache
+                    if len(cache) >= _MODRINTH_ICON_CACHE_MAX:
+                        try:
+                            cache.pop(next(iter(cache)))
+                        except Exception:
+                            pass
+                    cache[url] = texture
+                except Exception:
+                    pass
+
                 def ui_set():
-                    image.set_from_paintable(texture)
+                    for im in images:
+                        try:
+                            im.set_from_paintable(texture)
+                        except Exception:
+                            pass
 
                 GLib.idle_add(ui_set)
             except Exception:
@@ -713,7 +949,15 @@ class ModrinthMixin:
             detail_page = self._build_modrinth_detail_page(hit)
             self._modrinth_nav.push(detail_page)
 
-    def _make_modrinth_row(self, hit, mc_version: str, installed_names: set[str]) -> Gtk.ListBoxRow:
+    def _make_modrinth_row(
+        self,
+        hit,
+        mc_version: str,
+        installed_names: set[str],
+        installed_packs: set[str] | None = None,
+        installed_dps: set[str] | None = None,
+        installed_plugins: set[str] | None = None,
+    ) -> Gtk.ListBoxRow:
         from hosty.shared.backend import modrinth_client
 
         ptype = str(getattr(hit, "project_type", "mod")).lower()
@@ -744,11 +988,20 @@ class ModrinthMixin:
                 if sensitive is not None:
                     b.set_sensitive(sensitive)
 
-        if is_modpack and self._is_modpack_installed(hit.project_id):
+        pid = str(getattr(hit, "project_id", "") or "").strip()
+
+        def _installed(kind: str) -> bool:
+            if kind == "modpack":
+                return pid in installed_packs if installed_packs is not None else self._is_modpack_installed(pid)
+            if kind == "datapack":
+                return pid in installed_dps if installed_dps is not None else self._is_datapack_installed(pid)
+            return pid in installed_plugins if installed_plugins is not None else self._is_plugin_installed(pid)
+
+        if is_modpack and _installed("modpack"):
             _set_row_btn(_("Installed"), False)
-        elif is_datapack and self._is_datapack_installed(hit.project_id):
+        elif is_datapack and _installed("datapack"):
             _set_row_btn(_("Installed"), False)
-        elif is_plugin and self._is_plugin_installed(hit.project_id):
+        elif is_plugin and _installed("plugin"):
             _set_row_btn(_("Installed"), False)
         elif (not is_modpack) and (not is_datapack) and (not is_plugin) and self._looks_installed(hit, installed_names):
             _set_row_btn(_("Installed"), False)
@@ -787,9 +1040,13 @@ class ModrinthMixin:
             ic = Gtk.Image.new_from_icon_name("application-x-addon-symbolic")
             ic.set_pixel_size(48)
             ic.set_valign(Gtk.Align.START)
-            if hit.icon_url:
-                self._load_icon_async(ic, hit.icon_url, size=48)
             return ic
+
+        compact_icon = _mk_icon()
+        expanded_icon = _mk_icon()
+        if hit.icon_url:
+            # One fetch feeds both layouts (plus the memory cache).
+            self._load_icon_async([compact_icon, expanded_icon], hit.icon_url, size=48)
 
         def _mk_chevron():
             ch = Gtk.Image.new_from_icon_name("go-next-symbolic")
@@ -803,7 +1060,7 @@ class ModrinthMixin:
         compact.set_margin_end(6)
         compact.set_margin_top(10)
         compact.set_margin_bottom(10)
-        compact.append(_mk_icon())
+        compact.append(compact_icon)
         compact.append(_mk_text_col())
         compact.append(compact_install)
         compact.append(_mk_chevron())
@@ -814,7 +1071,7 @@ class ModrinthMixin:
         expanded.set_margin_top(10)
         expanded.set_margin_bottom(10)
         expanded_top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        expanded_top.append(_mk_icon())
+        expanded_top.append(expanded_icon)
         expanded_top.append(_mk_text_col())
         expanded_top.append(_mk_chevron())
         expanded.append(expanded_top)
@@ -832,17 +1089,6 @@ class ModrinthMixin:
         row_stack.add_named(compact, "compact")
         row_stack.add_named(expanded, "expanded")
         row.set_child(row_stack)
-
-        def _tick_row(widget, fc, _ud=None):
-            w = widget.get_width()
-            cur = widget.get_visible_child_name()
-            if w >= 550 and cur != "compact":
-                widget.set_visible_child_name("compact")
-            elif w > 0 and w < 550 and cur != "expanded":
-                widget.set_visible_child_name("expanded")
-            return True
-
-        row_stack.add_tick_callback(_tick_row)
 
         best_version = [None]
 
@@ -881,18 +1127,20 @@ class ModrinthMixin:
                 else:
                     loader_for_query = self._server_loader()
                 if is_plugin:
-                    versions = modrinth_client.find_compatible_plugin_versions(
-                        hit.project_id,
-                        mc_version,
-                        limit=1,
-                    )
+                    with _VERSION_FETCH_SEMAPHORE:
+                        versions = modrinth_client.find_compatible_plugin_versions(
+                            hit.project_id,
+                            mc_version,
+                            limit=1,
+                        )
                 else:
-                    versions = modrinth_client.find_compatible_versions(
-                        hit.project_id,
-                        mc_version,
-                        loader=loader_for_query,
-                        limit=1,
-                    )
+                    with _VERSION_FETCH_SEMAPHORE:
+                        versions = modrinth_client.find_compatible_versions(
+                            hit.project_id,
+                            mc_version,
+                            loader=loader_for_query,
+                            limit=1,
+                        )
                 if not versions:
                     _set_row_btn(sensitive=False)
                     return
@@ -908,6 +1156,9 @@ class ModrinthMixin:
                         is_datapack=is_datapack,
                         is_plugin=is_plugin,
                         btn_label=btn_label,
+                        installed_packs=installed_packs,
+                        installed_dps=installed_dps,
+                        installed_plugins=installed_plugins,
                     )
                     _set_row_btn(label, sensitive)
 
@@ -1468,17 +1719,20 @@ class ModrinthMixin:
         install_btn_narrow.set_visible(True)
         install_btn_wide.set_visible(False)
 
-        def toggle_install_btn(widget, frame_clock, _ud=None):
-            w = widget.get_width()
+        def _apply_install_btn_mode() -> None:
+            try:
+                w = sw.get_width()
+            except Exception:
+                return
             if w >= 600:
                 install_btn_wide.set_visible(True)
                 install_btn_narrow.set_visible(False)
             elif w > 0:
                 install_btn_wide.set_visible(False)
                 install_btn_narrow.set_visible(True)
-            return True
 
-        sw.add_tick_callback(toggle_install_btn)
+        sw.connect("notify::width", lambda *_: _apply_install_btn_mode())
+        _apply_install_btn_mode()
 
         version_objs: list = []
         selected_index = [0]

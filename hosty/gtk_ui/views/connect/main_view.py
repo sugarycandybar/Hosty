@@ -196,6 +196,7 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         settings_row.add_row(self._auto_start_row)
 
         self._tunnels_usage_row = Adw.ActionRow(title=_("Tunnels"), subtitle=_("Not available"))
+        self._tunnels_usage_row.add_css_class("property")
         self._tunnels_usage_row.add_prefix(Gtk.Image.new_from_icon_name("network-wired-symbolic"))
         self._tunnels_usage_row.set_activatable(False)
         settings_row.add_row(self._tunnels_usage_row)

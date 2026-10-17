@@ -67,33 +67,84 @@ def add_ctrl_w_close(dialog: Adw.Dialog) -> Gtk.Shortcut:
     return shortcut
 
 
-_dialog_present_orig = None
+_open_dialogs: list[Adw.Dialog] = []
 
 
-def install_ctrl_w_for_dialogs() -> None:
-    """Make Ctrl+W close any presented dialog, from a single place.
+def _dialog_key(dialog: Adw.Dialog) -> tuple[type, str]:
+    """Identity used to detect a duplicate open of the same dialog."""
+    try:
+        title = dialog.get_title() or ""
+    except Exception:
+        title = ""
+    return (type(dialog), title)
 
-    Presented dialogs are separate toplevels, so the main window's
-    ``win.close-window`` accelerator never reaches them. Hooking
-    ``Adw.Dialog.present`` covers every current and future dialog without
-    per-dialog boilerplate. Safe to call multiple times.
+
+def _forget_dialog(dialog: Adw.Dialog) -> None:
+    for index, existing in enumerate(_open_dialogs):
+        if existing is dialog:
+            del _open_dialogs[index]
+            return
+
+
+def _present_dialog(dialog: Adw.Dialog, parent, present_impl) -> None:
+    """Wire Ctrl+W, suppress a duplicate open, then run ``present_impl``.
+
+    Split out from the ``Adw.Dialog.present`` hook so the behavior is
+    testable without a display or monkeypatching the class.
     """
-    global _dialog_present_orig
-    if _dialog_present_orig is not None:
+    if not getattr(dialog, "_hosty_ctrl_w_installed", False):
+        try:
+            add_ctrl_w_close(dialog)
+        except Exception:
+            pass
+        else:
+            dialog._hosty_ctrl_w_installed = True
+
+    key = _dialog_key(dialog)
+    if any(existing is not dialog and _dialog_key(existing) == key for existing in _open_dialogs):
+        # The same dialog is already on screen: a second activation of the
+        # same button (e.g. a fast double-click) must not open it twice.
         return
-    _dialog_present_orig = Adw.Dialog.present
 
-    def _present_with_ctrl_w(self: Adw.Dialog, parent=None) -> None:
-        if not getattr(self, "_hosty_ctrl_w_installed", False):
-            try:
-                add_ctrl_w_close(self)
-            except Exception:
-                pass
-            else:
-                self._hosty_ctrl_w_installed = True
-        return _dialog_present_orig(self, parent)
+    tracked = any(existing is dialog for existing in _open_dialogs)
+    if not tracked:
+        _open_dialogs.append(dialog)
+        dialog.connect("closed", lambda _d, d=dialog: _forget_dialog(d))
+    try:
+        return present_impl(dialog, parent)
+    except Exception:
+        # A failed present must not leave the dialog stuck as "open".
+        if not tracked:
+            _forget_dialog(dialog)
+        raise
 
-    Adw.Dialog.present = _present_with_ctrl_w
+
+_open_dialog_present_orig = None
+
+
+def install_dialog_present_hooks() -> None:
+    """Install our single hook around ``Adw.Dialog.present``.
+
+    Two cross-cutting behaviors live here so every current and future
+    dialog inherits them without per-dialog boilerplate:
+
+    * Ctrl+W closes the dialog. Presented dialogs are separate toplevels,
+      so the main window's ``win.close-window`` accelerator never reaches
+      them.
+    * A dialog already on screen is not opened a second time when its
+      button is activated twice in quick succession.
+
+    Safe to call multiple times.
+    """
+    global _open_dialog_present_orig
+    if _open_dialog_present_orig is not None:
+        return
+    _open_dialog_present_orig = Adw.Dialog.present
+
+    def _present_hooked(self: Adw.Dialog, parent=None) -> None:
+        return _present_dialog(self, parent, _open_dialog_present_orig)
+
+    Adw.Dialog.present = _present_hooked
 
 
 def make_dialog_header(
