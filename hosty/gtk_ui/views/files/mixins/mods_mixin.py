@@ -51,6 +51,37 @@ class ModsMixin:
         if server_id and self._server_manager:
             self._server_manager.end_mod_operation(server_id)
 
+    # ===== OSD progress bar (top of window) =====
+    def _progress_begin(self) -> None:
+        root = self.get_root()
+        if root is not None and hasattr(root, "begin_progress"):
+            root.begin_progress()
+
+    def _progress_update(self, fraction: float | None) -> None:
+        root = self.get_root()
+        if root is not None and hasattr(root, "update_progress"):
+            root.update_progress(fraction)
+
+    def _progress_end(self) -> None:
+        root = self.get_root()
+        if root is not None and hasattr(root, "end_progress"):
+            root.end_progress()
+
+    def _install_progress_reporter(self, index: int, count: int):
+        """Build a download-progress callback for file ``index`` of ``count``.
+
+        The returned callback reports overall install progress (0.0-1.0) to
+        the OSD bar and is safe to call from a worker thread.
+        """
+        count = max(1, int(count))
+        index = max(0, int(index))
+
+        def report(done: int, total: int) -> None:
+            within = min(1.0, float(done) / float(total)) if total else 0.0
+            GLib.idle_add(self._progress_update, min(1.0, (index + within) / count))
+
+        return report
+
     def _mod_dependency_state_path(self) -> Path | None:
         root = self._server_dir()
         if not root:
@@ -1155,35 +1186,6 @@ class ModsMixin:
                         message,
                     )
 
-            # Build a plural-correct list like "1 modpack, 3 mods" instead of "modpack(s)".
-            update_parts: list[str] = []
-            modpack_count = len(filtered_modpacks)
-            if modpack_count:
-                # Translators: e.g. "1 modpack", "3 modpacks"
-                update_parts.append(
-                    ngettext("{count} modpack", "{count} modpacks", modpack_count).format(count=modpack_count)
-                )
-            mod_count = len(filtered_mods)
-            if mod_count:
-                # Translators: e.g. "1 mod", "3 mods"
-                update_parts.append(ngettext("{count} mod", "{count} mods", mod_count).format(count=mod_count))
-            datapack_count = len(filtered_datapacks)
-            if datapack_count:
-                # Translators: e.g. "1 datapack", "3 datapacks"
-                update_parts.append(
-                    ngettext("{count} datapack", "{count} datapacks", datapack_count).format(count=datapack_count)
-                )
-            plugin_count = len(filtered_plugins)
-            if plugin_count:
-                # Translators: e.g. "1 plugin", "3 plugins"
-                update_parts.append(
-                    ngettext("{count} plugin", "{count} plugins", plugin_count).format(count=plugin_count)
-                )
-            if update_parts:
-                # Translators: {items} is a comma-separated list like "1 modpack, 3 mods"
-                self._toast(_("Updating {items}.").format(items=", ".join(update_parts)))
-            else:
-                self._toast(_("Updating selected items."))
             threading.Thread(
                 target=self._apply_mod_updates,
                 args=(

@@ -1221,6 +1221,7 @@ class ModrinthMixin:
                 self._alert(_("Install failed"), msg)
 
             def install_plugin_thread():
+                GLib.idle_add(self._progress_begin)
                 try:
                     root = self._server_dir()
                     if not root:
@@ -1239,11 +1240,18 @@ class ModrinthMixin:
                                 old_path.unlink(missing_ok=True)
 
                     dest = plugins_dir / chosen.filename
-                    modrinth_client.download_to(chosen.download_url, dest, expected_hashes=chosen.hashes)
+                    modrinth_client.download_to(
+                        chosen.download_url,
+                        dest,
+                        expected_hashes=chosen.hashes,
+                        progress_callback=self._install_progress_reporter(0, 1),
+                    )
                     self._configure_known_mod_after_download(hit, as_plugin=True)
                     GLib.idle_add(lambda f=chosen.filename: ui_ok_plugin(f))
                 except Exception as e:
                     GLib.idle_add(lambda m=str(e): ui_err_plugin(m))
+                finally:
+                    GLib.idle_add(self._progress_end)
 
             threading.Thread(target=install_plugin_thread, daemon=True).start()
             return
@@ -1271,6 +1279,8 @@ class ModrinthMixin:
                 self._alert(_("Install failed"), msg)
 
             def install_dp_thread(deps_to_install: list):
+                total_files = len(deps_to_install) + 1
+                GLib.idle_add(self._progress_begin)
                 try:
                     root = self._server_dir()
                     if not root:
@@ -1281,9 +1291,14 @@ class ModrinthMixin:
                     dp_dir.mkdir(parents=True, exist_ok=True)
 
                     installed_dep_count = 0
-                    for dep in deps_to_install:
+                    for idx, dep in enumerate(deps_to_install):
                         dep_dest = dp_dir / dep.filename
-                        modrinth_client.download_to(dep.download_url, dep_dest, expected_hashes=dep.hashes)
+                        modrinth_client.download_to(
+                            dep.download_url,
+                            dep_dest,
+                            expected_hashes=dep.hashes,
+                            progress_callback=self._install_progress_reporter(idx, total_files),
+                        )
                         self._record_datapack_install(
                             dep.project_id,
                             dep.name or dep.filename,
@@ -1294,10 +1309,17 @@ class ModrinthMixin:
                         installed_dep_count += 1
 
                     dest = dp_dir / chosen.filename
-                    modrinth_client.download_to(chosen.download_url, dest, expected_hashes=chosen.hashes)
+                    modrinth_client.download_to(
+                        chosen.download_url,
+                        dest,
+                        expected_hashes=chosen.hashes,
+                        progress_callback=self._install_progress_reporter(total_files - 1, total_files),
+                    )
                     GLib.idle_add(lambda f=chosen.filename, c=installed_dep_count: ui_ok_dp(f, c))
                 except Exception as e:
                     GLib.idle_add(lambda m=str(e): ui_err_dp(m))
+                finally:
+                    GLib.idle_add(self._progress_end)
 
             def prompt_dp_dependencies(deps_to_install: list):
                 if not deps_to_install:
@@ -1398,12 +1420,17 @@ class ModrinthMixin:
                     _set_btns(f"{done}/{total}")
 
             def install_pack_thread():
+                GLib.idle_add(self._progress_begin)
                 try:
                     root = self._server_dir()
                     if not root:
                         raise RuntimeError("No server selected.")
 
                     def on_pack_progress(d: int, t: int, rel_path: str):
+                        if int(t) > 0:
+                            GLib.idle_add(self._progress_update, min(1.0, int(d) / int(t)))
+                        else:
+                            GLib.idle_add(self._progress_update, None)
                         GLib.idle_add(lambda dd=d, tt=t: ui_progress_pack(dd, tt))
 
                     result = modrinth_client.install_modpack(
@@ -1420,6 +1447,8 @@ class ModrinthMixin:
                     GLib.idle_add(lambda: ui_ok_pack(d, o, m, details))
                 except Exception as e:
                     GLib.idle_add(lambda m=str(e): ui_err_pack(m))
+                finally:
+                    GLib.idle_add(self._progress_end)
 
             threading.Thread(target=install_pack_thread, daemon=True).start()
             return
@@ -1447,6 +1476,8 @@ class ModrinthMixin:
             self._alert(_("Install failed"), msg)
 
         def thread_fn(deps_to_install: list, all_required_deps: list):
+            total_files = len(deps_to_install) + 1
+            GLib.idle_add(self._progress_begin)
             try:
                 root = self._server_dir()
                 if not root:
@@ -1469,24 +1500,36 @@ class ModrinthMixin:
                         installed_names_local.discard(old_filename.lower())
 
                 installed_dep_count = 0
-                for dep in deps_to_install:
+                for idx, dep in enumerate(deps_to_install):
                     dep_name = dep.filename.lower()
                     if dep_name in installed_names_local:
                         continue
                     if dep_name == chosen.filename.lower():
                         continue
                     dep_dest = mods_dir / dep.filename
-                    modrinth_client.download_to(dep.download_url, dep_dest, expected_hashes=dep.hashes)
+                    modrinth_client.download_to(
+                        dep.download_url,
+                        dep_dest,
+                        expected_hashes=dep.hashes,
+                        progress_callback=self._install_progress_reporter(idx, total_files),
+                    )
                     installed_names_local.add(dep_name)
                     installed_dep_count += 1
 
                 dest = mods_dir / chosen.filename
-                modrinth_client.download_to(chosen.download_url, dest, expected_hashes=chosen.hashes)
+                modrinth_client.download_to(
+                    chosen.download_url,
+                    dest,
+                    expected_hashes=chosen.hashes,
+                    progress_callback=self._install_progress_reporter(total_files - 1, total_files),
+                )
                 self._record_dependency_installs(chosen.filename, all_required_deps)
                 self._configure_known_mod_after_download(hit)
                 GLib.idle_add(lambda f=chosen.filename, c=installed_dep_count: ui_ok(f, c))
             except Exception as e:
                 GLib.idle_add(lambda m=str(e): ui_err(m))
+            finally:
+                GLib.idle_add(self._progress_end)
 
         def prompt_dependencies(deps_to_install: list, all_required_deps: list):
             if not deps_to_install:

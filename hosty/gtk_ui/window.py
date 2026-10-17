@@ -15,6 +15,7 @@ from gi.repository import Adw, Gio, GLib, GObject, Gtk
 from hosty.gtk_ui.views.server_detail import ServerDetailView
 from hosty.gtk_ui.views.sidebar import Sidebar
 from hosty.gtk_ui.views.welcome_view import WelcomeView
+from hosty.gtk_ui.widgets.osd_progress import OsdProgressBar
 from hosty.shared.backend.playit_config import load_playit_config
 from hosty.shared.backend.server_manager import ServerManager
 from hosty.shared.utils.constants import APP_ID
@@ -53,6 +54,13 @@ class HostyWindow(Adw.ApplicationWindow):
         self._toast_overlay = Adw.ToastOverlay()
         self._last_transient_toast = None
 
+        # Thin progress strip shown at the very top of the window while
+        # downloads/installs run (libadwaita `.osd` progress bar).
+        self._progress_bar = OsdProgressBar()
+        self._content_overlay = Gtk.Overlay()
+        self._content_overlay.set_child(self._toast_overlay)
+        self._content_overlay.add_overlay(self._progress_bar)
+
         # OverlaySplitView. Pinning keeps the sidebar visible side-by-side
         # instead of overlaying it when collapsed, which squeezes phone
         # widths and pins the sidebar open on narrow cold starts.
@@ -89,7 +97,7 @@ class HostyWindow(Adw.ApplicationWindow):
         self._split_view.connect("notify::collapsed", self._on_split_collapsed_changed)
 
         self._toast_overlay.set_child(self._split_view)
-        self.set_content(self._toast_overlay)
+        self.set_content(self._content_overlay)
 
         # Sidebar toggle buttons for desktop mode
         self._welcome_sidebar_toggle = Gtk.ToggleButton()
@@ -480,6 +488,25 @@ class HostyWindow(Adw.ApplicationWindow):
             except Exception:
                 pass
         self._toast_overlay.add_toast(toast)
+
+    # ===== Global OSD progress bar =====
+    def begin_progress(self) -> None:
+        """Show the top-of-window progress strip for one operation."""
+        bar = getattr(self, "_progress_bar", None)
+        if bar is not None:
+            bar.begin()
+
+    def update_progress(self, fraction: float | None) -> None:
+        """Set progress (0.0-1.0) on the strip, or ``None`` to pulse."""
+        bar = getattr(self, "_progress_bar", None)
+        if bar is not None:
+            bar.update(fraction)
+
+    def end_progress(self) -> None:
+        """Finish one operation; the strip hides once none remain."""
+        bar = getattr(self, "_progress_bar", None)
+        if bar is not None:
+            bar.end()
 
     def pause_playit_auto_start_for_running_server(self, server_id: str):
         self._playit_autostart_paused_ids.add(server_id)

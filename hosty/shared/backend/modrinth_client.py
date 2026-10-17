@@ -242,10 +242,36 @@ def _pick_mrpack_file(files: list[dict[str, Any]]) -> dict[str, Any] | None:
     return pack if pack else (files[0] if files else None)
 
 
-def _download_bytes(url: str, timeout: float = 120.0) -> bytes:
+def _download_bytes(
+    url: str,
+    timeout: float = 120.0,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> bytes:
+    """Download ``url`` fully, optionally reporting (received, total) bytes.
+
+    ``total`` is 0 when the server does not send a Content-Length.
+    """
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
-        return resp.read()
+        if progress_callback is None:
+            return resp.read()
+        try:
+            total = int(resp.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            total = 0
+        chunks: list[bytes] = []
+        received = 0
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            received += len(chunk)
+            try:
+                progress_callback(received, total)
+            except Exception:
+                pass
+        return b"".join(chunks)
 
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -837,10 +863,15 @@ def download_to(
     dest: Path,
     timeout: float = 120.0,
     expected_hashes: dict[str, str] | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> None:
-    """Download url to dest, verifying checksums (when provided) and jar magic."""
+    """Download url to dest, verifying checksums (when provided) and jar magic.
+
+    ``progress_callback(received, total)`` is called while streaming; ``total``
+    is 0 when the server sends no Content-Length.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
-    data = _download_bytes(url, timeout=timeout)
+    data = _download_bytes(url, timeout=timeout, progress_callback=progress_callback)
 
     if expected_hashes and not _verify_hash(data, expected_hashes):
         raise RuntimeError(f"Checksum mismatch for {Path(dest).name}")

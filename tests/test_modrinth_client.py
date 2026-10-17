@@ -279,6 +279,73 @@ def test_resolve_mod_file_details_titles_degrade(monkeypatch):
     assert out["a.jar"]["title"] == ""
 
 
+class _FakeResponse:
+    """Minimal urlopen() response for chunked ``_download_bytes`` tests."""
+
+    def __init__(self, chunks, headers=None):
+        self._chunks = list(chunks)
+        self.headers = headers or {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+    def read(self, size=-1):
+        if not self._chunks:
+            return b""
+        if size is None or size < 0:
+            data = b"".join(self._chunks)
+            self._chunks = []
+            return data
+        return self._chunks.pop(0)
+
+
+def test_download_bytes_reports_progress(monkeypatch):
+    chunks = [b"aaaa", b"bbbb"]
+
+    def fake_urlopen(_req, timeout=120.0, context=None):
+        return _FakeResponse(chunks, {"Content-Length": "8"})
+
+    monkeypatch.setattr(modrinth_client.urllib.request, "urlopen", fake_urlopen)
+    seen: list[tuple[int, int]] = []
+    data = modrinth_client._download_bytes(
+        "https://cdn.example/a.jar",
+        progress_callback=lambda done, total: seen.append((done, total)),
+    )
+    assert data == b"aaaabbbb"
+    assert seen == [(4, 8), (8, 8)]
+
+
+def test_download_bytes_progress_without_content_length(monkeypatch):
+    def fake_urlopen(_req, timeout=120.0, context=None):
+        return _FakeResponse([b"xx", b"yy"], {})
+
+    monkeypatch.setattr(modrinth_client.urllib.request, "urlopen", fake_urlopen)
+    seen: list[tuple[int, int]] = []
+    modrinth_client._download_bytes("https://cdn.example/a.jar", progress_callback=lambda d, t: seen.append((d, t)))
+    assert seen == [(2, 0), (4, 0)]
+
+
+def test_download_to_forwards_progress(monkeypatch, tmp_path):
+    def fake_bytes(_url, timeout=120.0, progress_callback=None):
+        if progress_callback:
+            progress_callback(1, 2)
+        return b"PK\x03\x04fake-jar"
+
+    monkeypatch.setattr(modrinth_client, "_download_bytes", fake_bytes)
+    seen: list[tuple[int, int]] = []
+    dest = tmp_path / "a.jar"
+    modrinth_client.download_to(
+        "https://cdn.example/a.jar",
+        dest,
+        progress_callback=lambda d, t: seen.append((d, t)),
+    )
+    assert seen == [(1, 2)]
+    assert dest.read_bytes() == b"PK\x03\x04fake-jar"
+
+
 def test_install_modpack_captures_file_details(monkeypatch, tmp_path):
     import hashlib
     import io
