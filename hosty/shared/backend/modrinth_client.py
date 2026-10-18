@@ -397,7 +397,9 @@ def search_mods(
         facets_raw.append(["server_side:required", "server_side:optional", "server_side:unknown"])
     elif server_side_only and ptype in ("mod", "plugin"):
         facets_raw.append(["server_side:required", "server_side:optional"])
-    if category and ptype not in ("datapack", "plugin"):
+    if category:
+        # Plugin and datapack projects carry the same category tags as mods,
+        # so the Category filter applies to every project type.
         facets_raw.append([f"categories:{category}"])
     if game_version:
         facets_raw.append([f"versions:{game_version}"])

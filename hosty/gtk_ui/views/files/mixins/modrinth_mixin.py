@@ -48,6 +48,20 @@ def _modrinth_row_mode_for_width(width: int) -> str:
     return "expanded"
 
 
+def _stop_before_install_message(is_plugin: bool) -> str:
+    """Body for the "server is running" alert while installing content."""
+    if is_plugin:
+        return _("Stop the server before installing plugins.")
+    return _("Stop the server before installing mods.")
+
+
+def _select_before_install_message(is_plugin: bool) -> str:
+    """Body for the "no server selected" alert while installing content."""
+    if is_plugin:
+        return _("Select a server before installing plugins.")
+    return _("Select a server before installing mods.")
+
+
 class ModrinthMixin:
     def _server_loader(self) -> str:
         """Return the Modrinth loader id for *mod* queries (defaults to fabric).
@@ -137,14 +151,24 @@ class ModrinthMixin:
             return (_("Installed"), False)
         return (btn_label, True)
 
-    def _is_plugin_search_available(self) -> bool:
-        """True when the server runs Bukkit plugins alongside mods (Arclight)."""
-        from hosty.shared.utils.constants import LOADER_ARCLIGHT, normalize_loader_type
+    @staticmethod
+    def _project_type_items(loader_type: str | None) -> list[tuple[str, str]]:
+        """Return the (label, project type) filter entries this server can install.
 
-        return bool(
-            self._server_info
-            and normalize_loader_type(getattr(self._server_info, "loader_type", None)) == LOADER_ARCLIGHT
-        )
+        Paper installs Bukkit plugins instead of mods (and therefore has no
+        modpacks); Arclight is a hybrid that runs both.
+        """
+        from hosty.shared.utils.constants import supports_mods, supports_plugins
+
+        items: list[tuple[str, str]] = []
+        if supports_mods(loader_type):
+            items.append((_("Mods"), "mod"))
+        if supports_plugins(loader_type):
+            items.append((_("Plugins"), "plugin"))
+        if supports_mods(loader_type):
+            items.append((_("Modpacks"), "modpack"))
+        items.append((_("Datapacks"), "datapack"))
+        return items
 
     @staticmethod
     def _is_plugin_hit(hit) -> bool:
@@ -231,14 +255,9 @@ class ModrinthMixin:
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         outer.set_hexpand(True)
 
-        project_type_items = [
-            (_("Mods"), "mod"),
-            (_("Modpacks"), "modpack"),
-            (_("Datapacks"), "datapack"),
-        ]
-        if self._is_plugin_search_available():
-            # Arclight runs mods and Bukkit plugins side by side.
-            project_type_items.insert(1, (_("Plugins"), "plugin"))
+        project_type_items = self._project_type_items(
+            getattr(self._server_info, "loader_type", None) if self._server_info else None
+        )
         category_items = [
             (_("Any category"), ""),
             (_("Optimization"), "optimization"),
@@ -1085,7 +1104,7 @@ class ModrinthMixin:
 
         def on_install(*_b):
             if self._is_running():
-                self._alert(_("Server is running"), _("Stop the server before installing mods."))
+                self._alert(_("Server is running"), _stop_before_install_message(is_plugin))
                 return
             if not mc_version and not is_datapack:
                 self._alert(_("Unknown version"), _("Could not read Minecraft version for this server."))
@@ -1098,7 +1117,7 @@ class ModrinthMixin:
 
             op_token = self._begin_mod_operation()
             if not op_token:
-                self._alert(_("No server selected"), _("Select a server before installing mods."))
+                self._alert(_("No server selected"), _select_before_install_message(is_plugin))
                 return
 
             _set_row_btn(_("Installing…"), False)
@@ -1854,7 +1873,7 @@ class ModrinthMixin:
 
         def on_install(*_b):
             if self._is_running():
-                self._alert(_("Server is running"), _("Stop the server before installing mods."))
+                self._alert(_("Server is running"), _stop_before_install_message(is_plugin))
                 return
             if not mc_version and not is_datapack:
                 self._alert(_("Unknown version"), _("Could not read Minecraft version for this server."))
@@ -1867,7 +1886,7 @@ class ModrinthMixin:
 
             op_token = self._begin_mod_operation()
             if not op_token:
-                self._alert(_("No server selected"), _("Select a server before installing mods."))
+                self._alert(_("No server selected"), _select_before_install_message(is_plugin))
                 return
 
             _set_dbtn(_("Installing…"), False)

@@ -41,6 +41,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         self._mods_group: Adw.PreferencesGroup | None = None
         self._open_mods_row: Adw.ActionRow | None = None
         self._open_plugins_row: Adw.ActionRow | None = None
+        self._check_updates_row: Adw.ActionRow | None = None
         self._mods_update_busy = False
         self._mods_auto_check_busy = False
         self._modrinth_icon_textures: dict[str, object] = {}
@@ -231,6 +232,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         open_title = _("Open plugins folder") if is_paper else _("Open mods folder")
         installed_title = _("Installed Plugins") if is_paper else _("Installed Mods")
         empty_title = _("No plugins installed") if is_paper else _("No mods installed")
+        updates_title = _("Plugin updates") if is_paper else _("Mod updates")
         if self._mods_group:
             # Group titles are parsed as Pango markup: escape "&" etc.
             self._mods_group.set_title(GLib.markup_escape_text(group_title))
@@ -248,6 +250,8 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
             for row in list(self._mod_rows):
                 if row.get_title() in (_("No mods installed"), _("No plugins installed")):
                     row.set_title(empty_title)
+        if self._check_updates_row:
+            self._check_updates_row.set_title(updates_title)
 
     def set_server(self, server_info: ServerInfo, server_manager: ServerManager):
         self._pop_to_root()
@@ -378,30 +382,38 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._worlds_group.add(row)
                 self._world_rows.append(row)
 
-        # ---- Installed Mods expander ----
-        mods_dir = self._content_dir(root)
-        if mods_dir is None:
-            mods_dir = root / "mods"
-        mods_dir.mkdir(parents=True, exist_ok=True)
-        jars = sorted(mods_dir.glob("*.jar"), key=lambda p: p.name.lower())
-        entries = self._modpack_entries()
-        managed_set = set(self._modpack_managed_mod_map().keys())
+        # ---- Installed Mods / Installed Plugins expander ----
+        content_dir = self._content_dir(root)
+        if content_dir is None:
+            content_dir = root / "mods"
+        content_dir.mkdir(parents=True, exist_ok=True)
 
         if self._mods_expander:
-            for project_id, entry in sorted(
-                entries.items(),
-                key=lambda item: (str(item[1].get("title", "")).strip() or item[0]).lower(),
-            ):
-                row = self._make_modpack_row(project_id, entry)
-                self._mods_expander.add_row(row)
-                self._mod_rows.append(row)
+            if self._is_paper():
+                # Paper installs Bukkit plugins: list them with plugin metadata
+                # (tracked versions, "Open plugin page", delete-plugin action).
+                total_mods = self._populate_plugin_rows(self._mods_expander, content_dir, self._mod_rows)
+            else:
+                jars = sorted(content_dir.glob("*.jar"), key=lambda p: p.name.lower())
+                entries = self._modpack_entries()
+                managed_set = set(self._modpack_managed_mod_map().keys())
 
-            standalone_jars = [jar for jar in jars if jar.name.lower() not in managed_set]
+                for project_id, entry in sorted(
+                    entries.items(),
+                    key=lambda item: (str(item[1].get("title", "")).strip() or item[0]).lower(),
+                ):
+                    row = self._make_modpack_row(project_id, entry)
+                    self._mods_expander.add_row(row)
+                    self._mod_rows.append(row)
 
-            for jar in standalone_jars:
-                row = self._make_mod_row(jar)
-                self._mods_expander.add_row(row)
-                self._mod_rows.append(row)
+                standalone_jars = [jar for jar in jars if jar.name.lower() not in managed_set]
+
+                for jar in standalone_jars:
+                    row = self._make_mod_row(jar)
+                    self._mods_expander.add_row(row)
+                    self._mod_rows.append(row)
+
+                total_mods = len(entries) + len(standalone_jars)
 
             if not self._mod_rows:
                 empty = _("No plugins installed") if self._is_paper() else _("No mods installed")
@@ -409,7 +421,6 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
                 self._mod_rows.append(info)
 
             # Update expander end count
-            total_mods = len(entries) + len([j for j in jars if j.name.lower() not in managed_set])
             # Translators: number of installed items, e.g. "1 item", "3 items"
             self._mods_expander._count_label.set_label(
                 ngettext("{count} item", "{count} items", total_mods).format(count=total_mods)
@@ -421,27 +432,7 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         if self._plugins_expander and self._is_arclight():
             plugins_dir = self._plugins_dir() or (root / "plugins")
             plugins_dir.mkdir(parents=True, exist_ok=True)
-            plugin_state = self._read_plugin_state().get("plugins", {})
-
-            tracked_plugin_files = {str(m.get("filename", "")).strip().lower() for m in plugin_state.values()}
-            plugin_count = 0
-            for project_id, meta in sorted(
-                plugin_state.items(),
-                key=lambda item: (str(item[1].get("title", "")).strip() or item[0]).lower(),
-            ):
-                row = self._make_plugin_row_from_meta(project_id, meta, plugins_dir)
-                if row is not None:
-                    self._plugins_expander.add_row(row)
-                    self._plugin_rows.append(row)
-                    plugin_count += 1
-
-            for jar in sorted(plugins_dir.glob("*.jar"), key=lambda p: p.name.lower()):
-                if jar.name.lower() in tracked_plugin_files:
-                    continue
-                row = self._make_plugin_row(jar)
-                self._plugins_expander.add_row(row)
-                self._plugin_rows.append(row)
-                plugin_count += 1
+            plugin_count = self._populate_plugin_rows(self._plugins_expander, plugins_dir, self._plugin_rows)
 
             if not self._plugin_rows:
                 info = self._add_info_row_to_expander(self._plugins_expander, _("No plugins installed"))

@@ -996,11 +996,21 @@ class ModsMixin:
     def _on_check_mod_updates(self, *_args, silent: bool = False) -> None:
         if self._mods_update_busy or self._mods_auto_check_busy:
             if not silent:
-                self._toast(_("Mod update check already running"))
+                message = (
+                    _("Plugin update check already running")
+                    if self._is_paper()
+                    else _("Mod update check already running")
+                )
+                self._toast(message)
             return
         if self._is_running():
             if not silent:
-                self._alert(_("Server is running"), _("Stop the server before checking for mod updates."))
+                self._alert(
+                    _("Server is running"),
+                    _("Stop the server before checking for plugin updates.")
+                    if self._is_paper()
+                    else _("Stop the server before checking for mod updates."),
+                )
             return
         if not self._server_info or not self._server_info.mc_version:
             if not silent:
@@ -1726,7 +1736,10 @@ class ModsMixin:
         from hosty.shared.backend import modrinth_client
 
         def _finish_early() -> None:
-            GLib.idle_add(lambda: self._alert(_("No server selected"), _("Select a server to update mods.")))
+            message = (
+                _("Select a server to update plugins.") if self._is_paper() else _("Select a server to update mods.")
+            )
+            GLib.idle_add(lambda m=message: self._alert(_("No server selected"), m))
             GLib.idle_add(lambda: setattr(self, "_mods_update_busy", False))
             GLib.idle_add(lambda t=mod_operation_token: self._end_mod_operation(t))
             if done_callback is not None:
@@ -2163,6 +2176,35 @@ class ModsMixin:
         )
         row.add_suffix(forget_btn)
         return row
+
+    def _populate_plugin_rows(self, expander: Adw.ExpanderRow, plugins_dir: Path, rows: list[Gtk.Widget]) -> int:
+        """Fill *expander* with tracked and untracked plugin rows.
+
+        Shared by the Arclight "Installed Plugins" section and the Paper
+        content section (Paper lists plugins where other loaders list mods).
+        Returns the number of rows added.
+        """
+        plugin_state = self._read_plugin_state().get("plugins", {})
+        tracked_plugin_files = {str(m.get("filename", "")).strip().lower() for m in plugin_state.values()}
+        count = 0
+        for project_id, meta in sorted(
+            plugin_state.items(),
+            key=lambda item: (str(item[1].get("title", "")).strip() or item[0]).lower(),
+        ):
+            row = self._make_plugin_row_from_meta(project_id, meta, plugins_dir)
+            if row is not None:
+                expander.add_row(row)
+                rows.append(row)
+                count += 1
+
+        for jar in sorted(plugins_dir.glob("*.jar"), key=lambda p: p.name.lower()):
+            if jar.name.lower() in tracked_plugin_files:
+                continue
+            row = self._make_plugin_row(jar)
+            expander.add_row(row)
+            rows.append(row)
+            count += 1
+        return count
 
     def _forget_plugin_record(self, project_id: str, filename: str) -> None:
         state = self._read_plugin_state()

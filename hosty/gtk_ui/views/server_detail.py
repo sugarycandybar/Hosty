@@ -294,6 +294,13 @@ class ServerDetailView(Gtk.Box):
             # server.properties is (re)generated on boot; re-read rows that mirror it.
             self._connect_view.refresh_server_state()
 
+    def _content_is_plugins(self) -> bool:
+        """True when this server installs Bukkit plugins instead of mods (Paper)."""
+        from hosty.shared.utils.constants import supports_mods
+
+        loader = getattr(self._current_server, "loader_type", None) if self._current_server else None
+        return not supports_mods(loader)
+
     def _update_toggle_for_selected(self, status: str):
         """Update Start/Stop from the sidebar-selected server's process."""
         self._toggle_btn.remove_css_class("hosty-starting-button")
@@ -330,7 +337,11 @@ class ServerDetailView(Gtk.Box):
             self._toggle_btn.add_css_class("suggested-action")
             self._toggle_btn.set_sensitive(not mods_busy)
             if mods_busy:
-                self._toggle_btn.set_tooltip_text(_("Mods are currently installing/updating"))
+                self._toggle_btn.set_tooltip_text(
+                    _("Plugins are currently installing/updating")
+                    if self._content_is_plugins()
+                    else _("Mods are currently installing/updating")
+                )
             else:
                 self._toggle_btn.set_tooltip_text(None)
 
@@ -466,10 +477,13 @@ class ServerDetailView(Gtk.Box):
         """Show a dialog describing why a server could not start."""
         kind = error.get("kind")
         if kind == "mod-operation":
-            dialog = Adw.AlertDialog.new(
-                _("Cannot Start Server"),
-                _("Mods are currently being installed or updated. Please wait for the operation to finish."),
-            )
+            if self._content_is_plugins():
+                message = _(
+                    "Plugins are currently being installed or updated. Please wait for the operation to finish."
+                )
+            else:
+                message = _("Mods are currently being installed or updated. Please wait for the operation to finish.")
+            dialog = Adw.AlertDialog.new(_("Cannot Start Server"), message)
             dialog.add_response("ok", _("OK"))
             dialog.present(self.get_root())
         elif kind == "java-download":
