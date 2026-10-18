@@ -7,6 +7,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 
 import gi
@@ -49,11 +50,15 @@ def _open_uri(uri: str) -> bool:
 
 
 class PlayitSetupDialog(Adw.Dialog):
-    """Guided setup for playit install + setup-code link flow."""
+    """Guided setup for playit install + official claim flow."""
 
     __gsignals__ = {
         "setup-complete": (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
+
+    _CLAIM_POLL_INTERVAL_SECONDS = 2.0
+    _CLAIM_TIMEOUT_SECONDS = 600
+    _CLAIM_MAX_CONSECUTIVE_ERRORS = 15
 
     def __init__(self, server_manager: ServerManager, server_info: ServerInfo, server_running: bool):
         super().__init__()
@@ -62,8 +67,8 @@ class PlayitSetupDialog(Adw.Dialog):
 
         self._claim_url = ""
         self._setup_started = False
-        self._finalize_started = False
         self._finished = False
+        self._claim_poll_stop = False
         self._did_try_open_setup_link = False
 
         apply_dialog_size(self, _("Set Up Playit"))
@@ -90,17 +95,14 @@ class PlayitSetupDialog(Adw.Dialog):
         self._toolbar_view.set_content(self._stack)
         self.set_child(self._toolbar_view)
 
+        self.connect("closed", self._on_closed)
+
     def _build_steps_page(self) -> Gtk.Widget:
         status = Adw.StatusPage()
         status.set_icon_name("system-software-install-symbolic")
         status.set_title(_("Playit Installation Steps"))
         status.set_description(
-            _(
-                "1. Download Playit agent\n"
-                "2. Open the Hosty setup URL\n"
-                "3. Paste your setup code\n"
-                "4. Link account and start tunnel"
-            )
+            _("1. Download Playit agent\n2. Approve the link in your browser\n3. Your tunnels start automatically")
         )
         return status
 
@@ -117,19 +119,20 @@ class PlayitSetupDialog(Adw.Dialog):
 
         group = Adw.PreferencesGroup(
             title=_("Link Playit"),
-            description=_("Open the setup link and paste the setup code"),
+            description=_("Open the link and approve the agent in your browser"),
         )
 
-        self._claim_link_row = Adw.ActionRow(title=_("Setup link"), subtitle=_("Waiting for link..."))
+        self._claim_link_row = Adw.ActionRow(title=_("Approval link"), subtitle=_("Waiting for link..."))
         self._claim_link_row.set_activatable(True)
         self._claim_link_row.add_suffix(Gtk.Image.new_from_icon_name("go-next-symbolic"))
         self._claim_link_row.connect("activated", self._on_open_claim_link)
         group.add(self._claim_link_row)
 
-        self._setup_code_row = Adw.EntryRow(title=_("Setup code"))
-        self._setup_code_row.set_show_apply_button(False)
-        self._setup_code_row.set_text("")
-        group.add(self._setup_code_row)
+        self._claim_status_row = Adw.ActionRow(title=_("Status"), subtitle=_("Waiting for your approval..."))
+        self._claim_spinner = Gtk.Spinner()
+        self._claim_spinner.set_visible(False)
+        self._claim_status_row.add_suffix(self._claim_spinner)
+        group.add(self._claim_status_row)
 
         page.add(group)
 
@@ -145,14 +148,21 @@ class PlayitSetupDialog(Adw.Dialog):
     def _on_close_clicked(self, *_args):
         self.close()
 
+    def _on_closed(self, *_args):
+        self._claim_poll_stop = True
+        if not self._finished and self._server_manager:
+            try:
+                self._server_manager.playit_manager.abandon_claim()
+            except Exception:
+                pass
+
     def _on_action_clicked(self, *_args):
         page = self._stack.get_visible_child_name()
         if page == "steps":
             self._begin_checking()
-        elif page == "claim":
-            self._begin_finish_setup()
         elif page == "success":
             self.close()
+        # The claim page completes automatically; there is nothing to confirm.
 
     def start_setup(self):
         if self._setup_started:
@@ -176,6 +186,7 @@ class PlayitSetupDialog(Adw.Dialog):
 
     def _show_error(self, message: str):
         def ui():
+            self._stack.set_visible_child_name("progress")
             self._progress_status.set_icon_name("dialog-error-symbolic")
             self._progress_status.set_title(_("Setup failed"))
             self._progress_status.set_description(message)
@@ -205,51 +216,80 @@ class PlayitSetupDialog(Adw.Dialog):
 
         if manager.has_claimed_secret():
             linked_ok, _detail = manager.validate_existing_link(retry_attempts=3)
-            if linked_ok:
+            # A linked-but-assignable agent has a read-only key and cannot
+            # create tunnels, so relink it as self-managed rather than
+            # reporting success.
+            if linked_ok and manager.is_agent_self_managed():
                 self._mark_setup_complete(manager)
                 return
 
-        self._claim_url = manager.setup_url
+        self._claim_url = manager.start_claim()
         self._show_claim_page()
+        self._poll_claim(manager)
 
     def _show_claim_page(self):
         def ui():
             self._claim_link_row.set_subtitle(self._claim_url)
+            self._claim_status_row.set_subtitle(_("Waiting for your approval..."))
+            self._claim_spinner.set_visible(True)
+            self._claim_spinner.set_spinning(True)
             self._stack.set_visible_child_name("claim")
             self._close_btn.set_sensitive(True)
-            self._action_btn.set_sensitive(True)
-            self._action_btn.set_label(_("Link Code"))
+            self._action_btn.set_sensitive(False)
+            self._action_btn.set_label(_("Waiting..."))
             if self._claim_url and not self._did_try_open_setup_link:
                 self._did_try_open_setup_link = True
                 _open_uri(self._claim_url)
 
         GLib.idle_add(ui)
 
-    def _begin_finish_setup(self):
-        if self._finalize_started:
+    def _poll_claim(self, manager):
+        deadline = time.monotonic() + self._CLAIM_TIMEOUT_SECONDS
+        consecutive_errors = 0
+
+        while not self._claim_poll_stop:
+            if time.monotonic() >= deadline:
+                self._show_error(_("Timed out waiting for approval. Close this dialog and try again."))
+                return
+
+            try:
+                state = manager.poll_claim()
+            except Exception:
+                state = "error"
+
+            if state == "accepted":
+                self._finish_claim(manager)
+                return
+            if state == "rejected":
+                self._show_error(_("The claim was rejected in the browser. Close this dialog and try again."))
+                return
+            if state == "expired":
+                self._show_error(_("This claim link has expired. Close this dialog and try again."))
+                return
+            if state == "invalid":
+                self._show_error(_("This claim link is invalid. Close this dialog and try again."))
+                return
+            if state == "error":
+                consecutive_errors += 1
+                if consecutive_errors >= self._CLAIM_MAX_CONSECUTIVE_ERRORS:
+                    self._show_error(
+                        _("Could not reach playit to confirm the link. Check your connection and try again.")
+                    )
+                    return
+            else:
+                consecutive_errors = 0
+
+            # Sleep in small slices so cancelling the dialog stops promptly.
+            slept = 0.0
+            while slept < self._CLAIM_POLL_INTERVAL_SECONDS and not self._claim_poll_stop:
+                time.sleep(0.1)
+                slept += 0.1
+
+    def _finish_claim(self, manager):
+        if self._claim_poll_stop:
             return
-
-        setup_code = self._setup_code_row.get_text().strip()
-        if not setup_code:
-            self._show_error(_("Paste the setup code from the browser first."))
-            return
-
-        self._finalize_started = True
-        self._close_btn.set_sensitive(False)
-        self._action_btn.set_sensitive(False)
-        self._action_btn.set_label(_("Linking..."))
-        self._stack.set_visible_child_name("progress")
-        self._update_progress(
-            0.85,
-            _("Linking account..."),
-            _("Exchanging setup code with playit."),
-        )
-
-        threading.Thread(target=self._finish_setup_thread, args=(setup_code,), daemon=True).start()
-
-    def _finish_setup_thread(self, setup_code: str):
-        manager = self._server_manager.playit_manager
-        ok, msg = manager.link_account(setup_code)
+        self._update_progress(0.9, _("Linking account..."), _("Finishing playit setup."))
+        ok, msg = manager.finish_claim()
         if not ok:
             self._show_error(_("Could not link playit account: {}").format(msg))
             return
@@ -283,6 +323,8 @@ class PlayitSetupDialog(Adw.Dialog):
         self._finished = True
 
         def ui():
+            self._claim_spinner.set_spinning(False)
+            self._claim_spinner.set_visible(False)
             self._stack.set_visible_child_name("success")
             self._close_btn.set_sensitive(False)
             self._action_btn.set_sensitive(True)

@@ -20,7 +20,7 @@ from datetime import datetime as dt
 from pathlib import Path
 
 from hosty.shared.core.events import EventEmitter
-from hosty.shared.utils.constants import DATA_DIR
+from hosty.shared.utils.constants import APP_VERSION, DATA_DIR, HOSTY_USER_AGENT
 from hosty.shared.utils.file_utils import atomic_write_json
 from hosty.shared.utils.net import lazy_requests, make_ssl_context
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
@@ -57,7 +57,17 @@ def _split_endpoint(endpoint: str) -> tuple[str, int | None]:
 class PlayitManager(EventEmitter):
     """Manage playit tunnels for multiple servers via a single agent process."""
 
-    setup_url = "https://playit.gg/account/setup/wizard/new-account/third-party/third-party-code?partner=hosty"
+    # Official, unauthenticated playit claim flow (the agent's own "claim"
+    # command): a locally generated claim code becomes a
+    # https://playit.gg/claim/<code> link the user approves, then the secret
+    # is exchanged directly with api.playit.gg. This replaces the old
+    # third-party link service, so no external worker or partner secret is
+    # involved.
+    #
+    # The claim must be made as a *self-managed* agent (see poll_claim):
+    # Hosty creates and owns its tunnels through the API, and an "assignable"
+    # agent's key is read-only for tunnel creation (NotAllowedWithReadOnly).
+    claim_base_url = "https://playit.gg/claim"
 
     class TunnelException(Exception):
         pass
@@ -185,7 +195,6 @@ class PlayitManager(EventEmitter):
         self._git_base = "https://github.com/playit-cloud/playit-agent/releases"
         self._api_base = "https://api.playit.gg"
         self._web_base = "https://playit.gg"
-        self._link_worker_url = "https://playit.auto-mcs.com/link"
 
         self.provider = "playit"
         self.directory = DATA_DIR / "playit"
@@ -210,8 +219,10 @@ class PlayitManager(EventEmitter):
 
         self.initialized = False
         self._agent_id: str | None = None
+        self._agent_type = ""
         self._proto_key: str | None = None
         self._secret_key: str | None = None
+        self._claim_code = ""
         self._last_error = ""
 
     def _is_invalid_agent_key_error(self, detail: str) -> bool:
@@ -621,58 +632,136 @@ class PlayitManager(EventEmitter):
 
         return bool(self._proto_key)
 
-    def link_account(self, setup_code: str, timeout: int = 20) -> tuple[bool, str]:
-        code = str(setup_code or "").strip()
+    _CLAIM_REQUEST_ATTEMPTS = 3
+    _CLAIM_EXCHANGE_ATTEMPTS = 5
+    _CLAIM_RETRY_DELAY_SECONDS = 1.0
+
+    def _post_claim_request(self, endpoint: str, payload: dict, timeout: int = 20):
+        url = f"{self._api_base}/{endpoint.strip('/')}"
+        attempts = max(1, int(self._CLAIM_REQUEST_ATTEMPTS))
+        for attempt in range(1, attempts + 1):
+            try:
+                return requests.post(
+                    url,
+                    json=payload,
+                    timeout=timeout,
+                    headers={"User-Agent": HOSTY_USER_AGENT, "Accept": "application/json"},
+                )
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                if attempt >= attempts:
+                    raise
+                logger.warning(
+                    "playit claim request to %s attempt %d/%d failed (%s); retrying",
+                    endpoint,
+                    attempt,
+                    attempts,
+                    e,
+                )
+                time.sleep(self._CLAIM_RETRY_DELAY_SECONDS * attempt)
+
+    def start_claim(self) -> str:
+        """Begin the official claim flow and return the URL to show the user."""
+        # 5 random bytes mirror the official agent's claim_generate().
+        self._claim_code = os.urandom(5).hex()
+        self._claim_url = f"{self.claim_base_url}/{self._claim_code}"
+        self._emit_endpoint_changed()
+        return self._claim_url
+
+    def abandon_claim(self) -> None:
+        """Drop a pending claim (e.g. when the setup dialog is cancelled)."""
+        if self._claim_url or self._claim_code:
+            self._claim_url = ""
+            self._claim_code = ""
+            self._emit_endpoint_changed()
+
+    def poll_claim(self) -> str:
+        """Poll the pending claim.
+
+        Returns a normalized state: ``waiting``, ``accepted``, ``rejected``,
+        ``expired``, ``invalid`` or ``error``.
+        """
+        if not self._claim_code:
+            return "invalid"
+
+        payload = {
+            "code": self._claim_code,
+            # self-managed: Hosty creates its own tunnels via the API. An
+            # "assignable" agent would yield a read-only key.
+            "agent_type": "self-managed",
+            "version": f"hosty {APP_VERSION}",
+        }
+        try:
+            response = self._post_claim_request("claim/setup", payload)
+            data = response.json()
+        except requests.RequestException as e:
+            self._last_error = str(e)
+            return "error"
+        except ValueError:
+            self._last_error = "playit returned an invalid response"
+            return "error"
+
+        if not isinstance(data, dict) or data.get("status") != "success":
+            detail = str(data.get("data") or "") if isinstance(data, dict) else ""
+            if detail == "CodeExpired":
+                return "expired"
+            if detail == "InvalidCode":
+                return "invalid"
+            self._last_error = detail or "claim setup failed"
+            return "error"
+
+        state = str(data.get("data") or "")
+        if state == "UserAccepted":
+            return "accepted"
+        if state == "UserRejected":
+            return "rejected"
+        return "waiting"
+
+    def finish_claim(self, timeout: int = 20) -> tuple[bool, str]:
+        code = self._claim_code
         if not code:
             return False, _("Missing playit setup code")
 
-        binary = self.resolve_binary()
-        if not binary:
-            return False, _("playit binary not found")
+        # The browser approval can reach the API a moment after our last poll,
+        # so a couple of "not accepted yet" replies are expected: retry briefly
+        # before surfacing a failure.
+        data: dict | None = None
+        for attempt in range(1, self._CLAIM_EXCHANGE_ATTEMPTS + 1):
+            try:
+                response = self._post_claim_request("claim/exchange", {"code": code}, timeout=timeout)
+                data = response.json()
+            except requests.RequestException as e:
+                return False, _("network error talking to playit: {}").format(e)
+            except ValueError:
+                return False, _("playit returned an invalid response")
 
-        major, minor, patch = self._detect_version(binary)
-        platform_name = "windows" if sys.platform == "win32" else ("macos" if sys.platform == "darwin" else "linux")
+            if isinstance(data, dict) and data.get("status") == "success":
+                break
+            detail = str(data.get("data") or "") if isinstance(data, dict) else ""
+            if detail not in ("NotAccepted", "NotSetup") or attempt >= self._CLAIM_EXCHANGE_ATTEMPTS:
+                break
+            time.sleep(self._CLAIM_RETRY_DELAY_SECONDS)
 
-        payload = {
-            "account_setup_code": code,
-            "agent_name": self.agent_name,
-            "platform": platform_name,
-            "version_major": major,
-            "version_minor": minor,
-            "version_patch": patch,
-        }
+        if not isinstance(data, dict) or data.get("status") != "success":
+            detail = str(data.get("data") or "") if isinstance(data, dict) else ""
+            known = {
+                "CodeNotFound": _("This claim link was not found. Please try setup again."),
+                "CodeExpired": _("This claim link has expired. Please try setup again."),
+                "UserRejected": _("The claim was rejected in the browser."),
+                "NotAccepted": _("The claim has not been approved in the browser yet."),
+                "NotSetup": _("The claim has not been completed yet."),
+            }
+            return False, known.get(detail, _("playit rejected the claim ({}).").format(detail or "unknown error"))
 
-        try:
-            response = requests.post(
-                self._link_worker_url,
-                json=payload,
-                timeout=timeout,
-            )
-        except requests.RequestException as e:
-            return False, _("Failed to reach playit link service: {}").format(e)
+        secret = str((data.get("data") or {}).get("secret_key") or "").strip()
+        if not secret:
+            return False, _("playit did not return a key: {}").format(data)
 
-        raw_text = response.text
-        try:
-            data = response.json()
-        except ValueError:
-            return False, _("Link service returned invalid JSON (HTTP {}): {}").format(response.status_code, raw_text)
-
-        if response.status_code >= 400:
-            error_detail = data.get("error") or data.get("message") or data.get("detail") or raw_text
-            return False, _("Link service returned HTTP {}: {}").format(response.status_code, error_detail)
-
-        if data.get("status", "fail") == "success":
-            payload_data = data.get("data") or {}
-            self._agent_id = str(payload_data.get("agent_id", "") or "") or None
-            self._secret_key = str(payload_data.get("agent_secret_key", "") or "") or None
-
-        if not self._secret_key:
-            return False, _("Link service did not return a key: {}").format(data)
-
-        if not self._write_secret_key(self._secret_key):
+        self._secret_key = secret
+        if not self._write_secret_key(secret):
             return False, _("Failed to write playit.toml")
 
         self._claim_url = ""
+        self._claim_code = ""
         self._emit_endpoint_changed()
         self.initialized = False
 
@@ -681,12 +770,13 @@ class PlayitManager(EventEmitter):
             linked_msg = _("playit account linked")
         elif self._is_invalid_agent_key_error(self._last_error):
             self.unlink_account()
-            return (
-                False,
-                _("playit rejected the linked key (InvalidAgentKey). Please generate a new setup code and try again"),
-            )
+            return False, _("playit rejected the linked key (InvalidAgentKey). Please try setup again")
         else:
             linked_msg = _("playit account linked (API sync pending)")
+
+        # The claim page pre-fills a playit-generated agent name; keep Hosty's
+        # convention instead so the dashboard entry stays recognisable.
+        self._rename_agent()
 
         if self.is_running:
             # The running process still serves the previous identity: tunnels
@@ -696,6 +786,15 @@ class PlayitManager(EventEmitter):
                 restart_detail = _("Agent restart failed: {}").format(restart_msg)
                 return True, f"{linked_msg} {restart_detail}"
         return True, linked_msg
+
+    def _rename_agent(self) -> None:
+        """Best-effort: align the playit dashboard agent name with Hosty's."""
+        if not self._agent_id:
+            return
+        try:
+            self._request("agents/rename", json={"agent_id": self._agent_id, "name": self.agent_name})
+        except Exception as e:
+            logger.warning("playit agent rename failed: %s", e)
 
     def validate_existing_link(self, retry_attempts: int = 3) -> tuple[bool, str]:
         if not self.read_claimed_secret():
@@ -711,9 +810,21 @@ class PlayitManager(EventEmitter):
 
         return False, detail
 
+    def is_agent_self_managed(self) -> bool:
+        """Whether the linked agent may create its own tunnels via the API.
+
+        Hosty creates tunnels with the agent key, which playit only allows for
+        *self-managed* agents. An "assignable" agent (as produced by playit's
+        interactive wizard) returns ``NotAllowedWithReadOnly`` for
+        ``tunnels/create``. An unknown type is treated as usable so this never
+        forces a needless relink.
+        """
+        return self._agent_type in ("", "self-managed")
+
     def unlink_account(self) -> bool:
         reset_ok = self._reset_config()
         self._agent_id = None
+        self._agent_type = ""
         self._proto_key = None
         self._secret_key = None
         self.initialized = False
@@ -742,6 +853,7 @@ class PlayitManager(EventEmitter):
             agent_data = self._request("agents/rundata")
             response_data = agent_data.get("data") or {}
             self._agent_id = str(response_data.get("agent_id", "")) or None
+            self._agent_type = str(response_data.get("agent_type", "") or "")
             if not self._agent_id:
                 self.initialized = False
                 self._last_error = _("agents/rundata did not include agent_id")
@@ -1234,8 +1346,7 @@ class PlayitManager(EventEmitter):
         if not existing_secret:
             if not allow_unclaimed:
                 return False, _("playit is not linked yet")
-            self._claim_url = self.setup_url
-            self._emit_endpoint_changed()
+            self.start_claim()
             return True, _("playit setup is required")
 
         if not self.initialized and not self._initialize_with_retry(max_attempts=25, delay_seconds=1.0):
@@ -1243,8 +1354,7 @@ class PlayitManager(EventEmitter):
             if self._is_invalid_agent_key_error(detail):
                 self.unlink_account()
                 if allow_unclaimed:
-                    self._claim_url = self.setup_url
-                    self._emit_endpoint_changed()
+                    self.start_claim()
                     return True, _("playit key invalid, setup is required")
                 return False, _("linked playit key is invalid; run setup again")
             return False, _("failed to initialize playit API session: {}").format(detail)
@@ -1628,6 +1738,14 @@ class PlayitManager(EventEmitter):
             if same_port and self._is_adoptable_tunnel(tunnel, kind_key):
                 tunnel.in_use = True
                 return tunnel
+
+        if not self.is_agent_self_managed():
+            # Assignable (wizard-linked) agents have a read-only key, so
+            # playit rejects tunnels/create. Adopting an existing tunnel above
+            # still works; only creation is blocked.
+            raise self.TunnelException(
+                _("Your linked playit agent cannot create tunnels. Run Playit setup again to relink it.")
+            )
 
         if kind_key == "voicechat":
             return self._create_raw_tunnel(port, protocol, label=label)

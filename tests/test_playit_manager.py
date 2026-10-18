@@ -513,17 +513,142 @@ def test_restart_agent_keeps_running_when_nothing_registered():
     assert "srv-legacy" in pm._active_server_ids
 
 
-class _LinkSuccessResponse:
+class _ClaimSuccessResponse:
     status_code = 200
     text = '{"status": "success"}'
 
+    def __init__(self, data):
+        self._data = data
+
     def json(self):
-        return {"status": "success", "data": {"agent_id": "agent-9", "agent_secret_key": "secret-9"}}
+        return {"status": "success", "data": self._data}
 
 
-def test_link_account_restarts_running_agent():
-    """Relink changes identity: a running process would keep serving the old
-    agent, so link must restart it (new tunnels would otherwise stay dark)."""
+class _ClaimFailResponse:
+    status_code = 400
+    text = '{"status": "fail"}'
+
+    def __init__(self, error):
+        self._error = error
+
+    def json(self):
+        return {"status": "fail", "data": self._error}
+
+
+def test_start_claim_builds_official_claim_url():
+    _ensure_gettext()
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    url = pm.start_claim()
+
+    assert url.startswith("https://playit.gg/claim/")
+    assert pm.claim_url == url
+    # 5 random bytes -> 10 hex chars, matching the official agent's claim_generate().
+    assert len(url.rsplit("/", 1)[-1]) == 10
+    assert pm._claim_code in url
+
+    pm.abandon_claim()
+    assert pm.claim_url == ""
+    assert pm._claim_code == ""
+
+
+def test_poll_claim_normalizes_states():
+    _ensure_gettext()
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._claim_code = "abc123"
+
+    cases = {
+        "WaitingForUserVisit": "waiting",
+        "WaitingForUser": "waiting",
+        "UserAccepted": "accepted",
+        "UserRejected": "rejected",
+    }
+    for raw, expected in cases.items():
+        with patch("requests.post", return_value=_ClaimSuccessResponse(raw)):
+            assert pm.poll_claim() == expected
+
+
+def test_poll_claim_maps_expired_and_invalid():
+    _ensure_gettext()
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._claim_code = "abc123"
+
+    for raw, expected in {"CodeExpired": "expired", "InvalidCode": "invalid"}.items():
+        with patch("requests.post", return_value=_ClaimFailResponse(raw)):
+            assert pm.poll_claim() == expected
+
+
+def test_poll_claim_requests_self_managed_agent_type():
+    """Hosty creates tunnels via the API, which needs a self-managed agent.
+
+    An "assignable" agent's key is read-only for tunnel creation
+    (NotAllowedWithReadOnly), so the claim must request a self-managed agent.
+    """
+    _ensure_gettext()
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._claim_code = "abc123"
+
+    with patch("requests.post", return_value=_ClaimSuccessResponse("WaitingForUserVisit")) as post:
+        pm.poll_claim()
+
+    payload = post.call_args.kwargs["json"]
+    assert payload["agent_type"] == "self-managed"
+    assert payload["code"] == "abc123"
+
+
+def test_is_agent_self_managed():
+    _ensure_gettext()
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    # Unknown type: treated as usable so this never forces a needless relink.
+    assert pm.is_agent_self_managed() is True
+    pm._agent_type = "self-managed"
+    assert pm.is_agent_self_managed() is True
+    pm._agent_type = "assignable"
+    assert pm.is_agent_self_managed() is False
+
+
+def test_allocate_tunnel_rejects_assignable_agent():
+    """An assignable agent must fail with a clear relink message instead of a
+    generic allocation error, since its key cannot create tunnels."""
+    _ensure_gettext()
+    import tempfile
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_type = "assignable"
+
+    with (
+        patch("hosty.shared.backend.playit_config.load_playit_config", return_value={}),
+        patch.object(PlayitManager, "_retrieve_tunnels", return_value=pm.tunnels),
+    ):
+        try:
+            pm._allocate_kind_tunnel_locked(tempfile.mkdtemp(), 25565, "tcp", kind_key="java")
+        except PlayitManager.TunnelException as e:
+            assert "relink" in str(e).lower()
+        else:
+            raise AssertionError("expected TunnelException for an assignable agent")
+
+
+def test_finish_claim_links_and_restarts_running_agent():
+    """Linking changes identity: a running process would keep serving the old
+    agent, so the claim must restart it (new tunnels would otherwise stay dark)."""
     _ensure_gettext()
     from unittest.mock import Mock, patch
 
@@ -532,6 +657,7 @@ def test_link_account_restarts_running_agent():
     pm = PlayitManager()
     pm._process = Mock()
     pm._process.poll.return_value = None
+    pm._claim_code = "abc123"
     restarts = []
 
     def fake_restart():
@@ -539,22 +665,23 @@ def test_link_account_restarts_running_agent():
         return True, "restarted"
 
     with (
-        patch.object(PlayitManager, "resolve_binary", return_value="/bin/playit"),
-        patch.object(PlayitManager, "_detect_version", return_value=(0, 17, 1)),
-        patch("requests.post", return_value=_LinkSuccessResponse()),
+        patch("requests.post", return_value=_ClaimSuccessResponse({"secret_key": "secret-9"})),
         patch.object(PlayitManager, "_write_secret_key", return_value=True),
         patch.object(PlayitManager, "_initialize_with_retry", return_value=True),
+        patch.object(PlayitManager, "_rename_agent") as rename,
         patch.object(PlayitManager, "restart_agent", side_effect=fake_restart),
     ):
-        ok, msg = pm.link_account("code-123")
+        ok, msg = pm.finish_claim()
 
     assert ok is True
     assert "linked" in msg
     assert restarts == [True]
-    assert pm._agent_id == "agent-9"
+    assert pm._secret_key == "secret-9"
+    assert pm._claim_code == ""
+    rename.assert_called_once()
 
 
-def test_link_account_skips_restart_when_stopped():
+def test_finish_claim_skips_restart_when_stopped():
     _ensure_gettext()
     from unittest.mock import patch
 
@@ -562,18 +689,121 @@ def test_link_account_skips_restart_when_stopped():
 
     pm = PlayitManager()
     assert pm._process is None
+    pm._claim_code = "abc123"
 
     with (
-        patch.object(PlayitManager, "resolve_binary", return_value="/bin/playit"),
-        patch.object(PlayitManager, "_detect_version", return_value=(0, 17, 1)),
-        patch("requests.post", return_value=_LinkSuccessResponse()),
+        patch("requests.post", return_value=_ClaimSuccessResponse({"secret_key": "secret-9"})),
         patch.object(PlayitManager, "_write_secret_key", return_value=True),
         patch.object(PlayitManager, "_initialize_with_retry", return_value=True),
+        patch.object(PlayitManager, "_rename_agent"),
         patch.object(PlayitManager, "restart_agent", side_effect=AssertionError("must not restart")),
     ):
-        ok, _msg = pm.link_account("code-123")
+        ok, _msg = pm.finish_claim()
 
     assert ok is True
+
+
+def test_finish_claim_reports_exchange_failure():
+    _ensure_gettext()
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._claim_code = "abc123"
+
+    with (
+        patch("requests.post", return_value=_ClaimFailResponse("CodeExpired")),
+        patch.object(PlayitManager, "_write_secret_key", return_value=True),
+    ):
+        ok, msg = pm.finish_claim()
+
+    assert ok is False
+    assert "expired" in msg.lower()
+
+
+def test_finish_claim_retries_not_accepted():
+    """Right after UserAccepted the exchange may still report NotAccepted."""
+    _ensure_gettext()
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._claim_code = "abc123"
+    replies = [_ClaimFailResponse("NotAccepted"), _ClaimSuccessResponse({"secret_key": "s"})]
+
+    with (
+        patch("requests.post", side_effect=replies) as post,
+        patch("hosty.shared.backend.playit_manager.time.sleep") as sleep,
+        patch.object(PlayitManager, "_write_secret_key", return_value=True),
+        patch.object(PlayitManager, "_initialize_with_retry", return_value=True),
+        patch.object(PlayitManager, "_rename_agent"),
+        patch.object(PlayitManager, "restart_agent", side_effect=AssertionError("must not restart")),
+    ):
+        ok, msg = pm.finish_claim()
+
+    assert ok is True
+    assert "linked" in msg
+    assert post.call_count == 2
+    sleep.assert_called_once()
+
+
+def test_claim_request_retries_transient_connection_abort():
+    """A dropped claim connection must not abort the whole link flow.
+
+    The claim endpoints sit behind Cloudflare, so transient socket drops
+    (``('Connection aborted.', ...)``) are worth retrying before surfacing an
+    error to the user.
+    """
+    _ensure_gettext()
+    from unittest.mock import patch
+
+    import requests as real_requests
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._claim_code = "abc123"
+    aborted = real_requests.exceptions.ConnectionError("('Connection aborted.', RemoteDisconnected(...))")
+
+    with (
+        patch("requests.post", side_effect=[aborted, _ClaimSuccessResponse({"secret_key": "secret-9"})]) as post,
+        patch("hosty.shared.backend.playit_manager.time.sleep") as sleep,
+        patch.object(PlayitManager, "_write_secret_key", return_value=True),
+        patch.object(PlayitManager, "_initialize_with_retry", return_value=True),
+        patch.object(PlayitManager, "_rename_agent"),
+        patch.object(PlayitManager, "restart_agent", side_effect=AssertionError("must not restart")),
+    ):
+        ok, msg = pm.finish_claim()
+
+    assert ok is True
+    assert "linked" in msg
+    assert post.call_count == 2
+    sleep.assert_called_once()
+
+
+def test_claim_request_reports_error_after_retries_exhausted():
+    _ensure_gettext()
+    from unittest.mock import patch
+
+    import requests as real_requests
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._claim_code = "abc123"
+    aborted = real_requests.exceptions.ConnectionError("('Connection aborted.', RemoteDisconnected(...))")
+
+    with (
+        patch("requests.post", side_effect=aborted) as post,
+        patch("hosty.shared.backend.playit_manager.time.sleep"),
+    ):
+        ok, msg = pm.finish_claim()
+
+    assert ok is False
+    assert "network error" in msg
+    assert post.call_count == PlayitManager._CLAIM_REQUEST_ATTEMPTS
 
 
 def _alloc_patches(pm, api):
