@@ -58,6 +58,21 @@
   <url type="bugtracker">https://github.com/sugarycandybar/Hosty/issues</url>
   <url type="vcs-browser">https://github.com/sugarycandybar/Hosty</url>
   <releases>
+    <release version="1.9.0" date="2026-10-20">
+      <description>
+        <p>Features and improvements:</p>
+        <ul>
+          <li>Added Arclight server support</li>
+          <li>UI improvements in connect and mod management</li>
+          <li>Faster startup and mod downloads</li>
+        </ul>
+        <p>Bug fixes:</p>
+        <ul>
+          <li>Fixed updating servers that use modpacks</li>
+          <li>Fixed Modrinth swipe navigation</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.8.2" date="2026-09-28">
       <description>
         <p>Bug fixes and improvements:</p>
@@ -101,24 +116,6 @@
           <li>Autodelete backups after 30 days</li>
           <li>Added java version selection and JVM arguments</li>
         </ul>
-      </description>
-    </release>
-    <release version="1.7.7" date="2026-06-22">
-      <description>
-        <p>Added Polish translation</p>
-      </description>
-    </release>
-    <release version="1.7.6" date="2026-06-16">
-      <description>
-        <ul>
-          <li>Added support for running multiple servers for peak mining and crafting.</li>
-          <li>Redesigned the Modrinth interface to be more user-friendly.</li>
-        </ul>
-      </description>
-    </release>
-    <release version="1.7.3" date="2026-05-24">
-      <description>
-        <p>Playit agent fix</p>
       </description>
     </release>
   </releases>
