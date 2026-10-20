@@ -125,31 +125,31 @@
   <content_rating type="oars-1.1"/>
   <screenshots>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/44a7af7230679797fbb18bf620351da048303eeb/packaging/linux/screenshots/mods.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/e14e860200049aebb093f30eedcaf3f1cdd3ab2c/packaging/linux/screenshots/mods.png</image>
       <caption xml:lang="en">Install and manage mods</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/44a7af7230679797fbb18bf620351da048303eeb/packaging/linux/screenshots/connect.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/e14e860200049aebb093f30eedcaf3f1cdd3ab2c/packaging/linux/screenshots/connect.png</image>
       <caption xml:lang="en">Share local servers</caption>
     </screenshot>
     <screenshot type="default">
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/44a7af7230679797fbb18bf620351da048303eeb/packaging/linux/screenshots/console.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/e14e860200049aebb093f30eedcaf3f1cdd3ab2c/packaging/linux/screenshots/console.png</image>
       <caption xml:lang="en">Server console and logs</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/44a7af7230679797fbb18bf620351da048303eeb/packaging/linux/screenshots/properties.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/e14e860200049aebb093f30eedcaf3f1cdd3ab2c/packaging/linux/screenshots/properties.png</image>
       <caption xml:lang="en">Edit server properties</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/44a7af7230679797fbb18bf620351da048303eeb/packaging/linux/screenshots/backups.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/e14e860200049aebb093f30eedcaf3f1cdd3ab2c/packaging/linux/screenshots/backups.png</image>
       <caption xml:lang="en">Create and restore backups</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/44a7af7230679797fbb18bf620351da048303eeb/packaging/linux/screenshots/files.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/e14e860200049aebb093f30eedcaf3f1cdd3ab2c/packaging/linux/screenshots/files.png</image>
       <caption xml:lang="en">Manage world files and backups</caption>
     </screenshot>
     <screenshot>
-      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/44a7af7230679797fbb18bf620351da048303eeb/packaging/linux/screenshots/performance.png</image>
+      <image type="source">https://raw.githubusercontent.com/sugarycandybar/Hosty/e14e860200049aebb093f30eedcaf3f1cdd3ab2c/packaging/linux/screenshots/performance.png</image>
       <caption xml:lang="en">Monitor server performance</caption>
     </screenshot>
   </screenshots>
