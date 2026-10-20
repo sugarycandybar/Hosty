@@ -89,7 +89,8 @@ Beta installs alongside stable under the same app ID (Devel icon) and shares you
 
 
 
-https://github.com/user-attachments/assets/ac84cc74-8ac9-401a-923f-6e58d6cd10e0
+https://github.com/user-attachments/assets/9ac1b4ca-a89b-4adb-b902-3d3276fe0fd0
+
 
 
 
