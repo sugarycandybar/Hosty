@@ -3,14 +3,11 @@ WelcomeView - Empty state shown when no server is selected.
 Includes its own Adw.HeaderBar with proper window controls.
 """
 
-from pathlib import Path
-
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Adw, Gdk, GdkPixbuf, Gtk
+from gi.repository import Adw, Gtk
 
 from hosty.shared.utils.constants import APP_ID
 
@@ -43,18 +40,8 @@ class WelcomeView(Gtk.Box):
         content.set_vexpand(True)
         content.set_hexpand(True)
 
-        icon = Gtk.Image()
+        icon = Gtk.Image.new_from_icon_name(APP_ID)
         icon.set_pixel_size(96)
-        icon_path = Path(__file__).resolve().parents[3] / "packaging" / "linux" / "io.github.sugarycandybar.Hosty.svg"
-        if icon_path.exists():
-            try:
-                pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(icon_path), 128, 128, True)
-                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-                icon.set_from_paintable(texture)
-            except Exception:
-                icon.set_from_icon_name(APP_ID)
-        else:
-            icon.set_from_icon_name(APP_ID)
         content.append(icon)
 
         title = Gtk.Label(label=_("Welcome to Hosty"))

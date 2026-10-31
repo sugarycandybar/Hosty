@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="packaging/linux/io.github.sugarycandybar.Hosty.svg" alt="Hosty icon" width="128" />
+  <img src="data/icons/hicolor/scalable/apps/io.github.sugarycandybar.Hosty.svg" alt="Hosty icon" width="128" />
 </p>
 
 <h1 align="center">Hosty</h1>
@@ -46,10 +46,19 @@ It keeps the full server workflow in one app: setup, start/stop, monitoring, mod
 python3 -m pip install requests psutil Pillow
 ```
 
-3. Run Hosty:
+3. Run Hosty from the repository root:
 
 ```bash
-python3 hosty.py
+PYTHONPATH=src python3 -m hosty
+```
+
+To install Hosty into a local prefix instead:
+
+```bash
+meson setup build --prefix="$HOME/.local"
+meson compile -C build
+meson install -C build
+"$HOME/.local/bin/hosty"
 ```
 
 ### Windows
@@ -66,10 +75,16 @@ pacman -S mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-python-gobject ming
 Then run from the MSYS2 UCRT64 shell:
 
 ```bash
-python hosty.py
+PYTHONPATH=src python -m hosty
 ```
 
 Conda is also supported if the environment includes `pygobject` and `gtk4`.
+
+### GNOME Builder
+
+Open the repository folder in GNOME Builder. The root
+`io.github.sugarycandybar.Hosty.yml` manifest is detected automatically: press
+`Ctrl+F5` to build the Flatpak and `Ctrl+F7` to run it.
 
 </details>
 
@@ -97,43 +112,43 @@ https://github.com/user-attachments/assets/9ac1b4ca-a89b-4adb-b902-3d3276fe0fd0
 ## Screenshots
 
 <p align="center">
-	<img src="packaging/linux/screenshots/console.png" alt="Console view" width="900" />
+	<img src="data/screenshots/console.png" alt="Console view" width="900" />
 </p>
 
 - Console: stream logs and send commands.
 
 <p align="center">
-	<img src="packaging/linux/screenshots/performance.png" alt="Performance view" width="900" />
+	<img src="data/screenshots/performance.png" alt="Performance view" width="900" />
 </p>
 
 - Performance: monitor live server performance.
 
 <p align="center">
-	<img src="packaging/linux/screenshots/properties.png" alt="Properties view" width="900" />
+	<img src="data/screenshots/properties.png" alt="Properties view" width="900" />
 </p>
 
 - Properties: edit server settings with autosave.
 
 <p align="center">
-	<img src="packaging/linux/screenshots/files.png" alt="Files and worlds view" width="900" />
+	<img src="data/screenshots/files.png" alt="Files and worlds view" width="900" />
 </p>
 
 - Files: manage worlds, dimensions, and backups.
 
 <p align="center">
-	<img src="packaging/linux/screenshots/mods.png" alt="Mods view" width="900" />
+	<img src="data/screenshots/mods.png" alt="Mods view" width="900" />
 </p>
 
 - Mods: browse Modrinth, install mods, and auto-manage dependencies.
 
 <p align="center">
-	<img src="packaging/linux/screenshots/connect.png" alt="Connect view" width="900" />
+	<img src="data/screenshots/connect.png" alt="Connect view" width="900" />
 </p>
 
 - Connect: configure Playit and manage whitelist/ban lists.
 
 <p align="center">
-	<img src="packaging/linux/screenshots/backups.png" alt="Backups view" width="900" />
+	<img src="data/screenshots/backups.png" alt="Backups view" width="900" />
 </p>
 
 - Backups: create and restore world backups.

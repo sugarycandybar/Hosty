@@ -132,8 +132,8 @@ def test_migrate_prefers_existing_valid_canonical(tmp_path: Path):
 
 def test_dialogs_use_canonical_icon():
     """Both icon entry points must write server-icon.png at 64px, not icon.png at 128px."""
-    picker_src = Path("hosty/gtk_ui/dialogs/icon_picker.py").read_text()
-    create_src = Path("hosty/gtk_ui/dialogs/create_server.py").read_text()
+    picker_src = Path("src/hosty/gtk_ui/dialogs/icon_picker.py").read_text()
+    create_src = Path("src/hosty/gtk_ui/dialogs/create_server.py").read_text()
     for src, name in ((picker_src, "icon_picker.py"), (create_src, "create_server.py")):
         assert "server-icon.png" in src or "SERVER_ICON_FILENAME" in src or "prepare_server_icon" in src, (
             f"{name} does not reference the canonical server-icon.png"

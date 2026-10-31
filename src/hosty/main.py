@@ -6,12 +6,9 @@ and managing modded Minecraft servers.
 """
 
 import os
+import signal
 import sys
 from pathlib import Path
-
-from hosty.daemon.entry import parse_daemon_args, run_headless
-from hosty.factory import create_application
-from hosty.shared.utils.constants import ensure_data_dirs
 
 
 def _prepend_env_path(name: str, value: Path) -> None:
@@ -103,7 +100,15 @@ def _format_missing_gtk_message() -> str:
 
 def main():
     """Launch Hosty, either as the desktop app or as the headless daemon."""
+    from hosty.bootstrap import configure_environment
+
+    configure_environment()
+
     try:
+        from hosty.daemon.entry import parse_daemon_args, run_headless
+        from hosty.factory import create_application
+        from hosty.shared.utils.constants import ensure_data_dirs
+
         ensure_data_dirs()
         headless, _, argv = parse_daemon_args(sys.argv)
         if headless:
@@ -130,4 +135,5 @@ def main():
 
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     sys.exit(main())

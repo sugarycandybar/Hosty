@@ -11,7 +11,7 @@
 
 Hosty uses `gettext`. Mark UI strings with `_("...")` and counts with
 `ngettext("singular", "plural", n)` (both come from builtins via
-`hosty/i18n.py`, no import needed).
+`src/hosty/i18n.py`, no import needed).
 
 The easiest way to contribute a translation is Weblate, which proposes the
 `.po` changes as a pull request.
@@ -26,4 +26,4 @@ msginit -l <locale> -i po/hosty.pot -o po/<locale>.po  # new language only
 
 Then add your locale to `po/LINGUAS` and open a PR. New languages show up in
 the in-app picker automatically, no code changes needed. Only touch
-`po/POTFILES` when adding or removing source files with translatable strings.
+`po/POTFILES.in` when adding or removing source files with translatable strings.

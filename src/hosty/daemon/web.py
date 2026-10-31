@@ -5,7 +5,9 @@ from __future__ import annotations
 import mimetypes
 from pathlib import Path
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+from hosty.shared.utils.assets import asset_path
+
+STATIC_DIR = asset_path("daemon")
 
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",

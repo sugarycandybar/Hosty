@@ -1,4 +1,4 @@
-app-id: io.github.sugarycandybar.Hosty
+id: io.github.sugarycandybar.Hosty
 runtime: org.gnome.Platform
 runtime-version: "51"
 sdk: org.gnome.Sdk
@@ -10,9 +10,10 @@ finish-args:
   - --socket=fallback-x11
   - --device=dri
 modules:
-  - python3-requirements.json
+  - packaging/flatpak/python3-requirements.json
   - name: hosty
     buildsystem: meson
+    builddir: true
     sources:
       - type: dir
-        path: ../../
+        path: .

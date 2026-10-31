@@ -39,8 +39,8 @@ def _repo_po_dir() -> Path | None:
         candidate = parent / "po"
         if (candidate / "LINGUAS").is_file():
             return candidate
-    # Fallback: <repo>/po relative to this file (hosty/i18n.py -> repo/po)
-    fallback = here.parent.parent / "po"
+    # Fallback: <repo>/po relative to this file (src/hosty/i18n.py -> repo/po)
+    fallback = here.parents[2] / "po"
     if (fallback / "LINGUAS").is_file():
         return fallback
     return None
