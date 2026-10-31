@@ -33,7 +33,10 @@ subdir('data')
 subdir('src')
 subdir('po')
 
+gtk_update_icon_cache = find_program('gtk4-update-icon-cache', required: false).found()
+update_desktop_database = find_program('update-desktop-database', required: false).found()
+
 gnome.post_install(
-  gtk_update_icon_cache: true,
-  update_desktop_database: true,
+  gtk_update_icon_cache: gtk_update_icon_cache,
+  update_desktop_database: update_desktop_database,
 )

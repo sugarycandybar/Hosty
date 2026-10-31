@@ -60,7 +60,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install pytest polib requests
-      - run: sudo apt-get update -q && sudo apt-get install -y -q meson ninja-build gettext
+      - run: sudo apt-get update -q && sudo apt-get install -y -q meson ninja-build gettext desktop-file-utils
       - run: meson setup build
       - run: meson compile -C build
       - name: Check translation file lists
