@@ -17,6 +17,20 @@ jobs:
       - run: pip install ruff
       - run: ruff check .
       - run: ruff format --check .
+      - name: Check version consistency
+        run: |
+          python3 - <<'EOF'
+          import tomllib
+          from pathlib import Path
+
+          namespace = {}
+          exec(Path("src/hosty/version.py").read_text(encoding="utf-8"), namespace)
+          expected = namespace["__version__"]
+          actual = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          if actual != expected:
+              raise SystemExit(f"pyproject.toml version {actual} != src/hosty/version.py {expected}")
+          print(f"version OK: {expected}")
+          EOF
 
   typecheck:
     runs-on: ubuntu-latest
@@ -27,7 +41,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install mypy requests psutil pillow tomlkit
-      - run: mypy hosty/ || true
+      - run: mypy src/hosty/ || true
 
   syntax-check:
     runs-on: ubuntu-latest
@@ -36,7 +50,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - run: python3 -m compileall hosty/ hosty.py
+      - run: python3 -m compileall src/hosty
 
   i18n:
     runs-on: ubuntu-latest
@@ -46,7 +60,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install pytest polib requests
-      - run: sudo apt-get update -q && sudo apt-get install -y -q meson ninja-build gettext
+      - run: sudo apt-get update -q && sudo apt-get install -y -q meson ninja-build gettext desktop-file-utils
       - run: meson setup build
       - run: meson compile -C build
       - name: Check translation file lists
@@ -57,7 +71,7 @@ jobs:
           errors = []
           listed = {
               line.strip()
-              for line in Path("po/POTFILES").read_text(encoding="utf-8").splitlines()
+              for line in Path("po/POTFILES.in").read_text(encoding="utf-8").splitlines()
               if line.strip() and not line.strip().startswith("#")
           }
           # Every committed .po must be in LINGUAS (meson only builds those).
@@ -69,7 +83,7 @@ jobs:
               if po.stem not in linguas:
                   errors.append(f"po/{po.name} is not listed in po/LINGUAS, meson will not build it")
           # Every source file using _()/ngettext() must be in POTFILES.
-          for py in sorted(Path("hosty").rglob("*.py")):
+          for py in sorted(Path("src/hosty").rglob("*.py")):
               if "__pycache__" in py.parts or py.name == "i18n.py":
                   continue
               try:
@@ -78,14 +92,14 @@ jobs:
                   continue
               if re.search(r'_\(\s*["\']', src) or "ngettext(" in src:
                   if str(py) not in listed:
-                      errors.append(f"{py} uses gettext but is missing from po/POTFILES")
+                      errors.append(f"{py} uses gettext but is missing from po/POTFILES.in")
           # Desktop/metainfo templates must be listed for string extraction.
           for extra in (
-              "packaging/linux/io.github.sugarycandybar.Hosty.desktop.in",
-              "packaging/linux/io.github.sugarycandybar.Hosty.metainfo.xml.in",
+              "data/io.github.sugarycandybar.Hosty.desktop.in",
+              "data/io.github.sugarycandybar.Hosty.metainfo.xml.in",
           ):
               if extra not in listed:
-                  errors.append(f"{extra} is missing from po/POTFILES")
+                  errors.append(f"{extra} is missing from po/POTFILES.in")
           if errors:
               for e in errors:
                   print(f"::error::{e}")

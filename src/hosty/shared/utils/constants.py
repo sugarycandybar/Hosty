@@ -48,6 +48,9 @@ def _default_data_dir() -> Path:
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / "Hosty"
 
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    if xdg_data_home:
+        return Path(xdg_data_home) / "hosty"
     return Path.home() / ".local" / "share" / "hosty"
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "hosty"
-version = "1.7.7"
+version = "1.9.0"
 requires-python = ">=3.13"
 
 [tool.ruff]
@@ -12,11 +12,12 @@ select = ["E", "F", "I", "W", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"hosty/gtk_ui/**/*.py" = ["E402", "F403", "F405", "F821"]
-"hosty/shared/**/*.py" = ["F821"]
+"src/hosty/gtk_ui/**/*.py" = ["E402", "F403", "F405", "F821"]
+"src/hosty/shared/**/*.py" = ["F821"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = "-q"
 markers = [
     "network: hits real APIs (skipped in offline CI)",

@@ -4,7 +4,7 @@
 #define AppExeName "Hosty.exe"
 
 #ifndef AppVersion
-  #define FileHandle FileOpen("..\..\hosty\version.py")
+  #define FileHandle FileOpen("..\..\src\hosty\version.py")
   #if FileHandle
     #define FileLine FileRead(FileHandle)
     #expr FileClose(FileHandle)

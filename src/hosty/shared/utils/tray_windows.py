@@ -12,7 +12,6 @@ import ctypes
 import ctypes.wintypes
 import io
 import logging
-import sys
 import threading
 from pathlib import Path
 
@@ -396,22 +395,15 @@ class WindowsTrayManager:
         return img
 
     def _find_svg_path(self) -> Path | None:
-        """Locate the Hosty SVG icon from bundled or development paths."""
-        if getattr(sys, "frozen", False):
-            bundle_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-            candidates = [
-                bundle_dir / "share" / "icons" / "hicolor" / "scalable" / "apps" / "io.github.sugarycandybar.Hosty.svg",
-                bundle_dir / "icons" / "io.github.sugarycandybar.Hosty.svg",
-                bundle_dir / "io.github.sugarycandybar.Hosty.svg",
-            ]
-            for candidate in candidates:
-                if candidate.exists():
-                    return candidate
+        """Locate the Hosty SVG icon from installed, bundled, or source paths."""
+        from hosty.shared.utils.assets import icon_theme_dir
 
-        dev_path = Path(__file__).resolve().parents[3] / "packaging" / "linux" / "io.github.sugarycandybar.Hosty.svg"
-        if dev_path.exists():
-            return dev_path
-        return None
+        icon_dir = icon_theme_dir()
+        if icon_dir is None:
+            return None
+
+        candidate = icon_dir / "hicolor" / "scalable" / "apps" / "io.github.sugarycandybar.Hosty.svg"
+        return candidate if candidate.is_file() else None
 
     def _pil_to_hicon(self, img) -> int:
         """Convert a PIL Image to a Windows HICON via temporary ICO file."""

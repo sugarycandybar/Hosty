@@ -51,7 +51,7 @@ jobs:
         id: version
         shell: msys2 {0}
         run: |
-          VERSION=$(python -c "import ast; from pathlib import Path; tree = ast.parse(Path('hosty/version.py').read_text(encoding='utf-8')); print(next((node.value.value for node in tree.body if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id == '__version__' and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)), ''))")
+          VERSION=$(python -c "import ast; from pathlib import Path; tree = ast.parse(Path('src/hosty/version.py').read_text(encoding='utf-8')); print(next((node.value.value for node in tree.body if isinstance(node, ast.Assign) for target in node.targets if isinstance(target, ast.Name) and target.id == '__version__' and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)), ''))")
           if [ -z "$VERSION" ]; then
             echo "__version__ not found" >&2
             exit 1
@@ -92,12 +92,12 @@ jobs:
           GLIB_SCHEMAS="$(cygpath -w /ucrt64/share/glib-2.0/schemas)"
           ICONS="$(cygpath -w /ucrt64/share/icons)"
           PIXBUF_LOADERS="$(cygpath -w /ucrt64/lib/gdk-pixbuf-2.0)"
-          APP_ICONS="$(cygpath -w packaging/linux)"
-          HOSTY_CSS="$(cygpath -w hosty/gtk_ui/style.css)"
-          HOSTY_DAEMON_STATIC="$(cygpath -w hosty/daemon/static)"
+          APP_ICONS="$(cygpath -w data/icons)"
+          HOSTY_CSS="$(cygpath -w data/style.css)"
+          HOSTY_DAEMON_STATIC="$(cygpath -w data/daemon)"
 
           mkdir -p build
-          rsvg-convert -w 256 -h 256 packaging/linux/io.github.sugarycandybar.Hosty.svg -o build/Hosty.png
+          rsvg-convert -w 256 -h 256 data/icons/hicolor/scalable/apps/io.github.sugarycandybar.Hosty.svg -o build/Hosty.png
           python - <<'PY'
           from PIL import Image
           img = Image.open("build/Hosty.png")
@@ -117,10 +117,11 @@ jobs:
             --add-data "$GLIB_SCHEMAS;share/glib-2.0/schemas" \
             --add-data "$ICONS;share/icons" \
             --add-data "$PIXBUF_LOADERS;lib/gdk-pixbuf-2.0" \
-            --add-data "$APP_ICONS;icons" \
-            --add-data "$HOSTY_CSS;hosty/gtk_ui" \
-            --add-data "$HOSTY_DAEMON_STATIC;hosty/daemon/static" \
-            hosty.py
+            --add-data "$APP_ICONS;share/icons" \
+            --add-data "$HOSTY_CSS;share/hosty" \
+            --add-data "$HOSTY_DAEMON_STATIC;share/hosty/daemon" \
+            --paths src \
+            src/hosty/__main__.py
 
           BUNDLE_PIXBUF_DIR="$(find dist/Hosty -type d -path '*/gdk-pixbuf-2.0/2.10.0' | head -n 1)"
           if [ -z "$BUNDLE_PIXBUF_DIR" ]; then

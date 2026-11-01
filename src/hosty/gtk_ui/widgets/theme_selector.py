@@ -17,7 +17,7 @@ Original source (LGPL-3.0-or-later, (c) Christian Hergert):
         dark:   classes theme-selector+dark,   action-target 'force-dark',
                 tooltip "Dark Style", group=light
   - CSS node name "themeselector" (gtk_widget_class_set_css_name) with the
-    style.css block copied verbatim into hosty/gtk_ui/style.css.
+    style.css block copied verbatim into data/style.css.
   - Embedded via gtk_popover_menu_add_child(popover, selector, "interface-style")
     where the GMenu contains <attribute name="custom">interface-style</attribute>.
 

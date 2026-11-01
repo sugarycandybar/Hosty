@@ -1,7 +1,7 @@
 """Shared entry-point helpers for the headless daemon.
 
-Used by both the source entry point (hosty.py) and the installed
-flatpak/system wrapper (bin/hosty.in) so daemon behaviour is identical.
+Used by both ``python -m hosty`` and the installed launcher so daemon
+behaviour is identical.
 """
 
 from __future__ import annotations

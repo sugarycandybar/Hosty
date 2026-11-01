@@ -20,6 +20,7 @@ from hosty.gtk_ui.window import HostyWindow
 from hosty.i18n import set_language, setup_gettext
 from hosty.shared.backend.server_manager import ServerManager
 from hosty.shared.core.events import set_main_thread_dispatcher
+from hosty.shared.utils.assets import asset_path, icon_theme_dir
 from hosty.shared.utils.constants import APP_ID
 
 
@@ -197,7 +198,7 @@ class HostyApplication(Adw.Application):
         if not display:
             return
         css_provider = Gtk.CssProvider()
-        css_path = Path(__file__).parent / "style.css"
+        css_path = asset_path("style.css")
 
         if css_path.exists():
             css_provider.load_from_path(str(css_path))
@@ -215,17 +216,22 @@ class HostyApplication(Adw.Application):
 
         icon_theme = Gtk.IconTheme.get_for_display(display)
 
-        candidates = []
-        if getattr(sys, "frozen", False):
-            bundle_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
-            candidates.append(bundle_dir / "share" / "icons")
-            candidates.append(bundle_dir / "icons")
+        # Development sandboxes (for example GNOME Builder's build sandbox)
+        # may expose the host's configured icon theme name without mounting
+        # the theme itself. GTK then falls back to a partial built-in icon
+        # set, which makes common symbolic icons disappear. Fall back to
+        # Adwaita, which ships with the runtime, in that case.
+        settings = Gtk.Settings.get_default()
+        theme_name = settings.get_property("gtk-icon-theme-name") if settings else icon_theme.get_theme_name()
+        if theme_name and not any(
+            (Path(directory) / theme_name / "index.theme").is_file() for directory in icon_theme.get_search_path()
+        ):
+            if settings is not None:
+                settings.set_property("gtk-icon-theme-name", "Adwaita")
 
-        candidates.append(Path(__file__).resolve().parents[2] / "packaging" / "linux")
-
-        for icon_dir in candidates:
-            if icon_dir.exists():
-                icon_theme.add_search_path(str(icon_dir))
+        icon_dir = icon_theme_dir()
+        if icon_dir is not None:
+            icon_theme.add_search_path(str(icon_dir))
 
     def _setup_actions(self):
         """Register application actions."""

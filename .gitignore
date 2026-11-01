@@ -10,6 +10,7 @@ env/
 ENV/
 
 # Build and packaging output
+_build/
 build/
 dist/
 *.egg-info/
@@ -30,6 +31,7 @@ htmlcov/
 # IDE/editor settings
 .vscode/
 .idea/
+.gnome-builder/
 
 # Backup files
 *~
