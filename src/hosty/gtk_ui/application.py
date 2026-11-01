@@ -216,6 +216,19 @@ class HostyApplication(Adw.Application):
 
         icon_theme = Gtk.IconTheme.get_for_display(display)
 
+        # Development sandboxes (for example GNOME Builder's build sandbox)
+        # may expose the host's configured icon theme name without mounting
+        # the theme itself. GTK then falls back to a partial built-in icon
+        # set, which makes common symbolic icons disappear. Fall back to
+        # Adwaita, which ships with the runtime, in that case.
+        settings = Gtk.Settings.get_default()
+        theme_name = settings.get_property("gtk-icon-theme-name") if settings else icon_theme.get_theme_name()
+        if theme_name and not any(
+            (Path(directory) / theme_name / "index.theme").is_file() for directory in icon_theme.get_search_path()
+        ):
+            if settings is not None:
+                settings.set_property("gtk-icon-theme-name", "Adwaita")
+
         icon_dir = icon_theme_dir()
         if icon_dir is not None:
             icon_theme.add_search_path(str(icon_dir))
