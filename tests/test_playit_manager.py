@@ -2508,6 +2508,101 @@ def test_select_asset_prefers_daemon_over_cli():
     assert chosen["name"] == "playit-linux-amd64"
 
 
+def test_select_asset_windows_picks_daemon_not_cli():
+    """v1.2.0 ships playit-windows-*.exe as the CLI and playitd-windows-*.exe
+    as the daemon. The CLI rejects --secret-path, so it cannot start."""
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    assets = [
+        {"name": "playit-windows-x86-signed.exe"},
+        {"name": "playit-windows-x86-signed.msi"},
+        {"name": "playit-windows-x86.exe"},
+        {"name": "playit-windows-x86.msi"},
+        {"name": "playit-windows-x86_64-signed.exe"},
+        {"name": "playit-windows-x86_64-signed.msi"},
+        {"name": "playit-windows-x86_64.exe"},
+        {"name": "playit-windows-x86_64.msi"},
+        {"name": "playitd-tray-windows-x86-signed.exe"},
+        {"name": "playitd-tray-windows-x86_64-signed.exe"},
+        {"name": "playitd-windows-x86-signed.exe"},
+        {"name": "playitd-windows-x86.exe"},
+        {"name": "playitd-windows-x86_64-signed.exe"},
+        {"name": "playitd-windows-x86_64.exe"},
+    ]
+
+    with (
+        patch("hosty.shared.backend.playit_manager.platform.system", return_value="Windows"),
+        patch("hosty.shared.backend.playit_manager.platform.machine", return_value="AMD64"),
+    ):
+        chosen = pm._select_asset(assets)
+
+    assert chosen is not None
+    assert chosen["name"] == "playitd-windows-x86_64-signed.exe"
+
+
+def test_windows_binary_path_uses_daemon_name():
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    with patch("hosty.shared.backend.playit_manager.sys.platform", "win32"):
+        assert pm.binary_path.name == "playitd.exe"
+
+
+def test_resolve_binary_windows_ignores_cli_on_path():
+    """A playit.exe from PATH is the CLI; Hosty must not launch it as a daemon."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    with (
+        patch("hosty.shared.backend.playit_manager.sys.platform", "win32"),
+        patch.object(PlayitManager, "binary_path", new=Path("/missing/playitd.exe")),
+        patch(
+            "hosty.shared.backend.playit_manager.shutil.which",
+            side_effect=lambda name: r"C:\playit\playit.exe" if name == "playit" else None,
+        ),
+    ):
+        assert pm.resolve_binary() is None
+
+
+def test_start_agent_service_windows_uses_its_own_pipe(tmp_path):
+    """The installed service owns the default pipe; Hosty needs a private one."""
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm.directory = tmp_path
+    captured = {}
+
+    class FakeProcess:
+        def poll(self):
+            return None
+
+    def fake_popen(cmd, **kwargs):
+        captured["cmd"] = cmd
+        return FakeProcess()
+
+    with (
+        patch("hosty.shared.backend.playit_manager.sys.platform", "win32"),
+        patch("hosty.shared.backend.playit_manager.hidden_subprocess_kwargs", return_value={}),
+        patch("hosty.shared.backend.playit_manager.subprocess.Popen", side_effect=fake_popen),
+    ):
+        assert pm._start_agent_service(r"C:\hosty\playitd.exe") is True
+
+    cmd = captured["cmd"]
+    assert cmd[0] == r"C:\hosty\playitd.exe"
+    socket_index = cmd.index("--socket-path")
+    assert cmd[socket_index + 1].startswith(r"\\.\pipe\hosty-playit-")
+
+
 def test_save_bedrock_token_ignores_legacy_raknet(tmp_path):
     """A failed NetherNet migration must not point Geyser at a RakNet tunnel."""
     from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
