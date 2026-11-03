@@ -1929,29 +1929,54 @@ class ServerManager(EventEmitter):
         return self.playit_manager.sync_account_tunnels(servers)
 
     def ensure_bedrock_transport(self, server_id: str) -> bool:
-        """Ensure ``transport=raknet`` in server.properties for Bedrock-tunnelled servers.
+        """Point a Bedrock-tunnelled server at NetherNet instead of RakNet.
 
-        Playit's edges only support RakNet on Bedrock tunnels (newer Bedrock
-        defaults to NetherNet, which silently fails through the tunnel).
-        For Java servers the key is inert and ignored. Returns True when the
-        file was changed. Best-effort: never raises.
+        playit retired RakNet for Bedrock in October 2026, so Geyser must use
+        ``transport: nethernet`` with playit's NXS signaling. This configures
+        Geyser's per-loader config (with the tunnel's NetherNet token) and
+        corrects a legacy ``transport=raknet`` in ``server.properties``.
+
+        Returns True when ``server.properties`` was changed. Best-effort:
+        never raises.
         """
+        info = self._servers.get(server_id)
+        if not info:
+            return False
         try:
             if not self.has_bedrock_tunnel(server_id):
                 return False
-            cfg = self.get_config(server_id)
-            if not cfg:
-                return False
-            props = cfg.load()
-            if str(props.get("transport", "")).strip().lower() == "raknet":
-                return False
-            cfg.set_value("transport", "raknet")
-            cfg.save()
-            logger.info("set transport=raknet for Bedrock-tunnelled server %s", server_id)
-            return True
         except Exception:
-            logger.exception("failed to enforce transport=raknet for %s", server_id)
             return False
+
+        changed = False
+        try:
+            cfg = self.get_config(server_id)
+            if cfg:
+                props = cfg.load()
+                current = props.get("transport")
+                if current is not None and str(current).strip().lower() != "nethernet":
+                    cfg.set_value("transport", "nethernet")
+                    cfg.save()
+                    changed = True
+                    logger.info("set transport=nethernet for Bedrock-tunnelled server %s", server_id)
+        except Exception:
+            logger.exception("failed to update transport for %s", server_id)
+
+        try:
+            playit = getattr(self, "playit_manager", None)
+            if playit is not None:
+                playit_cfg = load_playit_config(info.server_dir)
+                playit.configure_geyser_mod(
+                    str(info.server_dir),
+                    self.get_bedrock_port(server_id),
+                    loader=info.loader_type,
+                    platform=info.arclight_platform,
+                    nethernet_token=str(playit_cfg.get("bedrock_nethernet_token", "")).strip(),
+                )
+        except Exception:
+            logger.exception("failed to configure Geyser NetherNet transport for %s", server_id)
+
+        return changed
 
     def start_server(self, server_id: str) -> tuple[bool, dict | None]:
         """Start a server with the same guard checks the desktop UI performs.
@@ -2017,8 +2042,9 @@ class ServerManager(EventEmitter):
             platform=info.arclight_platform,
         )
 
-        # Bedrock tunnels only support RakNet (NetherNet fails silently):
-        # enforce it before launch. Best-effort; never blocks the start.
+        # Bedrock tunnels now use NetherNet/NXS: make sure Geyser's config
+        # matches the tunnel (and its token) before launch. Best-effort;
+        # never blocks the start.
         try:
             self.ensure_bedrock_transport(server_id)
         except Exception:

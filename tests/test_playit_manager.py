@@ -98,8 +98,9 @@ def _tunnel_data(
     domain="nicely-units.tun.ply.gg",
     remote_port=7701,
     name=None,
+    nethernet_token=None,
 ):
-    return {
+    data = {
         "id": tunnel_id,
         "name": name if name is not None else f"hosty-x-{proto}-{local_port}",
         "tunnel_type": tunnel_type,
@@ -116,6 +117,9 @@ def _tunnel_data(
         "origin": {"data": {"local_port": local_port, "local_ip": "127.0.0.1"}},
         "created_at": "",
     }
+    if nethernet_token:
+        data["nethernet_token"] = nethernet_token
+    return data
 
 
 class _FakePlayitApi:
@@ -170,15 +174,10 @@ class _FakePlayitApi:
             )
             return {"status": "success", "data": {"id": tunnel_id}}
         if endpoint == "v1/tunnels/create":
-            # Voice chat uses raw (typeless) tunnels: game-typed UDP tunnels
-            # are protocol-filtered by playit's edges.
             self.created += 1
             tunnel_id = f"t-new-{self.created}"
             protocol = payload.get("protocol") or {}
             details = protocol.get("details") or {}
-            assert protocol.get("type") == "raw-ports", "voice must use raw-ports protocol"
-            assert details.get("port_type") == "udp"
-            assert str(details.get("software_description") or "").strip(), "raw tunnels need a description"
             ep = payload.get("endpoint") or {}
             assert (ep.get("details") or {}).get("region") == "global"
             fields = (((payload.get("origin") or {}).get("data") or {}).get("config") or {}).get("fields", [])
@@ -186,14 +185,30 @@ class _FakePlayitApi:
             for field in fields:
                 if field.get("name") == "local_port":
                     local_port = int(field.get("value", 24454))
+
+            if protocol.get("type") == "raw-ports":
+                # Voice chat uses raw (typeless) tunnels: game-typed UDP
+                # tunnels are protocol-filtered by playit's edges.
+                assert details.get("port_type") == "udp"
+                assert str(details.get("software_description") or "").strip(), "raw tunnels need a description"
+                tunnel_type = None
+                nethernet_token = None
+            elif protocol.get("type") == "tunnel-type" and details == "nethernet":
+                # Bedrock uses a NetherNet tunnel with an NXS token.
+                tunnel_type = "nethernet"
+                nethernet_token = "pnx1.test-token"
+            else:
+                raise AssertionError(f"unexpected v1 protocol {protocol}")
+
             self.store[tunnel_id] = _tunnel_data(
                 tunnel_id,
                 proto="udp",
-                tunnel_type=None,
+                tunnel_type=tunnel_type,
                 local_port=local_port,
                 domain="new.tun.ply.gg",
                 remote_port=7800,
                 name=payload.get("name"),
+                nethernet_token=nethernet_token,
             )
             return {"status": "success", "data": {"id": tunnel_id}}
         raise AssertionError(f"unexpected endpoint {endpoint}")
@@ -618,7 +633,7 @@ def test_bedrock_request_does_not_steal_voice_tunnel(tmp_path):
         ok, _msg, endpoint = pm.add_bedrock_tunnel("srv", str(tmp_path), bedrock_port=19132)
 
     assert ok is True
-    assert endpoint == "new.tun.ply.gg:7800"
+    assert endpoint == "new.tun.ply.gg:19132"
     assert api.created == 1
     assert store["t-voice"]["origin"]["data"]["local_port"] == 24454
     assert load_playit_config(tmp_path)["bedrock_tunnel_id"] != "t-voice"
@@ -767,7 +782,12 @@ def test_auto_create_clears_stale_auto_endpoint(tmp_path):
     ):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454, loader="fabric")
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
+    assert result == {
+        "bedrock_endpoint": "",
+        "bedrock_migrated": "",
+        "voicechat_endpoint": "",
+        "voicechat_migrated": "",
+    }
     assert load_playit_config(tmp_path)["voicechat_endpoint"] == ""
 
 
@@ -837,7 +857,12 @@ def test_deleted_tunnel_is_not_resurrected_on_agent_start(tmp_path):
     ):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454, loader="fabric")
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
+    assert result == {
+        "bedrock_endpoint": "",
+        "bedrock_migrated": "",
+        "voicechat_endpoint": "",
+        "voicechat_migrated": "",
+    }
     assert load_playit_config(tmp_path)["voicechat_endpoint"] == ""
     assert load_playit_config(tmp_path)["voicechat_tunnel_id"] == "t-gone"
 
@@ -874,7 +899,12 @@ def test_fresh_install_gets_tunnel_created(tmp_path):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454, loader="fabric")
 
     assert add_mock.call_count == 1
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "new.tun.ply.gg:7800", "voicechat_migrated": ""}
+    assert result == {
+        "bedrock_endpoint": "",
+        "bedrock_migrated": "",
+        "voicechat_endpoint": "new.tun.ply.gg:7800",
+        "voicechat_migrated": "",
+    }
     assert load_playit_config(tmp_path)["voicechat_endpoint"] == "new.tun.ply.gg:7800"
 
 
@@ -952,7 +982,12 @@ def test_auto_create_skips_validation_without_fresh_list(tmp_path):
     with patch.object(PlayitManager, "_request", side_effect=RuntimeError("offline")):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), voicechat_port=24454, loader="fabric")
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
+    assert result == {
+        "bedrock_endpoint": "",
+        "bedrock_migrated": "",
+        "voicechat_endpoint": "",
+        "voicechat_migrated": "",
+    }
     assert load_playit_config(tmp_path)["voicechat_endpoint"] == "maybe.tun.ply.gg:7701"
 
 
@@ -995,7 +1030,12 @@ def test_bedrock_failure_does_not_skip_voice_validation(tmp_path):
             "srv", str(tmp_path), bedrock_port=19132, voicechat_port=24454, loader="fabric"
         )
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
+    assert result == {
+        "bedrock_endpoint": "",
+        "bedrock_migrated": "",
+        "voicechat_endpoint": "",
+        "voicechat_migrated": "",
+    }
     cfg = load_playit_config(tmp_path)
     assert cfg["bedrock_endpoint"] == ""
     assert cfg["voicechat_endpoint"] == ""
@@ -1023,7 +1063,12 @@ def test_auto_create_clears_stale_java_endpoint(tmp_path):
     ):
         result = pm.auto_create_tunnel_mods("srv", str(tmp_path), loader="fabric")
 
-    assert result == {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
+    assert result == {
+        "bedrock_endpoint": "",
+        "bedrock_migrated": "",
+        "voicechat_endpoint": "",
+        "voicechat_migrated": "",
+    }
     assert load_playit_config(tmp_path)["java_endpoint"] == ""
 
 
@@ -2274,3 +2319,221 @@ def test_sync_adopts_java_only_after_session_restore(tmp_path):
     cfg = load_playit_config(srv_dir)
     assert cfg["java_endpoint"] == "java.tun.ply.gg"
     assert cfg["java_tunnel_id"] == "t-java"
+
+
+def test_nethernet_tunnel_uses_connect_port_and_matches_endpoints():
+    """NetherNet clients always join on 19132, not the allocated UDP port."""
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    tunnel = pm.Tunnel(
+        pm,
+        _tunnel_data(
+            "t-net",
+            proto="udp",
+            tunnel_type="nethernet",
+            local_port=19132,
+            domain="net.tun.ply.gg",
+            remote_port=55361,
+            nethernet_token="pnx1.token",
+        ),
+    )
+
+    assert tunnel.nethernet_token == "pnx1.token"
+    assert tunnel.hostname == "net.tun.ply.gg:19132"
+    assert pm._tunnel_endpoint(tunnel) == "net.tun.ply.gg:19132"
+    assert pm._tunnel_matches_endpoint(tunnel, "net.tun.ply.gg:19132")
+    assert pm._tunnel_matches_endpoint(tunnel, "net.tun.ply.gg")
+    # Old configs may still hold the allocated UDP port.
+    assert pm._tunnel_matches_endpoint(tunnel, "net.tun.ply.gg:55361")
+    assert not pm._tunnel_matches_endpoint(tunnel, "net.tun.ply.gg:19133")
+
+
+def test_bedrock_tunnel_creates_nethernet_and_stores_token(tmp_path):
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    store = {}
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(tmp_path, bedrock_port=19132)
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        ok, _msg, endpoint = pm.add_bedrock_tunnel("srv", str(tmp_path), bedrock_port=19132)
+
+    assert ok is True
+    assert endpoint == "new.tun.ply.gg:19132"
+    assert "v1/tunnels/create" in api.calls
+    assert store["t-new-1"]["tunnel_type"] == "nethernet"
+    cfg = load_playit_config(tmp_path)
+    assert cfg["bedrock_tunnel_id"] == "t-new-1"
+    assert cfg["bedrock_nethernet_token"] == "pnx1.test-token"
+    assert cfg["bedrock_nethernet_migrated"] is False
+
+
+def test_legacy_raknet_bedrock_tunnel_is_migrated(tmp_path):
+    """A stored minecraft-bedrock (RakNet) tunnel is replaced by NetherNet."""
+    from contextlib import ExitStack
+
+    from hosty.shared.backend.playit_config import load_playit_config
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    pm._agent_id = "agent-1"
+    store = {
+        "t-legacy": _tunnel_data(
+            "t-legacy",
+            local_port=19132,
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=7601,
+            name="hosty-bedrock-udp-19132-1",
+        )
+    }
+    api = _FakePlayitApi(store, allowed=4)
+    _save_voice_cfg(
+        tmp_path,
+        bedrock_port=19132,
+        bedrock_tunnel_id="t-legacy",
+        bedrock_endpoint="old.tun.ply.gg:7601",
+    )
+
+    with ExitStack() as stack:
+        for ctx in _alloc_patches(pm, api):
+            stack.enter_context(ctx)
+        ok, _msg, endpoint = pm.add_bedrock_tunnel("srv", str(tmp_path), bedrock_port=19132)
+
+    assert ok is True
+    assert endpoint == "new.tun.ply.gg:19132"
+    assert "t-legacy" not in store
+    assert store["t-new-1"]["tunnel_type"] == "nethernet"
+    cfg = load_playit_config(tmp_path)
+    assert cfg["bedrock_tunnel_id"] == "t-new-1"
+    assert cfg["bedrock_endpoint"] == "new.tun.ply.gg:19132"
+    assert cfg["bedrock_nethernet_token"] == "pnx1.test-token"
+    assert cfg["bedrock_nethernet_migrated"] is True
+
+
+def test_geyser_config_rewrites_legacy_raknet_block():
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    content = (
+        "# top comment\n"
+        "bedrock:\n"
+        "  address: 0.0.0.0\n"
+        "  port: 19132\n"
+        "  clone-remote-port: false\n"
+        "\n"
+        "  signaling:\n"
+        "    mode: builtin\n"
+        "    stun-discovery: true\n"
+        "\n"
+        "    nxs:\n"
+        "      token: ''\n"
+        "      endpoint: https://agent.warden.cloud\n"
+        "\n"
+        "java:\n"
+        "  auth-type: floodgate\n"
+    )
+
+    out = pm._replace_geyser_bedrock_block(content, 19132, "pnx1.tok")
+
+    assert "# top comment" in out
+    assert "transport: nethernet" in out
+    assert "webrtc-port: 0" in out
+    assert "mode: nxs" in out
+    assert "stun-discovery: false" in out
+    assert "token: 'pnx1.tok'" in out
+    assert "endpoint: https://nethernet.playit.gg" in out
+    assert "agent.warden.cloud" not in out
+    assert "java:\n  auth-type: floodgate" in out
+
+
+def test_geyser_config_preserves_comments_when_already_nethernet():
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    content = (
+        "bedrock:\n"
+        "  # keep this comment\n"
+        "  address: 0.0.0.0\n"
+        "  port: 19132\n"
+        "  webrtc-port: 0\n"
+        "  transport: nethernet\n"
+        "  clone-remote-port: false\n"
+        "\n"
+        "  signaling:\n"
+        "    mode: nxs\n"
+        "    stun-discovery: false\n"
+        "\n"
+        "    nxs:\n"
+        "      token: 'old'\n"
+        "      endpoint: https://nethernet.playit.gg\n"
+        "\n"
+        "java:\n"
+        "  auth-type: floodgate\n"
+    )
+
+    out = pm._replace_geyser_bedrock_block(content, 19132, "pnx1.new")
+
+    assert "  # keep this comment" in out
+    assert "token: 'pnx1.new'" in out
+
+
+def test_select_asset_prefers_daemon_over_cli():
+    from unittest.mock import patch
+
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    pm = PlayitManager()
+    assets = [
+        {"name": "playit-cli-linux-amd64"},
+        {"name": "playit-linux-amd64"},
+        {"name": "playit-openrc_x86.apk"},
+    ]
+
+    with (
+        patch("hosty.shared.backend.playit_manager.platform.system", return_value="Linux"),
+        patch("hosty.shared.backend.playit_manager.platform.machine", return_value="x86_64"),
+    ):
+        chosen = pm._select_asset(assets)
+
+    assert chosen is not None
+    assert chosen["name"] == "playit-linux-amd64"
+
+
+def test_save_bedrock_token_ignores_legacy_raknet(tmp_path):
+    """A failed NetherNet migration must not point Geyser at a RakNet tunnel."""
+    from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
+    from hosty.shared.backend.playit_manager import PlayitManager
+
+    save_playit_config(
+        tmp_path,
+        {
+            "bedrock_tunnel_id": "t-legacy",
+            "bedrock_endpoint": "old.tun.ply.gg:7601",
+            "bedrock_nethernet_token": "pnx1.keep",
+        },
+    )
+    pm = PlayitManager()
+    legacy = pm.Tunnel(
+        pm,
+        _tunnel_data(
+            "t-legacy",
+            tunnel_type="minecraft-bedrock",
+            domain="old.tun.ply.gg",
+            remote_port=7601,
+        ),
+    )
+
+    pm._save_bedrock_token(tmp_path, legacy, pm._tunnel_endpoint(legacy))
+
+    cfg = load_playit_config(tmp_path)
+    assert cfg["bedrock_endpoint"] == "old.tun.ply.gg:7601"
+    assert cfg["bedrock_nethernet_token"] == "pnx1.keep"

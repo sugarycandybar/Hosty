@@ -38,6 +38,16 @@ ENDPOINT_HOSTPORT_RE = re.compile(r"(((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}|(?:\d{1,3
 SECRET_VALUE_RE = re.compile(r'(?mi)^\s*(?:secret|secret_key|key)\s*=\s*"([^"]+)"\s*$')
 VERSION_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
+#: playit agent release pinned by Hosty. v1.2.0 is the first release that
+#: forwards NetherNet traffic (Geyser/WaterdogPE) through NXS signaling.
+PLAYIT_AGENT_VERSION = "v1.2.0"
+PLAYIT_AGENT_VERSION_NUMBER = (1, 2, 0)
+
+#: playit's NetherNet tunnel type (Minecraft Bedrock without RakNet).
+NETHERNET_TUNNEL_TYPE = "nethernet"
+NETHERNET_CONNECT_PORT = 19132
+NETHERNET_SIGNALING_ENDPOINT = "https://nethernet.playit.gg"
+
 
 def _split_endpoint(endpoint: str) -> tuple[str, int | None]:
     text = str(endpoint or "").strip()
@@ -112,6 +122,9 @@ class PlayitManager(EventEmitter):
             # playit's edges: Simple Voice Chat packets are dropped on a
             # minecraft-bedrock tunnel, so voice chat needs a raw tunnel.
             self.raw_tunnel_type = tunnel_data.get("tunnel_type")
+            # NetherNet tunnels expose a per-tunnel token that Geyser must
+            # present to playit's NXS signaling service.
+            self.nethernet_token = str(tunnel_data.get("nethernet_token") or "").strip()
             self.protocol = tunnel_data.get("port_type") or "tcp"
             self.status = str((tunnel_data.get("alloc") or {}).get("status", "pending"))
 
@@ -150,7 +163,16 @@ class PlayitManager(EventEmitter):
             except Exception:
                 self.remote_port = None
 
-            if self.type == "both" and self.remote_port:
+            if not self.nethernet_token:
+                cached = self._parent.tunnel_cache.get_tunnel(self.id)
+                self.nethernet_token = str(cached.get("nethernet_token") or "").strip()
+
+            if self.raw_tunnel_type == NETHERNET_TUNNEL_TYPE:
+                # NetherNet players always connect to the tunnel hostname on
+                # 19132; the allocated public UDP port is only used by the
+                # agent's UDP forwarding, not by clients.
+                self.hostname = f"{self.domain}:{NETHERNET_CONNECT_PORT}" if self.domain else ""
+            elif self.type == "both" and self.remote_port:
                 self.hostname = f"{self.domain}:{self.remote_port}"
             else:
                 self.hostname = self.domain
@@ -264,7 +286,7 @@ class PlayitManager(EventEmitter):
 
     def _is_pinned_binary(self) -> bool:
         marker = self.directory / ".playit-version"
-        return marker.exists() and marker.read_text(encoding="utf-8").strip() == "v0.17.1"
+        return marker.exists() and marker.read_text(encoding="utf-8").strip() == PLAYIT_AGENT_VERSION
 
     def is_installed(self) -> bool:
         return self.resolve_binary() is not None
@@ -368,26 +390,13 @@ class PlayitManager(EventEmitter):
             return False
 
     def secret_path(self) -> Path | None:
-        binary = self.resolve_binary()
-        if not binary:
-            return None
+        """Return Hosty's own playit secret file.
 
-        try:
-            result = subprocess.run(
-                [binary, "--stdout", "secret-path"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=8,
-                **hidden_subprocess_kwargs(),
-            )
-            output = (result.stdout or "").strip()
-            if not output:
-                return None
-            raw = output.splitlines()[-1].strip()
-            return Path(raw) if raw else None
-        except Exception:
-            return None
+        The v1.x daemon has no ``secret-path`` subcommand (that moved to the
+        separate CLI), so Hosty always writes and reads ``playit.toml`` in its
+        own data directory.
+        """
+        return self.toml_path if self.toml_path.exists() else None
 
     def read_claimed_secret(self) -> str:
         if self._load_config():
@@ -421,52 +430,39 @@ class PlayitManager(EventEmitter):
         return bool(self.read_claimed_secret())
 
     def _detect_version(self, binary: str) -> tuple[int, int, int]:
-        # Try v1.x style first: playit version
-        try:
-            result = subprocess.run(
-                [binary, "version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=6,
-                **hidden_subprocess_kwargs(),
-            )
-            text = (result.stdout or "").strip()
-            match = VERSION_RE.search(text)
-            if match:
-                version = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
-                return version
-        except Exception:
-            pass
+        # The v1.x daemon has no version flag; Hosty records the release it
+        # installed in .playit-version. Fall back to probing the binary for
+        # older releases that still supported ``version``/``--version``.
+        marker = self.directory / ".playit-version"
+        if marker.exists():
+            try:
+                match = VERSION_RE.search(marker.read_text(encoding="utf-8"))
+                if match:
+                    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+            except Exception:
+                pass
 
-        # Try old style: playit --version
-        try:
-            result = subprocess.run(
-                [binary, "--version"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=6,
-                **hidden_subprocess_kwargs(),
-            )
-            text = (result.stdout or "").strip()
-            match = VERSION_RE.search(text)
-            if match:
-                version = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
-                return version
-        except Exception:
-            pass
+        for args in (["version"], ["--version"]):
+            try:
+                result = subprocess.run(
+                    [binary, *args],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    timeout=6,
+                    **hidden_subprocess_kwargs(),
+                )
+                text = (result.stdout or "").strip()
+                match = VERSION_RE.search(text)
+                if match:
+                    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+            except Exception:
+                pass
 
-        return 0, 17, 1
-
-    def _is_incompatible_version(self, binary: str) -> bool:
-        """Check if binary version is 1.x (incompatible with subprocess approach)."""
-        major, minor, patch = self._detect_version(binary)
-        is_incompatible = major >= 1
-        return is_incompatible
+        return PLAYIT_AGENT_VERSION_NUMBER
 
     def _download_specific_version(self, version_tag: str) -> tuple[bool, str]:
-        """Download a specific release version (e.g., 'v0.17.1')."""
+        """Download a specific release version (e.g., 'v1.2.0')."""
         try:
             release_url = f"https://api.github.com/repos/playit-cloud/playit-agent/releases/tags/{version_tag}"
             req = urllib.request.Request(
@@ -540,8 +536,8 @@ class PlayitManager(EventEmitter):
         return payload[:4] == b"\x7fELF"
 
     def install_latest_binary(self) -> tuple[bool, str]:
-        """Download and install playit binary (pinned to v0.17.1 for compatibility)."""
-        return self._download_specific_version("v0.17.1")
+        """Download and install the pinned NetherNet-capable playit agent."""
+        return self._download_specific_version(PLAYIT_AGENT_VERSION)
 
     def _select_asset(self, assets: list[dict]) -> dict | None:
         sys_name = platform.system().lower()
@@ -551,6 +547,10 @@ class PlayitManager(EventEmitter):
             arch_keys = ("amd64", "x86_64", "x64")
         elif machine in {"aarch64", "arm64"}:
             arch_keys = ("aarch64", "arm64")
+        elif machine in {"armv7l", "armv7", "arm"}:
+            arch_keys = ("armv7", "arm")
+        elif machine in {"i386", "i686", "x86"}:
+            arch_keys = ("i686", "i386", "x86")
         else:
             arch_keys = (machine,)
 
@@ -569,7 +569,10 @@ class PlayitManager(EventEmitter):
             name = str(asset.get("name", "")).lower()
             if not name:
                 continue
-            if name.endswith(".sha256") or name.endswith(".sig"):
+            if name.endswith(".sha256") or name.endswith(".sig") or name.endswith(".apk"):
+                continue
+            # Never install the CLI: Hosty needs the daemon.
+            if "playit-cli" in name:
                 continue
             if not any(k in name for k in os_keys):
                 continue
@@ -585,7 +588,7 @@ class PlayitManager(EventEmitter):
         if "linux" in os_keys:
             for asset in assets:
                 name = str(asset.get("name", "")).lower()
-                if name.startswith("playit-linux") and not name.endswith(".sha256"):
+                if name.startswith("playit-linux") and "playit-cli" not in name and not name.endswith(".apk"):
                     return asset
 
         return None
@@ -836,17 +839,7 @@ class PlayitManager(EventEmitter):
 
     def _tunnel_exists_for_endpoint(self, endpoint: str) -> bool:
         """Check if any tunnel in the current list matches the given endpoint."""
-        ep = endpoint.strip().lower()
-        if not ep:
-            return False
-        for tunnel in self._return_single_list():
-            if tunnel.hostname and tunnel.hostname.strip().lower() == ep:
-                return True
-            if tunnel.domain and tunnel.remote_port:
-                candidate = f"{tunnel.domain}:{tunnel.remote_port}"
-                if candidate.lower() == ep:
-                    return True
-        return False
+        return self._find_tunnel_for_endpoint(endpoint) is not None
 
     def _check_tunnel_limit(self) -> bool:
         total = len(self.tunnels["tcp"]) + len(self.tunnels["udp"]) + len(self.tunnels["both"])
@@ -1086,6 +1079,69 @@ class PlayitManager(EventEmitter):
 
         return None
 
+    def _create_nethernet_tunnel(self, port: int = NETHERNET_CONNECT_PORT, label: str = "") -> Tunnel | None:
+        """Create a Minecraft Bedrock (NetherNet) tunnel via the v1 API.
+
+        NetherNet replaced RakNet for Bedrock as of October 2026. The tunnel
+        forwards plain UDP between playit's edge and Geyser, and carries a
+        ``nethernet_token`` that Geyser must present to playit's NXS signaling
+        service.
+        """
+        if not (1024 <= port <= 65535):
+            port = NETHERNET_CONNECT_PORT
+
+        if not self._check_tunnel_limit():
+            # Translators: {count} is the tunnel limit number, {url} is a web address and should not be translated
+            raise self.TunnelException(
+                ngettext(
+                    "This account cannot create more than {count} tunnel. You can increase your limit here: {url}",
+                    "This account cannot create more than {count} tunnels. You can increase your limit here: {url}",
+                    self.max_tunnels,
+                ).format(count=self.max_tunnels, url="https://playit.gg/account/upgrade")
+            )
+
+        tunnel_name = self._tunnel_name(label, "udp", port)
+
+        tunnel_data = {
+            "name": tunnel_name,
+            "protocol": {"type": "tunnel-type", "details": NETHERNET_TUNNEL_TYPE},
+            "origin": {
+                "type": "agent",
+                "data": {
+                    "agent_id": self._agent_id,
+                    "config": {
+                        "fields": [
+                            {"name": "local_ip", "value": "127.0.0.1"},
+                            {"name": "local_port", "value": str(port)},
+                        ]
+                    },
+                },
+            },
+            "endpoint": {"type": "region", "details": {"region": "global", "port": None}},
+            "enabled": True,
+        }
+
+        try:
+            data = self._request("v1/tunnels/create", json=tunnel_data)
+            tunnel_id = str((data.get("data") or {}).get("id", ""))
+            if not tunnel_id:
+                return None
+
+            self.tunnel_cache.add_tunnel(
+                tunnel_id,
+                {
+                    "name": tunnel_name,
+                    "tunnel_type": NETHERNET_TUNNEL_TYPE,
+                    "origin": {"data": {"local_ip": "127.0.0.1", "local_port": port}},
+                },
+            )
+
+            return self._wait_for_tunnel(tunnel_id, "udp")
+        except Exception:
+            return None
+
+        return None
+
     def _delete_tunnel(self, tunnel: Tunnel) -> bool:
         try:
             tunnel_status = self._request("tunnels/delete", json={"tunnel_id": tunnel.id})
@@ -1167,7 +1223,23 @@ class PlayitManager(EventEmitter):
         if self.is_running:
             return True
 
-        cmd = [binary, "-s", "--secret_path", str(self.toml_path)]
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
+        # v1.x daemon flags: --secret-path and --socket-path. The daemon logs
+        # to stdout by default (no -s flag; that belongs to playit-cli).
+        cmd = [binary, "--secret-path", str(self.toml_path)]
+        if sys.platform != "win32":
+            # Without an explicit socket path the daemon fails to bind on
+            # systems where its default IPC directory does not exist.
+            socket_path = self.directory / "playit.sock"
+            try:
+                socket_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            cmd += ["--socket-path", str(socket_path)]
         popen_kwargs = {
             "cwd": str(self.directory),
             "stdin": subprocess.DEVNULL,
@@ -1217,13 +1289,14 @@ class PlayitManager(EventEmitter):
             if not binary:
                 return False, _("playit binary not found")
 
-        # Ensure binary is pinned to v0.17.1 (marker avoids repeat downloads)
+        # Ensure binary is pinned to the NetherNet-capable release (marker
+        # avoids repeat downloads)
         if binary and not self._is_pinned_binary():
-            ok, msg = self._download_specific_version("v0.17.1")
+            ok, msg = self._download_specific_version(PLAYIT_AGENT_VERSION)
             if ok:
                 binary = self.resolve_binary()
             else:
-                return False, _("Failed to install playit v0.17.1: {}").format(msg)
+                return False, _("Failed to install playit {}: {}").format(PLAYIT_AGENT_VERSION, msg)
 
         provided_secret = str(secret or "").strip()
         existing_secret = self.read_claimed_secret()
@@ -1338,13 +1411,14 @@ class PlayitManager(EventEmitter):
             if not binary:
                 return False, _("playit binary not found")
 
-        # Ensure binary is pinned to v0.17.1 (marker avoids repeat downloads)
+        # Ensure binary is pinned to the NetherNet-capable release (marker
+        # avoids repeat downloads)
         if binary and not self._is_pinned_binary():
-            ok, msg = self._download_specific_version("v0.17.1")
+            ok, msg = self._download_specific_version(PLAYIT_AGENT_VERSION)
             if ok:
                 binary = self.resolve_binary()
             else:
-                return False, _("Failed to install playit v0.17.1: {}").format(msg)
+                return False, _("Failed to install playit {}: {}").format(PLAYIT_AGENT_VERSION, msg)
 
         provided_secret = str(secret or "").strip()
         existing_secret = self.read_claimed_secret()
@@ -1434,7 +1508,12 @@ class PlayitManager(EventEmitter):
         if kind == "java":
             return tunnel.protocol == "tcp"
         if kind == "bedrock":
-            return tunnel.protocol == "udp" and tunnel.raw_tunnel_type in (None, "minecraft-bedrock")
+            # NetherNet is the supported transport. Legacy RakNet tunnels
+            # still count so they are not wiped before being migrated.
+            return tunnel.protocol == "udp" and tunnel.raw_tunnel_type in (
+                NETHERNET_TUNNEL_TYPE,
+                "minecraft-bedrock",
+            )
         if kind == "voicechat":
             return tunnel.protocol == "udp" and tunnel.raw_tunnel_type is None
         return True
@@ -1446,6 +1525,15 @@ class PlayitManager(EventEmitter):
             return False
         if tunnel.hostname and tunnel.hostname.strip().lower() == ep:
             return True
+        if tunnel.raw_tunnel_type == NETHERNET_TUNNEL_TYPE and tunnel.domain:
+            # Clients always use port 19132 for NetherNet tunnels, but accept
+            # the bare domain and the allocated UDP port too (old configs).
+            domain = tunnel.domain.strip().lower()
+            if ep in (domain, f"{domain}:{NETHERNET_CONNECT_PORT}"):
+                return True
+            if tunnel.remote_port and ep == f"{domain}:{tunnel.remote_port}":
+                return True
+            return False
         if tunnel.domain and tunnel.remote_port:
             return f"{tunnel.domain}:{tunnel.remote_port}".lower() == ep
         return False
@@ -1462,6 +1550,12 @@ class PlayitManager(EventEmitter):
 
     def _tunnel_endpoint(self, tunnel: Tunnel) -> str:
         """Public endpoint string for a tunnel (domain:port when known)."""
+        if tunnel.raw_tunnel_type == NETHERNET_TUNNEL_TYPE:
+            # NetherNet clients always join on 19132, regardless of the
+            # allocated public UDP port shown in the dashboard.
+            if tunnel.domain:
+                return f"{tunnel.domain}:{NETHERNET_CONNECT_PORT}"
+            return str(tunnel.hostname or "").strip()
         if tunnel.domain and tunnel.remote_port:
             return f"{tunnel.domain}:{tunnel.remote_port}"
         if tunnel.domain:
@@ -1528,6 +1622,60 @@ class PlayitManager(EventEmitter):
                 )
             )
         return new_tunnel
+
+    def _replace_legacy_bedrock_tunnel(self, old_tunnel: Tunnel, port: int) -> Tunnel:
+        """Replace a RakNet-only ``minecraft-bedrock`` tunnel with NetherNet.
+
+        Deletes first (frees the account slot), then creates the NetherNet
+        tunnel. If the delete fails, the legacy tunnel is returned unchanged
+        so Bedrock keeps working (via RakNet) rather than stranding. If the
+        delete succeeds but the create fails, raises TunnelException.
+        """
+        old_id = str(old_tunnel.id or "")
+        if not self._delete_tunnel(old_tunnel):
+            logger.warning("could not delete legacy RakNet bedrock tunnel %s; keeping it", old_id)
+            old_tunnel.in_use = True
+            return old_tunnel
+        logger.info("replacing RakNet bedrock tunnel %s with a NetherNet tunnel", old_id)
+        new_tunnel = self._create_nethernet_tunnel(port, label="bedrock")
+        if not new_tunnel:
+            raise self.TunnelException(
+                _(
+                    "Replaced the legacy Bedrock tunnel but failed to create a NetherNet replacement. "
+                    "Delete an unused tunnel in the dashboard and try again."
+                )
+            )
+        return new_tunnel
+
+    def _save_bedrock_token(self, server_dir: str, tunnel: Tunnel, endpoint: str = "", migrated: bool = False) -> None:
+        """Persist a NetherNet tunnel's id/endpoint/token for Geyser."""
+        if str(getattr(tunnel, "raw_tunnel_type", "") or "") != NETHERNET_TUNNEL_TYPE:
+            # A legacy RakNet tunnel has no NXS token; leave the stored
+            # NetherNet details alone rather than pointing Geyser at it.
+            return
+        token = str(getattr(tunnel, "nethernet_token", "") or "").strip()
+        try:
+            from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
+
+            cfg = load_playit_config(server_dir)
+            changed = False
+            if tunnel.id and str(cfg.get("bedrock_tunnel_id", "")).strip() != str(tunnel.id):
+                cfg["bedrock_tunnel_id"] = str(tunnel.id)
+                changed = True
+            if endpoint and str(cfg.get("bedrock_endpoint", "")).strip() != endpoint:
+                cfg["bedrock_endpoint"] = endpoint
+                changed = True
+            if token and str(cfg.get("bedrock_nethernet_token", "")).strip() != token:
+                cfg["bedrock_nethernet_token"] = token
+                changed = True
+            if migrated:
+                cfg["bedrock_nethernet_migrated"] = True
+                cfg["bedrock_nethernet_notice_seen"] = False
+                changed = True
+            if changed:
+                save_playit_config(server_dir, cfg)
+        except Exception:
+            logger.exception("failed to store NetherNet tunnel details for %s", server_dir)
 
     @staticmethod
     def _is_adoptable_tunnel(tunnel: Tunnel, kind_key: str) -> bool:
@@ -1611,6 +1759,21 @@ class PlayitManager(EventEmitter):
                             bucket = list(self.tunnels.get(protocol, []))
                             break
                         return replacement
+                    if kind_key == "bedrock" and tunnel.raw_tunnel_type == "minecraft-bedrock":
+                        # RakNet-only legacy tunnel: replace with NetherNet.
+                        replacement = self._replace_legacy_bedrock_tunnel(tunnel, int(port))
+                        if replacement.id != stored_id:
+                            self._save_tunnel_id(server_dir, kind_key, replacement.id)
+                            self._save_bedrock_token(
+                                server_dir,
+                                replacement,
+                                self._tunnel_endpoint(replacement),
+                                migrated=True,
+                            )
+                            self._retrieve_tunnels()
+                            bucket = list(self.tunnels.get(protocol, []))
+                            break
+                        return replacement
                     if tunnel.port != int(port) and not self._update_tunnel_local_port(tunnel.id, int(port)):
                         raise self.TunnelException(
                             _("Could not point the {} tunnel at local port {}").format(kind_key or protocol, port)
@@ -1626,11 +1789,22 @@ class PlayitManager(EventEmitter):
             except Exception:
                 same_port = False
             if same_port and self._is_adoptable_tunnel(tunnel, kind_key):
+                if kind_key == "bedrock" and tunnel.raw_tunnel_type == "minecraft-bedrock":
+                    replacement = self._replace_legacy_bedrock_tunnel(tunnel, int(port))
+                    self._save_bedrock_token(
+                        server_dir,
+                        replacement,
+                        self._tunnel_endpoint(replacement),
+                        migrated=True,
+                    )
+                    return replacement
                 tunnel.in_use = True
                 return tunnel
 
         if kind_key == "voicechat":
             return self._create_raw_tunnel(port, protocol, label=label)
+        if kind_key == "bedrock":
+            return self._create_nethernet_tunnel(port, label=label)
         return self._create_tunnel(port, protocol, label=label, tunnel_type=tunnel_type)
 
     def _add_tunnel_for_protocol(
@@ -1681,16 +1855,16 @@ class PlayitManager(EventEmitter):
             return False, _("failed to allocate a {} playit tunnel").format(protocol.upper()), ""
 
         endpoint = str(tunnel.hostname or "").strip()
-        # For bedrock and voicechat tunnels, include the remote port in the endpoint
         if tunnel_kind in ("bedrock", "voicechat"):
-            if tunnel.domain and tunnel.remote_port:
-                endpoint = f"{tunnel.domain}:{tunnel.remote_port}"
-            elif tunnel.domain:
-                endpoint = tunnel.domain
+            # NetherNet endpoints always use the tunnel hostname on 19132;
+            # voice chat keeps the allocated public UDP port.
+            endpoint = self._tunnel_endpoint(tunnel)
 
         if endpoint:
             tunnel.in_use = True
             self._save_tunnel_id(server_dir, kind_key, tunnel.id)
+            if tunnel_kind == "bedrock":
+                self._save_bedrock_token(server_dir, tunnel, endpoint)
             if tunnel_kind not in ("bedrock", "voicechat"):
                 self._active_server_ids[server_id] = {
                     "tunnel_id": tunnel.id,
@@ -1734,7 +1908,11 @@ class PlayitManager(EventEmitter):
                 tunnel_host = str(tunnel.domain or tunnel.hostname or "").strip().lower()
                 if tunnel_host != want_host:
                     continue
-                if remote_port and int(tunnel.remote_port or 0) != int(remote_port):
+                if (
+                    remote_port
+                    and tunnel.raw_tunnel_type != NETHERNET_TUNNEL_TYPE
+                    and int(tunnel.remote_port or 0) != int(remote_port)
+                ):
                     continue
                 if not any(existing.id == tunnel.id for existing in found):
                     found.append(tunnel)
@@ -2123,11 +2301,36 @@ class PlayitManager(EventEmitter):
             tunnel_kind="voicechat",
         )
 
-    def _replace_geyser_bedrock_block(self, content: str, port: int) -> str:
+    def _replace_geyser_bedrock_block(self, content: str, port: int, nethernet_token: str = "") -> str:
+        """Point Geyser's Bedrock listener at playit's NetherNet/NXS transport.
+
+        Edits the existing ``bedrock:`` block in place when it already has the
+        NetherNet keys (preserving its comments); otherwise rewrites the block
+        canonically. Everything outside ``bedrock:`` is left untouched.
+        """
+        token = str(nethernet_token or "").strip()
         lines = content.splitlines()
         out: list[str] = []
         idx = 0
         replaced = False
+
+        def canonical_block() -> list[str]:
+            return [
+                "bedrock:",
+                "  address: 0.0.0.0",
+                f"  port: {port}",
+                "  webrtc-port: 0",
+                "  transport: nethernet",
+                "  clone-remote-port: false",
+                "",
+                "  signaling:",
+                "    mode: nxs",
+                "    stun-discovery: false",
+                "",
+                "    nxs:",
+                f"      token: '{token}'",
+                f"      endpoint: {NETHERNET_SIGNALING_ENDPOINT}",
+            ]
 
         while idx < len(lines):
             line = lines[idx]
@@ -2136,7 +2339,6 @@ class PlayitManager(EventEmitter):
                 idx += 1
                 continue
 
-            out.append("bedrock:")
             idx += 1
             block: list[str] = []
             while idx < len(lines):
@@ -2146,39 +2348,117 @@ class PlayitManager(EventEmitter):
                 block.append(child)
                 idx += 1
 
-            seen_address = seen_port = seen_clone = False
+            base_indent = 2
+            for child in block:
+                if child.strip():
+                    base_indent = len(child) - len(child.lstrip(" \t"))
+                    break
+
+            edited: list[str] = []
+            seen = {
+                "address": False,
+                "port": False,
+                "webrtc": False,
+                "transport": False,
+                "clone": False,
+                "signaling": False,
+                "mode": False,
+                "stun": False,
+                "nxs": False,
+                "token": False,
+                "endpoint": False,
+            }
+            existing_token = ""
+            signaling_indent: int | None = None
+            nxs_indent: int | None = None
+
             for child in block:
                 stripped = child.strip()
-                if stripped.startswith("address:"):
-                    out.append("  address: 0.0.0.0")
-                    seen_address = True
-                elif stripped.startswith("port:"):
-                    out.append(f"  port: {port}")
-                    seen_port = True
-                elif stripped.startswith("clone-remote-port:"):
-                    out.append("  clone-remote-port: false")
-                    seen_clone = True
-                else:
-                    out.append(child)
-            if not seen_address:
-                out.append("  address: 0.0.0.0")
-            if not seen_port:
-                out.append(f"  port: {port}")
-            if not seen_clone:
-                out.append("  clone-remote-port: false")
+                if not stripped:
+                    edited.append(child)
+                    continue
+                indent = len(child) - len(child.lstrip(" \t"))
+
+                if signaling_indent is not None and indent <= signaling_indent:
+                    signaling_indent = None
+                    nxs_indent = None
+                if nxs_indent is not None and indent <= nxs_indent:
+                    nxs_indent = None
+
+                pad = " " * indent
+
+                if signaling_indent is None and nxs_indent is None:
+                    if indent == base_indent and stripped.startswith("address:"):
+                        edited.append(f"{pad}address: 0.0.0.0")
+                        seen["address"] = True
+                        continue
+                    if indent == base_indent and stripped.startswith("port:"):
+                        edited.append(f"{pad}port: {port}")
+                        seen["port"] = True
+                        continue
+                    if indent == base_indent and stripped.startswith("webrtc-port:"):
+                        edited.append(f"{pad}webrtc-port: 0")
+                        seen["webrtc"] = True
+                        continue
+                    if indent == base_indent and stripped.startswith("transport:"):
+                        edited.append(f"{pad}transport: nethernet")
+                        seen["transport"] = True
+                        continue
+                    if indent == base_indent and stripped.startswith("clone-remote-port:"):
+                        edited.append(f"{pad}clone-remote-port: false")
+                        seen["clone"] = True
+                        continue
+                    if indent == base_indent and stripped == "signaling:":
+                        edited.append(child)
+                        seen["signaling"] = True
+                        signaling_indent = indent
+                        continue
+
+                if signaling_indent is not None and indent > signaling_indent:
+                    if nxs_indent is None:
+                        if stripped.startswith("mode:"):
+                            edited.append(f"{pad}mode: nxs")
+                            seen["mode"] = True
+                            continue
+                        if stripped.startswith("stun-discovery:"):
+                            edited.append(f"{pad}stun-discovery: false")
+                            seen["stun"] = True
+                            continue
+                        if stripped == "nxs:":
+                            edited.append(child)
+                            seen["nxs"] = True
+                            nxs_indent = indent
+                            continue
+                    if nxs_indent is not None and indent > nxs_indent:
+                        if stripped.startswith("token:"):
+                            existing_token = stripped.split(":", 1)[1].strip().strip("'\"")
+                            if token:
+                                edited.append(f"{pad}token: '{token}'")
+                            else:
+                                edited.append(child)
+                            seen["token"] = True
+                            continue
+                        if stripped.startswith("endpoint:"):
+                            edited.append(f"{pad}endpoint: {NETHERNET_SIGNALING_ENDPOINT}")
+                            seen["endpoint"] = True
+                            continue
+
+                edited.append(child)
+
+            complete = all(seen.values())
+            if complete:
+                out.append("bedrock:")
+                out.extend(edited)
+            else:
+                if not token:
+                    token = existing_token
+                out.extend(canonical_block())
             replaced = True
 
         if not replaced:
             if out and out[-1].strip():
                 out.append("")
-            out.extend(
-                [
-                    "bedrock:",
-                    "  address: 0.0.0.0",
-                    f"  port: {port}",
-                    "  clone-remote-port: false",
-                ]
-            )
+            out.extend(canonical_block())
 
         return "\n".join(out) + "\n"
 
@@ -2286,9 +2566,14 @@ class PlayitManager(EventEmitter):
         return Path(server_dir) / "config" / f"Geyser-{mod_loader_name(loader)}"
 
     def configure_geyser_mod(
-        self, server_dir: str, bedrock_port: int = 19132, loader: str = "", platform: str = ""
+        self,
+        server_dir: str,
+        bedrock_port: int = 19132,
+        loader: str = "",
+        platform: str = "",
+        nethernet_token: str = "",
     ) -> bool:
-        """Ensure Geyser's per-loader config listens on the Bedrock UDP port."""
+        """Ensure Geyser listens on the Bedrock UDP port via NetherNet/NXS."""
         try:
             port = int(bedrock_port)
         except Exception:
@@ -2301,7 +2586,10 @@ class PlayitManager(EventEmitter):
         try:
             config_dir.mkdir(parents=True, exist_ok=True)
             content = config_file.read_text(encoding="utf-8") if config_file.exists() else ""
-            config_file.write_text(self._replace_geyser_bedrock_block(content, port), encoding="utf-8")
+            config_file.write_text(
+                self._replace_geyser_bedrock_block(content, port, nethernet_token),
+                encoding="utf-8",
+            )
             return True
         except Exception:
             return False
@@ -2498,7 +2786,19 @@ class PlayitManager(EventEmitter):
         """Best-effort background repair for playit-backed mod config files."""
         result = {"geyser": False, "voicechat": False}
         if str(bedrock_endpoint or "").strip():
-            result["geyser"] = self.configure_geyser_mod(server_dir, bedrock_port, loader=loader, platform=platform)
+            try:
+                from hosty.shared.backend.playit_config import load_playit_config
+
+                nethernet_token = str(load_playit_config(server_dir).get("bedrock_nethernet_token", "")).strip()
+            except Exception:
+                nethernet_token = ""
+            result["geyser"] = self.configure_geyser_mod(
+                server_dir,
+                bedrock_port,
+                loader=loader,
+                platform=platform,
+                nethernet_token=nethernet_token,
+            )
             has_floodgate = self._jar_present(self._content_jar_dirs(server_dir, loader), "floodgate")
             if has_floodgate:
                 self.configure_floodgate_mod(server_dir, loader=loader, platform=platform)
@@ -2540,12 +2840,17 @@ class PlayitManager(EventEmitter):
         (or vice versa), and this method never raises.
 
         Returns dict with "bedrock_endpoint" and "voicechat_endpoint" (empty if not created),
-        plus "voicechat_migrated" holding the new endpoint when a legacy
-        bedrock-typed voice tunnel was migrated to raw (empty otherwise).
+        plus "bedrock_migrated" / "voicechat_migrated" holding the new endpoint
+        when a legacy tunnel was migrated (empty otherwise).
         """
         from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
 
-        result = {"bedrock_endpoint": "", "voicechat_endpoint": "", "voicechat_migrated": ""}
+        result = {
+            "bedrock_endpoint": "",
+            "bedrock_migrated": "",
+            "voicechat_endpoint": "",
+            "voicechat_migrated": "",
+        }
         try:
             cfg = load_playit_config(server_dir)
         except Exception:
@@ -2591,9 +2896,66 @@ class PlayitManager(EventEmitter):
         vc_id = str(cfg.get("voicechat_tunnel_id", "")).strip()
 
         try:
-            bedrock_match = self._find_tunnel_for_endpoint(bedrock_ep) if bedrock_ep else None
-            if bedrock_ep and (bedrock_match is None or bedrock_match.protocol != "udp"):
+            bedrock_match = None
+            if bedrock_id:
+                bedrock_match = next((t for t in self._return_single_list() if t.id == bedrock_id), None)
+            if bedrock_match is None and bedrock_ep:
+                bedrock_match = self._find_tunnel_for_endpoint(bedrock_ep)
+
+            if bedrock_match is not None and bedrock_match.raw_tunnel_type == "minecraft-bedrock":
+                # RakNet-only legacy tunnel: replace it with NetherNet so
+                # Bedrock keeps working after RakNet was retired.
+                ok, _msg, endpoint = self._regenerate_tunnel_for_protocol(
+                    server_id,
+                    server_dir,
+                    "udp",
+                    secret=secret,
+                    auto_install=True,
+                    bedrock_port=bedrock_port,
+                    tunnel_kind="bedrock",
+                )
+                new_tunnel = self._find_tunnel_for_endpoint(endpoint) if (ok and endpoint) else None
+                if new_tunnel is not None:
+                    bedrock_id = str(new_tunnel.id)
+                    bedrock_ep = self._tunnel_endpoint(new_tunnel)
+                    cfg["bedrock_tunnel_id"] = bedrock_id
+                    cfg["bedrock_endpoint"] = bedrock_ep
+                    if new_tunnel.nethernet_token:
+                        cfg["bedrock_nethernet_token"] = new_tunnel.nethernet_token
+                    cfg["bedrock_nethernet_migrated"] = True
+                    cfg["bedrock_nethernet_notice_seen"] = False
+                    result["bedrock_endpoint"] = bedrock_ep
+                    result["bedrock_migrated"] = bedrock_ep
+                    dirty = True
+                    logger.warning("playit auto-create: migrated RakNet bedrock tunnel for %s", server_dir)
+                else:
+                    logger.warning(
+                        "playit auto-create: bedrock NetherNet migration failed for %s; keeping legacy tunnel",
+                        server_dir,
+                    )
+            elif bedrock_match is not None:
+                if bedrock_match.protocol != "udp" or bedrock_match.raw_tunnel_type != NETHERNET_TUNNEL_TYPE:
+                    cfg["bedrock_endpoint"] = ""
+                    cfg["bedrock_nethernet_token"] = ""
+                    cfg["bedrock_nethernet_migrated"] = False
+                    cfg["bedrock_nethernet_notice_seen"] = False
+                    bedrock_ep = ""
+                    dirty = True
+                    logger.warning("playit auto-create: cleared stale bedrock endpoint for %s", server_dir)
+                else:
+                    if bedrock_match.id and bedrock_match.id != bedrock_id:
+                        cfg["bedrock_tunnel_id"] = bedrock_match.id
+                        bedrock_id = str(bedrock_match.id)
+                        dirty = True
+                    token = str(bedrock_match.nethernet_token or "").strip()
+                    if token and token != str(cfg.get("bedrock_nethernet_token", "")).strip():
+                        cfg["bedrock_nethernet_token"] = token
+                        dirty = True
+            elif bedrock_ep:
                 cfg["bedrock_endpoint"] = ""
+                cfg["bedrock_nethernet_token"] = ""
+                cfg["bedrock_nethernet_migrated"] = False
+                cfg["bedrock_nethernet_notice_seen"] = False
                 bedrock_ep = ""
                 dirty = True
                 logger.warning("playit auto-create: cleared stale bedrock endpoint for %s", server_dir)
@@ -2886,7 +3248,49 @@ class PlayitManager(EventEmitter):
                 ep = str(cfg.get(ep_field[kind], "") or "").strip()
                 if tid:
                     found = by_id(tid)
+                    if found is not None and kind == "bedrock" and found.raw_tunnel_type == "minecraft-bedrock":
+                        # RakNet-only legacy tunnel: replace it with NetherNet
+                        # so Bedrock keeps working after RakNet was retired.
+                        try:
+                            ok, _msg, endpoint = self._regenerate_tunnel_for_protocol(
+                                sid,
+                                sdir,
+                                "udp",
+                                secret=str(cfg.get("secret", "")).strip(),
+                                auto_install=bool(cfg.get("auto_install", True)),
+                                bedrock_port=want_port["bedrock"],
+                                tunnel_kind="bedrock",
+                            )
+                        except Exception:
+                            logger.exception("tunnel sync: bedrock regenerate failed")
+                            ok, endpoint = False, ""
+                        new_tunnel = self._find_tunnel_for_endpoint(endpoint) if (ok and endpoint) else None
+                        if new_tunnel is not None:
+                            cfg[id_field[kind]] = str(new_tunnel.id)
+                            cfg[ep_field[kind]] = self._tunnel_endpoint(new_tunnel)
+                            if new_tunnel.nethernet_token:
+                                cfg["bedrock_nethernet_token"] = new_tunnel.nethernet_token
+                            cfg["bedrock_nethernet_migrated"] = True
+                            cfg["bedrock_nethernet_notice_seen"] = False
+                            dirty = True
+                            summary["migrated"].append({"from": found.id, "to": new_tunnel.id, "servers": [sid]})
+                            logger.warning(
+                                "tunnel sync: migrated RakNet bedrock tunnel %s for %s",
+                                found.id[:8],
+                                sid,
+                            )
+                        else:
+                            logger.warning(
+                                "tunnel sync: bedrock NetherNet migration failed for %s; keeping legacy tunnel",
+                                sid,
+                            )
+                        continue
                     if found is not None and self._tunnel_suits_kind(found, kind):
+                        if kind == "bedrock" and found.raw_tunnel_type == NETHERNET_TUNNEL_TYPE:
+                            token = str(found.nethernet_token or "").strip()
+                            if token and token != str(cfg.get("bedrock_nethernet_token", "")).strip():
+                                cfg["bedrock_nethernet_token"] = token
+                                dirty = True
                         continue
                     if found is not None:
                         # Live but wrong kind (e.g. a java ref pointing at a
@@ -2901,6 +3305,10 @@ class PlayitManager(EventEmitter):
                         )
                         cfg[id_field[kind]] = ""
                         cfg[ep_field[kind]] = ""
+                        if kind == "bedrock":
+                            cfg["bedrock_nethernet_token"] = ""
+                            cfg["bedrock_nethernet_migrated"] = False
+                            cfg["bedrock_nethernet_notice_seen"] = False
                         tid = ""
                         ep = ""
                         dirty = True
@@ -2913,6 +3321,10 @@ class PlayitManager(EventEmitter):
                         if tid in mmap and kind != "voicechat":
                             cfg[id_field[kind]] = ""
                             cfg[ep_field[kind]] = ""
+                            if kind == "bedrock":
+                                cfg["bedrock_nethernet_token"] = ""
+                                cfg["bedrock_nethernet_migrated"] = False
+                                cfg["bedrock_nethernet_notice_seen"] = False
                             tid = ""
                             ep = ""
                             dirty = True
@@ -2935,6 +3347,10 @@ class PlayitManager(EventEmitter):
                                     summary["healed"].append({"server": sid, "kind": kind})
                             if not healed_here and ep and self._find_tunnel_for_endpoint(ep) is None:
                                 cfg[ep_field[kind]] = ""
+                                if kind == "bedrock":
+                                    cfg["bedrock_nethernet_token"] = ""
+                                    cfg["bedrock_nethernet_migrated"] = False
+                                    cfg["bedrock_nethernet_notice_seen"] = False
                                 dirty = True
                             continue
                             continue
@@ -2942,6 +3358,8 @@ class PlayitManager(EventEmitter):
                     live_match = self._find_tunnel_for_endpoint(ep)
                     if live_match is not None and self._tunnel_suits_kind(live_match, kind):
                         cfg[id_field[kind]] = live_match.id
+                        if kind == "bedrock" and live_match.nethernet_token:
+                            cfg["bedrock_nethernet_token"] = live_match.nethernet_token
                         dirty = True
                         summary["healed"].append({"server": sid, "kind": kind})
                     continue

@@ -60,28 +60,56 @@ def test_ensure_bedrock_transport_skipped_without_tunnel(tmp_path):
     assert not (tmp_path / "server.properties").exists()
 
 
-def test_ensure_bedrock_transport_writes_raknet(tmp_path):
-    mgr = _manager_with_server(tmp_path, playit_config={"bedrock_endpoint": "x.tun.ply.gg:1234"})
-    (tmp_path / "server.properties").write_text("server-port=25565\n", encoding="utf-8")
+def test_ensure_bedrock_transport_writes_nethernet(tmp_path):
+    mgr = _manager_with_server(tmp_path, playit_config={"bedrock_endpoint": "x.tun.ply.gg:19132"})
+    (tmp_path / "server.properties").write_text("server-port=25565\ntransport=raknet\n", encoding="utf-8")
     assert mgr.ensure_bedrock_transport("s1") is True
     content = (tmp_path / "server.properties").read_text(encoding="utf-8")
-    assert "transport=raknet" in content
+    assert "transport=nethernet" in content
+    assert "raknet" not in content
     assert "server-port=25565" in content
 
 
-def test_ensure_bedrock_transport_keeps_existing_raknet(tmp_path):
-    mgr = _manager_with_server(tmp_path, playit_config={"bedrock_endpoint": "x.tun.ply.gg:1234"})
-    (tmp_path / "server.properties").write_text("transport=raknet\n", encoding="utf-8")
+def test_ensure_bedrock_transport_keeps_existing_nethernet(tmp_path):
+    mgr = _manager_with_server(tmp_path, playit_config={"bedrock_endpoint": "x.tun.ply.gg:19132"})
+    (tmp_path / "server.properties").write_text("transport=nethernet\n", encoding="utf-8")
     assert mgr.ensure_bedrock_transport("s1") is False
 
 
-def test_ensure_bedrock_transport_overwrites_nethernet(tmp_path):
-    mgr = _manager_with_server(tmp_path, playit_config={"bedrock_endpoint": "x.tun.ply.gg:1234"})
-    (tmp_path / "server.properties").write_text("transport=nethernet\n", encoding="utf-8")
-    assert mgr.ensure_bedrock_transport("s1") is True
+def test_ensure_bedrock_transport_does_not_add_inert_key(tmp_path):
+    """Java's server.properties has no transport key: don't invent one."""
+    mgr = _manager_with_server(tmp_path, playit_config={"bedrock_endpoint": "x.tun.ply.gg:19132"})
+    (tmp_path / "server.properties").write_text("server-port=25565\n", encoding="utf-8")
+    assert mgr.ensure_bedrock_transport("s1") is False
     content = (tmp_path / "server.properties").read_text(encoding="utf-8")
-    assert "transport=raknet" in content
-    assert "nethernet" not in content
+    assert "transport=" not in content
+
+
+def test_ensure_bedrock_transport_configures_geyser_with_token(tmp_path):
+    """The real NetherNet switch lives in Geyser's config, not server.properties."""
+    calls = []
+
+    class _Playit:
+        def configure_geyser_mod(self, server_dir, port, **kwargs):
+            calls.append((server_dir, port, kwargs))
+            return True
+
+    mgr = _manager_with_server(
+        tmp_path,
+        playit_config={
+            "bedrock_endpoint": "x.tun.ply.gg:19132",
+            "bedrock_port": 19132,
+            "bedrock_nethernet_token": "pnx1.test",
+        },
+    )
+    mgr.playit_manager = _Playit()
+    mgr.ensure_bedrock_transport("s1")
+
+    assert calls
+    _server_dir, port, kwargs = calls[0]
+    assert port == 19132
+    assert kwargs["nethernet_token"] == "pnx1.test"
+    assert kwargs["loader"] == "fabric"
 
 
 def test_start_server_waits_for_stopping_then_starts(tmp_path):
