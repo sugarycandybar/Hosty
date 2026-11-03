@@ -231,6 +231,15 @@ class HostyApplication(Adw.Application):
 
         icon_dir = icon_theme_dir()
         if icon_dir is not None:
+            # The bundled icon cache can be stale (built before Hosty's own
+            # icons were merged into the hicolor tree), which hides icons such
+            # as the filters button and the app icons in the About dialog.
+            # Dropping it forces GTK to scan the directory.
+            for cache_file in icon_dir.rglob("icon-theme.cache"):
+                try:
+                    cache_file.unlink()
+                except OSError:
+                    pass
             icon_theme.add_search_path(str(icon_dir))
 
     def _setup_actions(self):

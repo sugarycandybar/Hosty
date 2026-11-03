@@ -270,7 +270,11 @@ class PlayitManager(EventEmitter):
 
     @property
     def binary_path(self) -> Path:
-        filename = "playit.exe" if sys.platform == "win32" else "playit"
+        # v1.x splits playit into a daemon (playitd) and a CLI (playit). Hosty
+        # needs the daemon: the CLI rejects daemon flags such as --secret-path.
+        # On Windows the daemon is called playitd.exe; the old playit.exe is
+        # the CLI and must not be reused (that broke the v1.2.0 upgrade).
+        filename = "playitd.exe" if sys.platform == "win32" else "playit"
         return self.directory / filename
 
     def resolve_binary(self) -> str | None:
@@ -278,9 +282,13 @@ class PlayitManager(EventEmitter):
         if bundled.exists() and bundled.is_file():
             return str(bundled)
 
-        system_bin = shutil.which("playit")
-        if system_bin:
-            return system_bin
+        # Prefer the daemon over the CLI. Older releases were a single
+        # ``playit`` binary, so keep that as a fallback outside Windows.
+        candidates = ("playitd",) if sys.platform == "win32" else ("playitd", "playit")
+        for name in candidates:
+            system_bin = shutil.which(name)
+            if system_bin:
+                return system_bin
 
         return None
 
@@ -574,6 +582,11 @@ class PlayitManager(EventEmitter):
             # Never install the CLI: Hosty needs the daemon.
             if "playit-cli" in name:
                 continue
+            if "windows" in os_keys:
+                # Windows daemon assets are playitd-windows-*.exe; the
+                # playit-windows-*.exe asset is the CLI/launcher.
+                if not name.startswith("playitd-windows-"):
+                    continue
             if not any(k in name for k in os_keys):
                 continue
             if not any(k in name for k in arch_keys):
@@ -1231,7 +1244,13 @@ class PlayitManager(EventEmitter):
         # v1.x daemon flags: --secret-path and --socket-path. The daemon logs
         # to stdout by default (no -s flag; that belongs to playit-cli).
         cmd = [binary, "--secret-path", str(self.toml_path)]
-        if sys.platform != "win32":
+        if sys.platform == "win32":
+            # The installed playit service owns the default named pipe
+            # (\\.\pipe\playitd-system); a daemon that finds it responsive
+            # exits with "already running". Give Hosty's own daemon a pipe
+            # of its own so it starts even when the service is installed.
+            cmd += ["--socket-path", rf"\\.\pipe\hosty-playit-{os.getpid()}"]
+        else:
             # Without an explicit socket path the daemon fails to bind on
             # systems where its default IPC directory does not exist.
             socket_path = self.directory / "playit.sock"

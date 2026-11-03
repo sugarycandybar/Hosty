@@ -132,6 +132,15 @@ jobs:
 
           BUNDLE_PIXBUF_LOADERS="$(cygpath -w "$BUNDLE_PIXBUF_DIR/loaders")"
           GDK_PIXBUF_MODULEDIR="$BUNDLE_PIXBUF_LOADERS" gdk-pixbuf-query-loaders > "$BUNDLE_PIXBUF_DIR/loaders.cache"
+          
+          HICOLOR_DIR="$(find dist/Hosty -type d -path '*/icons/hicolor' | head -n 1)"
+          if [ -n "$HICOLOR_DIR" ]; then
+            if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
+              gtk4-update-icon-cache -f -t "$HICOLOR_DIR" || true
+            elif command -v gtk-update-icon-cache >/dev/null 2>&1; then
+              gtk-update-icon-cache -f -t "$HICOLOR_DIR" || true
+            fi
+          fi
 
           # Compile .po translations into .mo and bundle them
           for po_file in po/*.po; do
