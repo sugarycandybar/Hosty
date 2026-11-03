@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: hosty 1.7.6\n"
 "Report-Msgid-Bugs-To: https://github.com/sugarycandybar/Hosty/issues\n"
-"POT-Creation-Date: 2026-10-25 10:20-0400\n"
+"POT-Creation-Date: 2026-11-02 23:36-0500\n"
 "PO-Revision-Date: 2026-06-22 12:04+0200\n"
 "Last-Translator: KOXXPL <80292506+KOXXPL@users.noreply.github.com>\n"
 "Language-Team: Polish\n"
@@ -20,19 +20,19 @@ msgstr ""
 "|| n%100>=20) ? 1 : 2);\n"
 "X-Generator: Gtranslator 50.0\n"
 
-#: src/hosty/gtk_ui/application.py:304
+#: src/hosty/gtk_ui/application.py:317
 msgid "Server created"
 msgstr "Serwer utworzony"
 
-#: src/hosty/gtk_ui/application.py:384
+#: src/hosty/gtk_ui/application.py:397
 msgid "Rename Server"
 msgstr "Zmień nazwę serwera"
 
-#: src/hosty/gtk_ui/application.py:385
+#: src/hosty/gtk_ui/application.py:398
 msgid "Enter a new name for the server:"
 msgstr "Wprowadź nową nazwę serwera:"
 
-#: src/hosty/gtk_ui/application.py:386 src/hosty/gtk_ui/application.py:447
+#: src/hosty/gtk_ui/application.py:399 src/hosty/gtk_ui/application.py:460
 #: src/hosty/gtk_ui/dialogs/create_server.py:84
 #: src/hosty/gtk_ui/dialogs/create_server.py:784
 #: src/hosty/gtk_ui/dialogs/create_server.py:798
@@ -41,9 +41,9 @@ msgstr "Wprowadź nową nazwę serwera:"
 #: src/hosty/gtk_ui/dialogs/preferences.py:351
 #: src/hosty/gtk_ui/views/connect/mixins/players_mixin.py:241
 #: src/hosty/gtk_ui/views/connect/mixins/players_mixin.py:269
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:706
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:728
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1546
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:757
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:779
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1605
 #: src/hosty/gtk_ui/views/files/mixins/backups_mixin.py:283
 #: src/hosty/gtk_ui/views/files/mixins/mods_mixin.py:258
 #: src/hosty/gtk_ui/views/files/mixins/mods_mixin.py:918
@@ -61,24 +61,24 @@ msgstr "Wprowadź nową nazwę serwera:"
 msgid "Cancel"
 msgstr "Anuluj"
 
-#: src/hosty/gtk_ui/application.py:387
+#: src/hosty/gtk_ui/application.py:400
 msgid "Rename"
 msgstr "Zmień nazwę"
 
-#: src/hosty/gtk_ui/application.py:410
+#: src/hosty/gtk_ui/application.py:423
 #, python-brace-format
 msgid "Server renamed to \"{}\""
 msgstr "Zmieniono nazwę serwera na \"{}\""
 
-#: src/hosty/gtk_ui/application.py:428
+#: src/hosty/gtk_ui/application.py:441
 msgid "Server icon updated"
 msgstr "Zaktualizowano ikonę serwera"
 
-#: src/hosty/gtk_ui/application.py:441
+#: src/hosty/gtk_ui/application.py:454
 msgid "Delete Server?"
 msgstr "Usunąć serwer?"
 
-#: src/hosty/gtk_ui/application.py:443
+#: src/hosty/gtk_ui/application.py:456
 #, python-brace-format
 msgid ""
 "Are you sure you want to delete \"{}\"?\n"
@@ -89,12 +89,12 @@ msgstr ""
 "\n"
 "{}"
 
-#: src/hosty/gtk_ui/application.py:444
+#: src/hosty/gtk_ui/application.py:457
 msgid "All server files will be permanently deleted."
 msgstr "Wszystkie pliki serwera zostaną bezodwrotnie usunięte."
 
-#: src/hosty/gtk_ui/application.py:448
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:707
+#: src/hosty/gtk_ui/application.py:461
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:758
 #: src/hosty/gtk_ui/views/files/mixins/mods_mixin.py:259
 #: src/hosty/gtk_ui/views/files/mixins/mods_mixin.py:919
 #: src/hosty/gtk_ui/views/files/mixins/mods_mixin.py:2005
@@ -104,21 +104,21 @@ msgstr "Wszystkie pliki serwera zostaną bezodwrotnie usunięte."
 msgid "Delete"
 msgstr "Usuń"
 
-#: src/hosty/gtk_ui/application.py:470
+#: src/hosty/gtk_ui/application.py:483
 #, python-brace-format
 msgid "Server \"{}\" restored"
 msgstr "Przywrócono serwer \"{}\""
 
-#: src/hosty/gtk_ui/application.py:472
+#: src/hosty/gtk_ui/application.py:485
 msgid "Could not restore deleted server"
 msgstr "Usunięty serwer nie mógł zostać przywrócony"
 
-#: src/hosty/gtk_ui/application.py:484
+#: src/hosty/gtk_ui/application.py:497
 #, python-brace-format
 msgid "Server \"{}\" deleted"
 msgstr "Usunięto serwer \"{}\""
 
-#: src/hosty/gtk_ui/application.py:485
+#: src/hosty/gtk_ui/application.py:498
 #: src/hosty/gtk_ui/views/connect/mixins/players_mixin.py:396
 #: src/hosty/gtk_ui/views/connect/mixins/players_mixin.py:438
 #: src/hosty/gtk_ui/views/files/main_view.py:747
@@ -190,7 +190,7 @@ msgid "Create and manage network tunnels"
 msgstr "Twórz i zarządzaj tunelami sieciowymi"
 
 #: src/hosty/gtk_ui/dialogs/add_playit_tunnel.py:35
-#: src/hosty/gtk_ui/views/connect/main_view.py:113
+#: src/hosty/gtk_ui/views/connect/main_view.py:120
 #, fuzzy
 msgid "Add tunnel"
 msgstr "Dodać tunel {}?"
@@ -721,7 +721,7 @@ msgid "View managed mods"
 msgstr "Zobacz zarządzane mody"
 
 #: src/hosty/gtk_ui/dialogs/playit_setup.py:69
-#: src/hosty/gtk_ui/views/connect/main_view.py:92
+#: src/hosty/gtk_ui/views/connect/main_view.py:99
 msgid "Set Up Playit"
 msgstr "Skonfiguruj Playit"
 
@@ -982,8 +982,8 @@ msgid "Regenerate token"
 msgstr ""
 
 #: src/hosty/gtk_ui/dialogs/preferences.py:336
-#: src/hosty/gtk_ui/views/connect/main_view.py:321
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1591
+#: src/hosty/gtk_ui/views/connect/main_view.py:328
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1650
 #: src/hosty/gtk_ui/views/files/main_view.py:754
 #: src/hosty/gtk_ui/views/server_detail.py:430
 #: src/hosty/gtk_ui/views/server_detail.py:487
@@ -1006,7 +1006,7 @@ msgid ""
 msgstr ""
 
 #: src/hosty/gtk_ui/dialogs/preferences.py:352
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:729
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:780
 msgid "Regenerate"
 msgstr "Wygeneruj ponownie"
 
@@ -1079,130 +1079,137 @@ msgid "[Hosty] No server process connected\n"
 msgstr "[Hosty] Brak połączonego procesu serwera\n"
 
 #: src/hosty/gtk_ui/views/connect/main_view.py:46
-#: src/hosty/gtk_ui/views/connect/main_view.py:126
-#: src/hosty/gtk_ui/views/connect/main_view.py:149
-#: src/hosty/gtk_ui/views/connect/main_view.py:172
-#: src/hosty/gtk_ui/views/connect/main_view.py:198
+#: src/hosty/gtk_ui/views/connect/main_view.py:133
+#: src/hosty/gtk_ui/views/connect/main_view.py:156
+#: src/hosty/gtk_ui/views/connect/main_view.py:179
+#: src/hosty/gtk_ui/views/connect/main_view.py:205
 #: src/hosty/gtk_ui/views/connect/mixins/local_ip_mixin.py:65
 #: src/hosty/gtk_ui/views/connect/mixins/local_ip_mixin.py:75
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:348
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:352
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:356
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:386
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:425
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:449
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:524
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:589
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:399
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:403
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:407
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:437
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:476
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:500
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:575
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:640
 msgid "Not available"
 msgstr "Niedostępne"
 
 #: src/hosty/gtk_ui/views/connect/main_view.py:57
+msgid "Bedrock tunnel updated to support NetherNet"
+msgstr "Tunel Bedrock zaktualizowany do obsługi NetherNet"
+
+#: src/hosty/gtk_ui/views/connect/main_view.py:58
+msgid "Learn more"
+msgstr "Dowiedz się więcej"
+
+#: src/hosty/gtk_ui/views/connect/main_view.py:64
 #: src/hosty/gtk_ui/views/properties_view.py:74
 msgid "Restart the server to apply changes"
 msgstr "Uruchom serwer ponownie, aby zastosować zmiany"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:58
+#: src/hosty/gtk_ui/views/connect/main_view.py:65
 #: src/hosty/gtk_ui/views/properties_view.py:75
 msgid "Dismiss"
 msgstr "Odrzuć"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:84
-#: src/hosty/gtk_ui/views/connect/main_view.py:109
+#: src/hosty/gtk_ui/views/connect/main_view.py:91
+#: src/hosty/gtk_ui/views/connect/main_view.py:116
 msgid "Playit.gg"
 msgstr "Playit.gg"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:85
+#: src/hosty/gtk_ui/views/connect/main_view.py:92
 msgid "Set up Playit to expose your server publicly"
 msgstr "Skonfiguruj Playit aby udostępnić swój serwer publicznie"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:88
+#: src/hosty/gtk_ui/views/connect/main_view.py:95
 msgid "Playit setup required"
 msgstr "Konfiguracja playit wymagana"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:89
+#: src/hosty/gtk_ui/views/connect/main_view.py:96
 msgid "Install and claim Playit for this server"
 msgstr "Zainstaluj i odbierz Playit dla tego serwera"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:117
+#: src/hosty/gtk_ui/views/connect/main_view.py:124
 msgid "Agent"
 msgstr "Agent"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:117
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:347
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:402
+#: src/hosty/gtk_ui/views/connect/main_view.py:124
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:398
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:453
 msgid "Stopped"
 msgstr "Zatrzymano"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:119
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:387
+#: src/hosty/gtk_ui/views/connect/main_view.py:126
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:438
 msgid "Start Agent"
 msgstr "Uruchom agenta"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:126
+#: src/hosty/gtk_ui/views/connect/main_view.py:133
 #, fuzzy
 msgid "Java tunnel"
 msgstr "Dodaj tunel Java"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:132
+#: src/hosty/gtk_ui/views/connect/main_view.py:139
 msgid "Copy Java tunnel domain"
 msgstr "Skopiuj domenę tunelu Java"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:139
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:363
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:468
+#: src/hosty/gtk_ui/views/connect/main_view.py:146
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:414
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:519
 msgid "Add Java tunnel"
 msgstr "Dodaj tunel Java"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:149
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:325
+#: src/hosty/gtk_ui/views/connect/main_view.py:156
 #, fuzzy
 msgid "Bedrock tunnel"
 msgstr "Dodaj tunel Bedrock"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:155
+#: src/hosty/gtk_ui/views/connect/main_view.py:162
 msgid "Copy bedrock tunnel domain"
 msgstr "Skopiuj domenę tunelu Bedrock"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:162
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:369
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:497
+#: src/hosty/gtk_ui/views/connect/main_view.py:169
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:420
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:548
 msgid "Add Bedrock tunnel"
 msgstr "Dodaj tunel Bedrock"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:172
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:327
+#: src/hosty/gtk_ui/views/connect/main_view.py:179
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:378
 #, fuzzy
 msgid "Voice Chat tunnel"
 msgstr "Dodaj tunel czatu głosowego"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:177
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:375
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:541
+#: src/hosty/gtk_ui/views/connect/main_view.py:184
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:426
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:592
 msgid "Add Voice Chat tunnel"
 msgstr "Dodaj tunel czatu głosowego"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:188
+#: src/hosty/gtk_ui/views/connect/main_view.py:195
 msgid "Playit settings"
 msgstr "Ustawienia Playit"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:192
+#: src/hosty/gtk_ui/views/connect/main_view.py:199
 msgid "Start with server"
 msgstr "Uruchom razem z serwerem"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:193
+#: src/hosty/gtk_ui/views/connect/main_view.py:200
 msgid "Automatically start and stop with this server"
 msgstr "Automatyczny start i stop z tym serwerem"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:198
+#: src/hosty/gtk_ui/views/connect/main_view.py:205
 #, fuzzy
 msgid "Tunnels"
 msgstr "Szczegóły tunelu"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:204
+#: src/hosty/gtk_ui/views/connect/main_view.py:211
 msgid "Open playit dashboard"
 msgstr "Otwórz panel Playit"
 
-#: src/hosty/gtk_ui/views/connect/main_view.py:210
+#: src/hosty/gtk_ui/views/connect/main_view.py:217
 msgid "Set Up Playit Again"
 msgstr "Skonfiguruj Playit ponownie"
 
@@ -1288,7 +1295,7 @@ msgstr[2] "{count} graczy"
 #: src/hosty/gtk_ui/views/connect/mixins/players_mixin.py:160
 #: src/hosty/gtk_ui/views/connect/mixins/players_mixin.py:162
 #: src/hosty/gtk_ui/views/connect/mixins/players_mixin.py:309
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1460
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1519
 #: src/hosty/gtk_ui/views/files/main_view.py:568
 #: src/hosty/gtk_ui/views/files/main_view.py:695
 #: src/hosty/gtk_ui/views/files/mixins/backups_mixin.py:116
@@ -1420,108 +1427,141 @@ msgstr "Przywrócono banicję dla {}"
 msgid "Unbanned {}"
 msgstr "Odbanowano {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:321
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:755
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1025
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1211
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1260
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1309
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1614
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:133
+msgid "Bedrock now uses NetherNet"
+msgstr "Bedrock korzysta teraz z NetherNet"
+
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:136
+msgid ""
+"Minecraft Bedrock replaced RakNet with NetherNet in October 2026. Hosty "
+"moved this server's Bedrock tunnel to the new NetherNet type and updated "
+"Geyser automatically.\n"
+"\n"
+"Bedrock players join the Bedrock tunnel address on port 19132. Java players "
+"are not affected."
+msgstr ""
+"Minecraft Bedrock zastąpił RakNet protokołem NetherNet w październiku 2026. "
+"Hosty przeniósł tunel Bedrock tego serwera na nowy typ NetherNet i "
+"automatycznie zaktualizował Geyser.\n"
+"\n"
+"Gracze Bedrock dołączają pod adres tunelu Bedrock na porcie 19132. Gracze "
+"Java nie są dotknięci zmianą."
+
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:143
+msgid "Got it"
+msgstr "Rozumiem"
+
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:147
+msgid "Open Playit's Geyser guide"
+msgstr "Otwórz przewodnik Playit o Geyser"
+
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:372
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:806
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1076
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1262
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1311
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1368
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1673
 msgid "A tunnel operation is already in progress"
 msgstr "Operacja na tunelu jest już w trakcie"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:396
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:376
+#, fuzzy
+msgid "Bedrock (NetherNet) tunnel"
+msgstr "Dodaj tunel Bedrock"
+
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:447
 msgid "Running"
 msgstr "Działa"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:397
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:448
 #: src/hosty/gtk_ui/views/server_detail.py:329
 msgid "Stop"
 msgstr "Zatrzymaj"
 
 #. Start/Stop button -- use standard Adwaita suggested-action / destructive-action
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:403
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:454
 #: src/hosty/gtk_ui/views/server_detail.py:79
 #: src/hosty/gtk_ui/views/server_detail.py:335
 msgid "Start"
 msgstr "Uruchom"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:421
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:445
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:522
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:472
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:496
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:573
 #, fuzzy
 msgid "Tunnel missing"
 msgstr "Szczegóły tunelu"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:456
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:507
 msgid "Manage Java tunnel"
 msgstr "Zarządzaj tunelem Java"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:462
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:513
 #, fuzzy
 msgid "Repair Java tunnel"
 msgstr "Dodaj tunel Java"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:485
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:536
 msgid "Manage Bedrock tunnel"
 msgstr "Zarządzaj tunelem Bedrock"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:491
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:542
 #, fuzzy
 msgid "Repair Bedrock tunnel"
 msgstr "Dodaj tunel Bedrock"
 
 #. Voice chat is fully automatic via the mod: show status, never
 #. the domain/port (nothing to copy).
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:520
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:571
 msgid "Configured"
 msgstr ""
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:529
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:580
 msgid "Manage Voice Chat tunnel"
 msgstr "Zarządzaj tunelem czatu głosowego"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:535
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:586
 #, fuzzy
 msgid "Repair Voice Chat tunnel"
 msgstr "Dodaj tunel czatu głosowego"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:574
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:625
 msgid "Starting..."
 msgstr "Uruchamianie..."
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:592
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:643
 #, python-brace-format
 msgid "{} of {} used"
 msgstr ""
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:646
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:697
 msgid "Java tunnel domain copied"
 msgstr "Domena tunelu Java skopiowana"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:664
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:715
 msgid "Bedrock tunnel domain copied"
 msgstr "Domena tunelu Bedrock skopiowana"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:694
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:745
 msgid "Playit setup completed"
 msgstr "Konfiguracja Playit powiodła się"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:698
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:749
 #: src/hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1757
 msgid "Could not open browser"
 msgstr "Nie udało się otworzyć przeglądarki"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:698
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:749
 msgid "Unable to open playit dashboard."
 msgstr "Nie udało się otworzyć panelu Playit"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:702
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:753
 #, python-brace-format
 msgid "Delete {} tunnel?"
 msgstr "Usunąć tunel {}?"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:704
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:755
 msgid ""
 "This will remove the current tunnel domain for this server. You can add a "
 "new tunnel again later."
@@ -1529,12 +1569,12 @@ msgstr ""
 "To usunie obecną domenę tunelu dla tego serwera. Możesz znowu dodać tunel "
 "później."
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:721
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:772
 #, python-brace-format
 msgid "Regenerate {} tunnel?"
 msgstr "Wygenerować ponownie tunel {}?"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:724
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:775
 msgid ""
 "This will replace the current tunnel domain with a new one. Players using "
 "the old domain will no longer be able to connect."
@@ -1542,162 +1582,162 @@ msgstr ""
 "To zastąpi obecną domenę tunelu nową. Gracze używający starej domeny nie "
 "będą mogli się już połączyć."
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:752
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:869
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1022
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1618
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:803
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:920
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1073
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1677
 msgid "Playit startup is already in progress"
 msgstr "Startowanie Playit jest już w trakcie"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:794
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:845
 msgid "Could not update Java tunnel"
 msgstr "Nie udało się zaktualizować tunelu Java"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:808
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:859
 #, python-brace-format
 msgid "Java port changed to {}"
 msgstr "Port Java został zmieniony na {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:840
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:891
 msgid "Could not create Java tunnel"
 msgstr "Nie udało się stworzyć tunelu Java"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:841
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:892
 #, fuzzy, python-brace-format
 msgid "{} Java port restored to {}."
 msgstr "Port Java został zmieniony na {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:850
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:901
 msgid "Minecraft Java (TCP)"
 msgstr "Minecraft Java (TCP)"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:872
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:923
 msgid "Java tunnel operation is already in progress"
 msgstr "Operacja na tunelu Java jest już w trakcie"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:875
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:926
 msgid "Bedrock tunnel creation is already in progress"
 msgstr "Operacja tworzenia tunelu Bedrock jest już w trakcie"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:918
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:969
 msgid "Could not update Bedrock tunnel"
 msgstr "Nie udało się zaktualizować tunelu Bedrock"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:940
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:991
 #, python-brace-format
 msgid "Bedrock port changed to {}"
 msgstr "Port Bedrock został zmieniony na {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:983
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1034
 msgid "Could not create Bedrock tunnel"
 msgstr "Nie udało się stworzyć tunelu Bedrock"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:984
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1035
 #, fuzzy, python-brace-format
 msgid "{} Bedrock port restored to {}."
 msgstr "Port Bedrock został zmieniony na {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:993
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1044
 msgid "Minecraft Bedrock (UDP)"
 msgstr "Minecraft Bedrock (UDP)"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1028
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1079
 msgid "Voice Chat tunnel creation is already in progress"
 msgstr "Operacja tworzenia tunelu czatu głosowego jest już w trakcie"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1089
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1140
 #, fuzzy, python-brace-format
 msgid "{}. Restart the server to apply voice chat settings."
 msgstr "Uruchom serwer ponownie, aby zastosować zmiany"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1093
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1144
 msgid "Could not update Voice Chat tunnel"
 msgstr "Nie udało się zaktualizować tunelu czatu głosowego"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1116
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1167
 #, python-brace-format
 msgid "Voice Chat port changed to {}"
 msgstr "Port czatu głosowego został zmieniony na {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1170
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1221
 msgid "Could not create Voice Chat tunnel"
 msgstr "Nie udało się stworzyć tunelu czatu głosowego"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1171
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1222
 #, fuzzy, python-brace-format
 msgid "{} Voice Chat port restored to {}."
 msgstr "Port czatu głosowego został zmieniony na {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1180
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1231
 msgid "Simple Voice Chat (UDP)"
 msgstr "Simple Voice Chat (UDP)"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1238
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1289
 msgid "Java tunnel already missing"
 msgstr "Już brakuje tunelu Java"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1240
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1291
 msgid "Could not delete Java tunnel"
 msgstr "Nie udało się usunąć tunelu Java"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1287
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1346
 msgid "Bedrock tunnel already missing"
 msgstr "Już brakuje tunelu Java"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1289
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1348
 msgid "Could not delete Bedrock tunnel"
 msgstr "Nie udało się usunąć tunelu Bedrock"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1336
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1395
 msgid "Voice Chat tunnel already missing"
 msgstr "Już brakuje tunelu czatu głosowego"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1338
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1397
 msgid "Could not delete Voice Chat tunnel"
 msgstr "Nie udało się usunąć tunelu czatu głosowego"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1482
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1541
 #, python-brace-format
 msgid "{} is not available for Minecraft {}"
 msgstr "{} jest niedostępne dla Minecraft {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1529
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1586
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1588
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1645
 #: src/hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1477
 #, python-brace-format
 msgid "Installed {}"
 msgstr "Zainstalowano {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1533
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1592
 #, python-brace-format
 msgid "Add {} tunnel?"
 msgstr "Dodać tunel {}?"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1541
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1600
 #, python-brace-format
 msgid ""
 "This tunnel needs {}. Hosty can install compatible {} versions automatically."
 msgstr ""
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1547
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1606
 msgid "Install Mods"
 msgstr "Zainstaluj mody"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1562
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1621
 #, python-brace-format
 msgid "Installing {} mod support..."
 msgstr "Instalowanie wsparcia modów dla {}..."
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1573
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1632
 #, python-brace-format
 msgid "Could not install {}: {}"
 msgstr "Nie udało się zainstalować {}: {}"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1589
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1648
 msgid "Some mods were not installed"
 msgstr "Niektóre mody nie zostały zainstalowane"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1590
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1649
 #, python-brace-format
 msgid ""
 "{}\n"
@@ -1708,23 +1748,23 @@ msgstr ""
 "\n"
 "Hosty wciąż utworzy tunel."
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1697
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1756
 msgid "Playit start failed unexpectedly; please try again."
 msgstr ""
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1705
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1764
 msgid "Playit agent started"
 msgstr "Agent Playit działa"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1707
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1766
 msgid "Could not start playit"
 msgstr "Nie udało się wystartować Playit"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1728
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1787
 msgid "Playit agent stopped"
 msgstr "Agent Playit zatrzymany"
 
-#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1730
+#: src/hosty/gtk_ui/views/connect/mixins/playit_mixin.py:1789
 msgid "Could not stop playit"
 msgstr "Nie udało się zatrzymać Playit"
 
@@ -2001,11 +2041,11 @@ msgstr "Proszę czekać aż obecna kopia zostanie zakończona."
 #: src/hosty/gtk_ui/views/files/mixins/worlds_mixin.py:371
 #: src/hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1107
 #: src/hosty/gtk_ui/views/files/mixins/modrinth_mixin.py:1876
-#: src/hosty/shared/backend/server_manager.py:2439
-#: src/hosty/shared/backend/server_manager.py:2479
-#: src/hosty/shared/backend/server_manager.py:2580
-#: src/hosty/shared/backend/server_manager.py:2625
-#: src/hosty/shared/backend/server_manager.py:2730
+#: src/hosty/shared/backend/server_manager.py:2465
+#: src/hosty/shared/backend/server_manager.py:2505
+#: src/hosty/shared/backend/server_manager.py:2606
+#: src/hosty/shared/backend/server_manager.py:2651
+#: src/hosty/shared/backend/server_manager.py:2756
 msgid "Server is running"
 msgstr "Serwer działa"
 
@@ -3757,66 +3797,66 @@ msgstr ""
 msgid "Failed to download JRE {}: {}"
 msgstr "Nie udało się pobrać JRE {}: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:321
+#: src/hosty/shared/backend/playit_manager.py:343
 msgid "Invalid playit API response"
 msgstr "Nieprawidłowa odpowiedź API Playit"
 
-#: src/hosty/shared/backend/playit_manager.py:481
+#: src/hosty/shared/backend/playit_manager.py:477
 msgid "Release assets unavailable"
 msgstr "Zasoby wydania niedostępne"
 
-#: src/hosty/shared/backend/playit_manager.py:485
+#: src/hosty/shared/backend/playit_manager.py:481
 msgid "No compatible playit build found for this platform"
 msgstr "Nie znaleziono kompatybilnej kompilacji Playit dla tej platformy"
 
-#: src/hosty/shared/backend/playit_manager.py:489
+#: src/hosty/shared/backend/playit_manager.py:485
 msgid "Download URL missing"
 msgstr "Brak adresu URL pobierania"
 
-#: src/hosty/shared/backend/playit_manager.py:496
+#: src/hosty/shared/backend/playit_manager.py:492
 msgid "Downloaded playit agent is invalid or corrupted; please retry"
 msgstr ""
 
-#: src/hosty/shared/backend/playit_manager.py:627
+#: src/hosty/shared/backend/playit_manager.py:630
 msgid "Missing playit setup code"
 msgstr "Brak kodu konfiguracyjnego Playit"
 
-#: src/hosty/shared/backend/playit_manager.py:631
-#: src/hosty/shared/backend/playit_manager.py:729
-#: src/hosty/shared/backend/playit_manager.py:1218
-#: src/hosty/shared/backend/playit_manager.py:1339
+#: src/hosty/shared/backend/playit_manager.py:634
+#: src/hosty/shared/backend/playit_manager.py:732
+#: src/hosty/shared/backend/playit_manager.py:1290
+#: src/hosty/shared/backend/playit_manager.py:1412
 msgid "playit binary not found"
 msgstr "Nie znaleziono pliku binarnego Playit"
 
-#: src/hosty/shared/backend/playit_manager.py:652
+#: src/hosty/shared/backend/playit_manager.py:655
 #, python-brace-format
 msgid "Failed to reach playit link service: {}"
 msgstr "Nie udało się połączyć z usługą łącza Playit: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:658
+#: src/hosty/shared/backend/playit_manager.py:661
 #, python-brace-format
 msgid "Link service returned invalid JSON (HTTP {}): {}"
 msgstr "Usługa łączenia zwróciła nieprawidłowy JSON (HTTP {}): {}"
 
-#: src/hosty/shared/backend/playit_manager.py:662
+#: src/hosty/shared/backend/playit_manager.py:665
 #, python-brace-format
 msgid "Link service returned HTTP {}: {}"
 msgstr "Usługa łączenia zwróciła HTTP {}: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:670
+#: src/hosty/shared/backend/playit_manager.py:673
 #, python-brace-format
 msgid "Link service did not return a key: {}"
 msgstr "Usługa łączenia nie zwróciła klucza: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:673
+#: src/hosty/shared/backend/playit_manager.py:676
 msgid "Failed to write playit.toml"
 msgstr "Nie udało się zapisać playit.toml"
 
-#: src/hosty/shared/backend/playit_manager.py:681
+#: src/hosty/shared/backend/playit_manager.py:684
 msgid "playit account linked"
 msgstr "Konto Playit połączone"
 
-#: src/hosty/shared/backend/playit_manager.py:686
+#: src/hosty/shared/backend/playit_manager.py:689
 msgid ""
 "playit rejected the linked key (InvalidAgentKey). Please generate a new "
 "setup code and try again"
@@ -3824,43 +3864,44 @@ msgstr ""
 "Playit odrzucił połączony klucz (InvalidAgentKey). Wygeneruj nowy kod "
 "konfiguracyjny i spróbuj ponownie"
 
-#: src/hosty/shared/backend/playit_manager.py:689
+#: src/hosty/shared/backend/playit_manager.py:692
 msgid "playit account linked (API sync pending)"
 msgstr "Konto Playit połączone (synchronizacja API w toku)"
 
-#: src/hosty/shared/backend/playit_manager.py:696
+#: src/hosty/shared/backend/playit_manager.py:699
 #, fuzzy, python-brace-format
 msgid "Agent restart failed: {}"
 msgstr "Instalacja nieudana: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:702
+#: src/hosty/shared/backend/playit_manager.py:705
 msgid "not linked"
 msgstr "nie połączono"
 
-#: src/hosty/shared/backend/playit_manager.py:705
+#: src/hosty/shared/backend/playit_manager.py:708
 msgid "linked"
 msgstr "połączono"
 
-#: src/hosty/shared/backend/playit_manager.py:707
-#: src/hosty/shared/backend/playit_manager.py:1242
-#: src/hosty/shared/backend/playit_manager.py:1359
+#: src/hosty/shared/backend/playit_manager.py:710
+#: src/hosty/shared/backend/playit_manager.py:1315
+#: src/hosty/shared/backend/playit_manager.py:1433
 msgid "unknown error"
 msgstr "nieznany błąd"
 
-#: src/hosty/shared/backend/playit_manager.py:710
+#: src/hosty/shared/backend/playit_manager.py:713
 msgid "linked key is invalid and was cleared"
 msgstr "Klucz łączenia jest nieprawidłowy i zostanie wyczyszczony"
 
-#: src/hosty/shared/backend/playit_manager.py:735
+#: src/hosty/shared/backend/playit_manager.py:738
 msgid "playit secret key not found"
 msgstr "Nie znaleziono tajnego klucza Playit"
 
-#: src/hosty/shared/backend/playit_manager.py:747
+#: src/hosty/shared/backend/playit_manager.py:750
 msgid "agents/rundata did not include agent_id"
 msgstr "agenci/rundata Nie zawarli agent_id"
 
-#: src/hosty/shared/backend/playit_manager.py:967
-#: src/hosty/shared/backend/playit_manager.py:1033
+#: src/hosty/shared/backend/playit_manager.py:960
+#: src/hosty/shared/backend/playit_manager.py:1026
+#: src/hosty/shared/backend/playit_manager.py:1097
 #, python-brace-format
 msgid ""
 "This account cannot create more than {count} tunnel. You can increase your "
@@ -3878,164 +3919,170 @@ msgstr[2] ""
 "To konto nie może utworzyć więcej niż {count} tuneli. Możesz zwiększyć swój "
 "limit tutaj: {url}"
 
-#: src/hosty/shared/backend/playit_manager.py:1199
+#: src/hosty/shared/backend/playit_manager.py:1271
 msgid "playit is already running for this server"
 msgstr "Playit jest już uruchomiony dla tego serwera"
 
-#: src/hosty/shared/backend/playit_manager.py:1208
+#: src/hosty/shared/backend/playit_manager.py:1280
 msgid "playit agent is running"
 msgstr "Agent Playit jest aktywny"
 
-#: src/hosty/shared/backend/playit_manager.py:1215
-#: src/hosty/shared/backend/playit_manager.py:1336
+#: src/hosty/shared/backend/playit_manager.py:1287
+#: src/hosty/shared/backend/playit_manager.py:1409
 #, python-brace-format
 msgid "playit install failed: {}"
 msgstr "instalacja Playit nie powiodła się: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1226
-#: src/hosty/shared/backend/playit_manager.py:1347
-#, python-brace-format
-msgid "Failed to install playit v0.17.1: {}"
+#: src/hosty/shared/backend/playit_manager.py:1299
+#: src/hosty/shared/backend/playit_manager.py:1421
+#, fuzzy, python-brace-format
+msgid "Failed to install playit {}: {}"
 msgstr "Nie udało się zainstalować Playit v0.17.1: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1236
-#: src/hosty/shared/backend/playit_manager.py:1356
+#: src/hosty/shared/backend/playit_manager.py:1309
+#: src/hosty/shared/backend/playit_manager.py:1430
 msgid "playit is not linked yet"
 msgstr "Playit nie jest jeszcze powiązany"
 
-#: src/hosty/shared/backend/playit_manager.py:1239
+#: src/hosty/shared/backend/playit_manager.py:1312
 msgid "playit setup is required"
 msgstr "Wymagana konfiguracja Playit"
 
-#: src/hosty/shared/backend/playit_manager.py:1248
+#: src/hosty/shared/backend/playit_manager.py:1321
 msgid "playit key invalid, setup is required"
 msgstr "Klucz Playit jest nieprawidłowy, konfiguracja jest wymagana"
 
-#: src/hosty/shared/backend/playit_manager.py:1249
-#: src/hosty/shared/backend/playit_manager.py:1362
+#: src/hosty/shared/backend/playit_manager.py:1322
+#: src/hosty/shared/backend/playit_manager.py:1436
 msgid "linked playit key is invalid; run setup again"
 msgstr ""
 "Połączony klucz Playit jest nieprawidłowy; uruchom konfigurację ponownie"
 
-#: src/hosty/shared/backend/playit_manager.py:1250
-#: src/hosty/shared/backend/playit_manager.py:1363
+#: src/hosty/shared/backend/playit_manager.py:1323
+#: src/hosty/shared/backend/playit_manager.py:1437
 #, python-brace-format
 msgid "failed to initialize playit API session: {}"
 msgstr "nie udało się zainicjować sesji API Playit: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1261
+#: src/hosty/shared/backend/playit_manager.py:1334
 msgid "failed to start playit agent"
 msgstr "Nie udało się uruchomić agenta Playit"
 
-#: src/hosty/shared/backend/playit_manager.py:1272
+#: src/hosty/shared/backend/playit_manager.py:1345
 msgid "playit started"
 msgstr "Playit działa"
 
-#: src/hosty/shared/backend/playit_manager.py:1306
+#: src/hosty/shared/backend/playit_manager.py:1379
 msgid "failed to allocate a new playit tunnel"
 msgstr "Nie udało się przydzielić nowego tunelu Playit"
 
-#: src/hosty/shared/backend/playit_manager.py:1319
+#: src/hosty/shared/backend/playit_manager.py:1392
 msgid "playit tunnel domain regenerated"
 msgstr "Tunel domeny Playit wygenerowany ponownie"
 
-#: src/hosty/shared/backend/playit_manager.py:1320
+#: src/hosty/shared/backend/playit_manager.py:1393
 msgid "playit tunnel created for this server"
 msgstr "Tunel Playit utworzony dla tego serwera"
 
-#: src/hosty/shared/backend/playit_manager.py:1526
+#: src/hosty/shared/backend/playit_manager.py:1620
 msgid ""
 "Replaced the legacy voice tunnel but failed to create a raw replacement. "
 "Delete an unused tunnel in the dashboard and try again."
 msgstr ""
 
-#: src/hosty/shared/backend/playit_manager.py:1616
+#: src/hosty/shared/backend/playit_manager.py:1644
+msgid ""
+"Replaced the legacy Bedrock tunnel but failed to create a NetherNet "
+"replacement. Delete an unused tunnel in the dashboard and try again."
+msgstr ""
+
+#: src/hosty/shared/backend/playit_manager.py:1779
 #, fuzzy, python-brace-format
 msgid "Could not point the {} tunnel at local port {}"
 msgstr "Nie udało się usunąć tuneli dla portu {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1655
-#: src/hosty/shared/backend/playit_manager.py:1786
-#: src/hosty/shared/backend/playit_manager.py:1905
+#: src/hosty/shared/backend/playit_manager.py:1829
+#: src/hosty/shared/backend/playit_manager.py:1964
+#: src/hosty/shared/backend/playit_manager.py:2083
 msgid "Voice Chat"
 msgstr "Czat głosowy"
 
-#: src/hosty/shared/backend/playit_manager.py:1660
-#: src/hosty/shared/backend/playit_manager.py:1665
-#: src/hosty/shared/backend/playit_manager.py:1789
-#: src/hosty/shared/backend/playit_manager.py:1908
+#: src/hosty/shared/backend/playit_manager.py:1834
+#: src/hosty/shared/backend/playit_manager.py:1839
+#: src/hosty/shared/backend/playit_manager.py:1967
+#: src/hosty/shared/backend/playit_manager.py:2086
 msgid "Bedrock"
 msgstr "Bedrock"
 
-#: src/hosty/shared/backend/playit_manager.py:1665
-#: src/hosty/shared/backend/playit_manager.py:1789
-#: src/hosty/shared/backend/playit_manager.py:1908
+#: src/hosty/shared/backend/playit_manager.py:1839
+#: src/hosty/shared/backend/playit_manager.py:1967
+#: src/hosty/shared/backend/playit_manager.py:2086
 msgid "Java"
 msgstr "Java"
 
-#: src/hosty/shared/backend/playit_manager.py:1681
+#: src/hosty/shared/backend/playit_manager.py:1855
 #, python-brace-format
 msgid "failed to allocate a {} playit tunnel"
 msgstr "Nie udało się przydzielić tunelu {} Playit"
 
-#: src/hosty/shared/backend/playit_manager.py:1703
+#: src/hosty/shared/backend/playit_manager.py:1877
 #, python-brace-format
 msgid "{} tunnel ready: {}"
 msgstr "Tunel {} gotowy: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1704
+#: src/hosty/shared/backend/playit_manager.py:1878
 #, python-brace-format
 msgid "{} tunnel created on {} port {}"
 msgstr "Tunel {} utworzony na {} i porcie {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1817
+#: src/hosty/shared/backend/playit_manager.py:1995
 #, python-brace-format
 msgid "Could not remove the old {} tunnel ({}). It was kept."
 msgstr ""
 
-#: src/hosty/shared/backend/playit_manager.py:1842
+#: src/hosty/shared/backend/playit_manager.py:2020
 #, python-brace-format
 msgid ""
 "Old tunnel removed but still at {} of {} tunnels. Delete an unused tunnel in "
 "the dashboard and try again."
 msgstr ""
 
-#: src/hosty/shared/backend/playit_manager.py:1862
+#: src/hosty/shared/backend/playit_manager.py:2040
 #, python-brace-format
 msgid "{} tunnel domain regenerated: {}"
 msgstr "Tunel {} domeny wygenerowany ponownie: {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1864
+#: src/hosty/shared/backend/playit_manager.py:2042
 #, python-brace-format
 msgid "{} tunnel domain regenerated"
 msgstr "Tunel {} domeny wygenerowany ponownie"
 
-#: src/hosty/shared/backend/playit_manager.py:1912
+#: src/hosty/shared/backend/playit_manager.py:2090
 #, python-brace-format
 msgid "No {} tunnel found"
 msgstr "Nie znaleziono tunelu {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1926
+#: src/hosty/shared/backend/playit_manager.py:2104
 #, python-brace-format
 msgid "Failed to delete {} tunnel"
 msgstr "Nie udało się usunąć tunelu {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1943
+#: src/hosty/shared/backend/playit_manager.py:2121
 #, python-brace-format
 msgid "{} tunnel deleted"
 msgstr "Usunięto tunel {}"
 
-#: src/hosty/shared/backend/playit_manager.py:1948
+#: src/hosty/shared/backend/playit_manager.py:2126
 msgid "no tunnels to delete"
 msgstr "Brak tuneli do usunięcia"
 
 #. Translators: {port} is a port number, e.g. 25565
-#: src/hosty/shared/backend/playit_manager.py:1972
+#: src/hosty/shared/backend/playit_manager.py:2150
 #, python-brace-format
 msgid "Failed to delete tunnels for port {port}."
 msgstr "Nie udało się usunąć tuneli dla portu {port}."
 
-#: src/hosty/shared/backend/playit_manager.py:1976
+#: src/hosty/shared/backend/playit_manager.py:2154
 #, python-brace-format
 msgid "Deleted {count} tunnel for port {port}."
 msgid_plural "Deleted {count} tunnels for port {port}."
@@ -4043,29 +4090,29 @@ msgstr[0] "Usunięto {count} tunel dla portu {port}."
 msgstr[1] "Usunięto {count} tunele dla portu {port}."
 msgstr[2] "Usunięto {count} tuneli dla portu {port}."
 
-#: src/hosty/shared/backend/playit_manager.py:2988
+#: src/hosty/shared/backend/playit_manager.py:3406
 msgid "playit is not running for this server"
 msgstr "Playit nie jest uruchomiony dla tego serwera"
 
-#: src/hosty/shared/backend/playit_manager.py:2996
+#: src/hosty/shared/backend/playit_manager.py:3414
 msgid "playit stopped for this server"
 msgstr "Playit zatrzymany dla tego serwera"
 
-#: src/hosty/shared/backend/playit_manager.py:3005
-#: src/hosty/shared/backend/playit_manager.py:3035
+#: src/hosty/shared/backend/playit_manager.py:3423
+#: src/hosty/shared/backend/playit_manager.py:3453
 msgid "playit is not running"
 msgstr "Playit nie jest uruchomiony"
 
-#: src/hosty/shared/backend/playit_manager.py:3025
+#: src/hosty/shared/backend/playit_manager.py:3443
 msgid "playit stopped"
 msgstr "Playit zatrzymany"
 
-#: src/hosty/shared/backend/playit_manager.py:3046
+#: src/hosty/shared/backend/playit_manager.py:3464
 #, fuzzy
 msgid "playit is already running"
 msgstr "Playit nie jest uruchomiony"
 
-#: src/hosty/shared/backend/playit_manager.py:3070
+#: src/hosty/shared/backend/playit_manager.py:3488
 #, fuzzy
 msgid "playit agent restarted"
 msgstr "Agent Playit działa"
@@ -4080,12 +4127,12 @@ msgstr "Serwer nie został znaleziony."
 
 #: src/hosty/shared/backend/server_manager.py:422
 #: src/hosty/shared/backend/server_manager.py:1689
-#: src/hosty/shared/backend/server_manager.py:2435
-#: src/hosty/shared/backend/server_manager.py:2475
-#: src/hosty/shared/backend/server_manager.py:2539
-#: src/hosty/shared/backend/server_manager.py:2576
-#: src/hosty/shared/backend/server_manager.py:2621
-#: src/hosty/shared/backend/server_manager.py:2726
+#: src/hosty/shared/backend/server_manager.py:2461
+#: src/hosty/shared/backend/server_manager.py:2501
+#: src/hosty/shared/backend/server_manager.py:2565
+#: src/hosty/shared/backend/server_manager.py:2602
+#: src/hosty/shared/backend/server_manager.py:2647
+#: src/hosty/shared/backend/server_manager.py:2752
 msgid "Server not found"
 msgstr "Serwer nie został znaleziony"
 
@@ -4217,50 +4264,50 @@ msgstr[2] "Usunięto {count} wyłączonych plików."
 msgid "Removed disabled item record."
 msgstr "Usunięto rekord elementu wyłączonego"
 
-#: src/hosty/shared/backend/server_manager.py:2483
+#: src/hosty/shared/backend/server_manager.py:2509
 msgid "Selected world folder does not exist"
 msgstr "Wybrany folder świata nie istnieje"
 
-#: src/hosty/shared/backend/server_manager.py:2485
+#: src/hosty/shared/backend/server_manager.py:2511
 msgid "Selected folder does not look like a Minecraft world"
 msgstr "Wybrany folder nie wygląda jak świat Minecrafta"
 
-#: src/hosty/shared/backend/server_manager.py:2500
+#: src/hosty/shared/backend/server_manager.py:2526
 msgid "Copied world is missing level.dat"
 msgstr ""
 
-#: src/hosty/shared/backend/server_manager.py:2545
+#: src/hosty/shared/backend/server_manager.py:2571
 msgid "World folder does not exist"
 msgstr "Folder świata nie istnieje"
 
-#: src/hosty/shared/backend/server_manager.py:2550
+#: src/hosty/shared/backend/server_manager.py:2576
 msgid "World folder is outside this server"
 msgstr "Folder świata znajduje się poza tym serwerem"
 
-#: src/hosty/shared/backend/server_manager.py:2584
-#: src/hosty/shared/backend/server_manager.py:2629
-#: src/hosty/shared/backend/server_manager.py:2734
+#: src/hosty/shared/backend/server_manager.py:2610
+#: src/hosty/shared/backend/server_manager.py:2655
+#: src/hosty/shared/backend/server_manager.py:2760
 msgid "Server directory does not exist"
 msgstr "Folder serwera nie istnieje"
 
-#: src/hosty/shared/backend/server_manager.py:2588
+#: src/hosty/shared/backend/server_manager.py:2614
 msgid "No world folder found"
 msgstr "Nie znaleziono folderu świata"
 
-#: src/hosty/shared/backend/server_manager.py:2737
+#: src/hosty/shared/backend/server_manager.py:2763
 msgid "Backup file not found"
 msgstr "Nie znaleziono pliku kopii zapasowej"
 
-#: src/hosty/shared/backend/server_manager.py:2748
-#: src/hosty/shared/backend/server_manager.py:2750
+#: src/hosty/shared/backend/server_manager.py:2774
+#: src/hosty/shared/backend/server_manager.py:2776
 msgid "Backup archive contains invalid paths."
 msgstr "Kopia zapasowa zawiera nieprawidłowe ścieżki."
 
-#: src/hosty/shared/backend/server_manager.py:2773
+#: src/hosty/shared/backend/server_manager.py:2799
 msgid "This backup does not contain any world data."
 msgstr "Ta kopia zapasowa nie zawiera żadnych danych świata."
 
-#: src/hosty/shared/backend/server_manager.py:2808
+#: src/hosty/shared/backend/server_manager.py:2834
 msgid "Restored."
 msgstr "Przywrócono."
 

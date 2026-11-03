@@ -53,6 +53,13 @@ class ConnectView(Gtk.Box, LocalIpMixin, PlayersMixin, PlayitMixin):
         self._whitelist_list_rows: list[Adw.ExpanderRow] = []
         self._banned_list_rows: list[Adw.ExpanderRow] = []
 
+        self._nethernet_banner = Adw.Banner()
+        self._nethernet_banner.set_title(_("Bedrock tunnel updated to support NetherNet"))
+        self._nethernet_banner.set_button_label(_("Learn more"))
+        self._nethernet_banner.set_revealed(False)
+        self._nethernet_banner.connect("button-clicked", self._on_nethernet_learn_more)
+        self.append(self._nethernet_banner)
+
         self._banner = Adw.Banner()
         self._banner.set_title(_("Restart the server to apply changes"))
         self._banner.set_button_label(_("Dismiss"))

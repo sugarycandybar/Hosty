@@ -17,6 +17,9 @@ DEFAULT_PLAYIT_CONFIG = {
     "auto_install": True,
     "java_endpoint": "",
     "bedrock_endpoint": "",
+    "bedrock_nethernet_token": "",
+    "bedrock_nethernet_migrated": False,
+    "bedrock_nethernet_notice_seen": False,
     "voicechat_endpoint": "",
     "bedrock_port": 19132,
     "voicechat_port": 24454,
@@ -61,6 +64,9 @@ def load_playit_config(server_dir: str | Path) -> dict:
     cfg["auto_install"] = bool(cfg.get("auto_install", True))
     cfg["java_endpoint"] = str(cfg.get("java_endpoint") or "").strip()
     cfg["bedrock_endpoint"] = str(cfg.get("bedrock_endpoint") or "").strip()
+    cfg["bedrock_nethernet_token"] = str(cfg.get("bedrock_nethernet_token") or "").strip()
+    cfg["bedrock_nethernet_migrated"] = bool(cfg.get("bedrock_nethernet_migrated", False))
+    cfg["bedrock_nethernet_notice_seen"] = bool(cfg.get("bedrock_nethernet_notice_seen", False))
     cfg["voicechat_endpoint"] = str(cfg.get("voicechat_endpoint") or "").strip()
     for kind in TUNNEL_KINDS:
         cfg[_tunnel_id_field(kind)] = str(cfg.get(_tunnel_id_field(kind)) or "").strip()
@@ -86,6 +92,9 @@ def save_playit_config(server_dir: str | Path, config: dict) -> bool:
     payload["auto_install"] = bool(payload.get("auto_install", True))
     payload["java_endpoint"] = str(payload.get("java_endpoint") or "").strip()
     payload["bedrock_endpoint"] = str(payload.get("bedrock_endpoint") or "").strip()
+    payload["bedrock_nethernet_token"] = str(payload.get("bedrock_nethernet_token") or "").strip()
+    payload["bedrock_nethernet_migrated"] = bool(payload.get("bedrock_nethernet_migrated", False))
+    payload["bedrock_nethernet_notice_seen"] = bool(payload.get("bedrock_nethernet_notice_seen", False))
     payload["voicechat_endpoint"] = str(payload.get("voicechat_endpoint") or "").strip()
     for kind in TUNNEL_KINDS:
         payload[_tunnel_id_field(kind)] = str(payload.get(_tunnel_id_field(kind)) or "").strip()

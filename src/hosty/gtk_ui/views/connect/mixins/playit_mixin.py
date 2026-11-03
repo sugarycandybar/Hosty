@@ -15,7 +15,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Adw, Gdk, GLib
+from gi.repository import Adw, Gdk, GLib, Gtk
 
 from hosty.gtk_ui.dialogs.add_playit_tunnel import AddPlayitTunnelDialog
 from hosty.gtk_ui.dialogs.manage_playit_tunnel import ManagePlayitTunnelDialog
@@ -23,6 +23,7 @@ from hosty.gtk_ui.dialogs.playit_setup import PlayitSetupDialog
 from hosty.shared.backend.playit_config import load_playit_config, save_playit_config
 
 PLAYIT_DASHBOARD_URL = "https://playit.gg/account/tunnels"
+PLAYIT_NETHERNET_GUIDE_URL = "https://playit.gg/support/use-geyser-with-playit/"
 
 
 from ..utils import *
@@ -35,6 +36,7 @@ class PlayitMixin:
         root = self._server_dir()
         if not root:
             self._cfg = {}
+            self._refresh_nethernet_banner()
             return
         self._cfg = load_playit_config(root)
 
@@ -59,6 +61,7 @@ class PlayitMixin:
         self._suppress_config_updates = True
         self._auto_start_row.set_active(bool(self._cfg.get("auto_start", True)))
         self._suppress_config_updates = False
+        self._refresh_nethernet_banner()
 
     def _save_server_config(self, updates: dict | None = None) -> bool:
         root = self._server_dir()
@@ -80,6 +83,8 @@ class PlayitMixin:
                 "auto_install": bool(self._cfg.get("auto_install", True)),
                 "java_endpoint": str(self._cfg.get("java_endpoint", "")).strip(),
                 "bedrock_endpoint": str(self._cfg.get("bedrock_endpoint", "")).strip(),
+                "bedrock_nethernet_migrated": bool(self._cfg.get("bedrock_nethernet_migrated", False)),
+                "bedrock_nethernet_notice_seen": bool(self._cfg.get("bedrock_nethernet_notice_seen", False)),
                 "voicechat_endpoint": str(self._cfg.get("voicechat_endpoint", "")).strip(),
                 # Only update port if the caller explicitly passed it
                 **({"bedrock_port": updates["bedrock_port"]} if updates and "bedrock_port" in updates else {}),
@@ -102,6 +107,49 @@ class PlayitMixin:
             },
         )
         return save_playit_config(root, existing)
+
+    def _nethernet_notice_should_show(self) -> bool:
+        """Whether the NetherNet migration notice applies to this server."""
+        cfg = getattr(self, "_cfg", {}) or {}
+        migrated = bool(cfg.get("bedrock_nethernet_migrated", False))
+        has_tunnel = bool(str(cfg.get("bedrock_endpoint", "")).strip())
+        is_nethernet = bool(str(cfg.get("bedrock_nethernet_token", "")).strip())
+        seen = bool(cfg.get("bedrock_nethernet_notice_seen", False))
+        return migrated and has_tunnel and is_nethernet and not seen
+
+    def _refresh_nethernet_banner(self) -> None:
+        banner = getattr(self, "_nethernet_banner", None)
+        if banner is None:
+            return
+        banner.set_revealed(self._nethernet_notice_should_show())
+
+    def _on_nethernet_learn_more(self, *_args) -> None:
+        banner = getattr(self, "_nethernet_banner", None)
+        if banner is not None:
+            banner.set_revealed(False)
+        self._save_server_config({"bedrock_nethernet_notice_seen": True})
+
+        dialog = Adw.AlertDialog()
+        dialog.set_heading(_("Bedrock now uses NetherNet"))
+        dialog.set_body(
+            _(
+                "Minecraft Bedrock replaced RakNet with NetherNet in October 2026. "
+                "Hosty moved this server's Bedrock tunnel to the new NetherNet type and "
+                "updated Geyser automatically.\n\n"
+                "Bedrock players join the Bedrock tunnel address on port 19132. "
+                "Java players are not affected."
+            )
+        )
+        dialog.add_response("close", _("Got it"))
+        dialog.set_default_response("close")
+        dialog.set_close_response("close")
+
+        link = Gtk.LinkButton.new_with_label(PLAYIT_NETHERNET_GUIDE_URL, _("Open Playit's Geyser guide"))
+        link.set_halign(Gtk.Align.CENTER)
+        link.set_margin_top(8)
+        dialog.set_extra_child(link)
+
+        dialog.present(self.get_root())
 
     def _propagate_tunnel_endpoint(self, endpoint_key: str, port: int, new_endpoint: str) -> None:
         if not self._server_manager:
@@ -138,6 +186,9 @@ class PlayitMixin:
                         "auto_install": bool(cfg.get("auto_install", True)),
                         "java_endpoint": str(cfg.get("java_endpoint", "")).strip(),
                         "bedrock_endpoint": str(cfg.get("bedrock_endpoint", "")).strip(),
+                        "bedrock_nethernet_token": str(cfg.get("bedrock_nethernet_token", "")).strip(),
+                        "bedrock_nethernet_migrated": bool(cfg.get("bedrock_nethernet_migrated", False)),
+                        "bedrock_nethernet_notice_seen": bool(cfg.get("bedrock_nethernet_notice_seen", False)),
                         "voicechat_endpoint": str(cfg.get("voicechat_endpoint", "")).strip(),
                         "bedrock_port": int(cfg.get("bedrock_port", 19132)),
                         "voicechat_port": int(cfg.get("voicechat_port", 24454)),
@@ -322,7 +373,7 @@ class PlayitMixin:
             return
         kinds: list[tuple[str, str]] = []
         if self._tunnel_addable("bedrock"):
-            kinds.append(("bedrock", _("Bedrock tunnel")))
+            kinds.append(("bedrock", _("Bedrock (NetherNet) tunnel")))
         if self._tunnel_addable("voicechat"):
             kinds.append(("voicechat", _("Voice Chat tunnel")))
         if not kinds:
@@ -1276,7 +1327,15 @@ class PlayitMixin:
                 def ui_done():
                     self._bedrock_in_progress = False
                     if ok or "No bedrock tunnel found" in str(msg):
-                        self._save_server_config({"bedrock_endpoint": "", "bedrock_tunnel_id": ""})
+                        self._save_server_config(
+                            {
+                                "bedrock_endpoint": "",
+                                "bedrock_tunnel_id": "",
+                                "bedrock_nethernet_token": "",
+                                "bedrock_nethernet_migrated": False,
+                                "bedrock_nethernet_notice_seen": False,
+                            }
+                        )
                         br_port = self._server_manager.get_bedrock_port(self._server_info.id)
                         self._propagate_tunnel_endpoint("bedrock_endpoint", br_port, "")
                         self._load_server_config()
