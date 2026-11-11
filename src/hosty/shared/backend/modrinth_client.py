@@ -388,8 +388,8 @@ def search_mods(
         facets_raw = [["project_type:plugin"]]
     else:
         project_types = [f"project_type:{ptype}"]
-        if ptype == "mod" and str(loader or "").strip().lower() == "paper":
-            # Paper "mods" are published as plugins on Modrinth
+        if ptype == "mod" and str(loader or "").strip().lower() in BUKKIT_FAMILY_LOADERS:
+            # Paper/Folia "mods" are published as plugins on Modrinth
             project_types.append("project_type:plugin")
         facets_raw: list[list[str]] = [project_types, [f"categories:{loader}"]]
 

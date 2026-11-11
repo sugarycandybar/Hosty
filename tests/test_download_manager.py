@@ -94,6 +94,51 @@ def test_resolve_paper_fallback_to_latest_when_no_stable(monkeypatch):
             assert dm.resolve_loader_build("paper", "26.2") == "5"
 
 
+def test_resolve_folia_falls_back_to_latest_when_only_alpha(monkeypatch):
+    dm = DownloadManager()
+    builds = [{"id": 6, "channel": "ALPHA"}, {"id": 4, "channel": "ALPHA"}]
+    latest = {"id": 6, "downloads": {"server:default": {"url": "x"}}}
+
+    def fake_get(url, **kw):
+        assert "/projects/folia/" in url
+        if url.endswith("/builds"):
+            return _mock_resp(builds)
+        return _mock_resp(latest)
+
+    with patch("hosty.shared.backend.download_manager.requests.get", side_effect=fake_get):
+        # Folia publishes ALPHA builds, so latest is the preferred fallback.
+        assert dm.resolve_loader_build("folia", "1.21.4") == "6"
+
+
+def test_fetch_papermc_mc_versions_parses_wrapped_versions():
+    dm = DownloadManager()
+    payload = {
+        "versions": [
+            {"version": {"id": "26.2"}},
+            {"version": {"id": "1.21.4"}},
+            {"version": {"id": "26.3"}},
+        ]
+    }
+    with patch("hosty.shared.backend.download_manager.requests.get", return_value=_mock_resp(payload)):
+        assert dm.fetch_papermc_mc_versions("folia") == ["26.3", "26.2", "1.21.4"]
+
+
+def test_install_folia_writes_launch_jar(tmp_path):
+    dm = DownloadManager()
+    cached = tmp_path / "folia.jar"
+    cached.write_bytes(b"PK" + b"\x00" * 2048)
+    ok, _msg = dm.install_server(
+        loader_type="folia",
+        java_path="java",
+        installer_jar=str(cached),
+        mc_version="1.21.4",
+        server_dir=str(tmp_path / "srv"),
+        loader_version="6",
+    )
+    assert ok is True
+    assert (tmp_path / "srv" / "folia-server.jar").exists()
+
+
 def test_session_cache(monkeypatch):
     dm = DownloadManager()
     calls = {"n": 0}

@@ -14,7 +14,7 @@
   <a href="https://github.com/sugarycandybar/Hosty/releases"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue?color=blue"></a>
 </p>
 
-Hosty is a desktop app for creating, running, and managing Minecraft servers with a clean, native-style UI. It supports the Fabric, NeoForge, Forge, and Paper server loaders.
+Hosty is a desktop app for creating, running, and managing Minecraft servers with a clean, native-style UI. It supports the Fabric, NeoForge, Forge, Paper, and Folia server loaders.
 
 It keeps the full server workflow in one app: setup, start/stop, monitoring, mod management, backups, and player access controls.
 

@@ -27,6 +27,14 @@ def test_paper_launch(tmp_path: Path):
     assert args == ["-jar", "paper-server.jar", "nogui"]
 
 
+def test_folia_launch(tmp_path: Path):
+    p = _proc(tmp_path)
+    (tmp_path / "folia-server.jar").write_text("x")
+    args, err = p._build_launch_command()
+    assert err == ""
+    assert args == ["-jar", "folia-server.jar", "nogui"]
+
+
 def test_fabric_takes_precedence_over_paper(tmp_path: Path):
     p = _proc(tmp_path)
     (tmp_path / "fabric-server-launch.jar").write_text("x")
@@ -64,6 +72,7 @@ def test_missing_launch_config_reports_all_loaders(tmp_path: Path):
     assert args is None
     assert "fabric-server-launch.jar" in err
     assert "paper-server.jar" in err
+    assert "folia-server.jar" in err
     assert "libraries" in err
 
 

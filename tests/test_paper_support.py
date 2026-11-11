@@ -55,6 +55,15 @@ def test_project_type_items_for_paper():
     assert all(value not in ("mod", "modpack") for _label, value in items)
 
 
+def test_project_type_items_for_folia():
+    _ensure_gettext()
+    from hosty.gtk_ui.views.files.mixins.modrinth_mixin import ModrinthMixin
+
+    items = ModrinthMixin._project_type_items("folia")
+    assert items == [("Plugins", "plugin"), ("Datapacks", "datapack")]
+    assert items[0][1] == "plugin"
+
+
 def test_project_type_items_for_arclight_keeps_hybrid_order():
     _ensure_gettext()
     from hosty.gtk_ui.views.files.mixins.modrinth_mixin import ModrinthMixin
@@ -292,6 +301,17 @@ def test_paper_titles_say_plugins():
     assert stub._open_mods_row.get_title() == "Open plugins folder"
     assert stub._check_updates_row.get_title() == "Plugin updates"
     # Arclight-only plugin section stays hidden on Paper.
+    assert stub._plugins_expander.get_visible() is False
+
+
+def test_folia_titles_say_plugins():
+    _ensure_gettext()
+    stub = _titles_stub("folia")
+    stub._update_mods_titles()
+    assert stub._mods_group.get_title() == "Plugins"
+    assert stub._mods_expander.get_title() == "Installed Plugins"
+    assert stub._open_mods_row.get_title() == "Open plugins folder"
+    assert stub._check_updates_row.get_title() == "Plugin updates"
     assert stub._plugins_expander.get_visible() is False
 
 

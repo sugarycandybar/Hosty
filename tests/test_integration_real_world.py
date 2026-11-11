@@ -29,6 +29,10 @@ def _fake_install_paper(server_dir: Path, build: str = "119"):
     (server_dir / "paper-server.jar").write_text(f"fake paper build {build}")
 
 
+def _fake_install_folia(server_dir: Path, build: str = "6"):
+    (server_dir / "folia-server.jar").write_text(f"fake folia build {build}")
+
+
 def _fake_install_neoforge(server_dir: Path, version: str = "26.2.0.67"):
     ver_dir = server_dir / "libraries" / "net" / "neoforged" / "neoforge" / version
     ver_dir.mkdir(parents=True)
@@ -53,6 +57,7 @@ def _fake_install_forge(server_dir: Path, mc_version: str = "1.21.4", build: str
     [
         ("fabric", "1.21.4", _fake_install_fabric),
         ("paper", "26.2", lambda d: _fake_install_paper(d, "119")),
+        ("folia", "1.21.4", lambda d: _fake_install_folia(d, "6")),
         ("neoforge", "26.2", lambda d: _fake_install_neoforge(d, "26.2.0.67")),
         ("forge", "1.21.4", lambda d: _fake_install_forge(d, "1.21.4", "53.0.1")),
     ],
@@ -93,11 +98,13 @@ def test_create_configure_launch_cycle(server_manager, loader, mc_version, insta
         assert "fabric-server-launch.jar" in args[1]
     elif loader == "paper":
         assert "paper-server.jar" in args[1]
+    elif loader == "folia":
+        assert "folia-server.jar" in args[1]
     else:
         assert any(a.startswith("@") for a in args)
 
     # --- Files: mods vs plugins dir ---
-    expected_dir = "plugins" if loader == "paper" else "mods"
+    expected_dir = "plugins" if loader in ("paper", "folia") else "mods"
     assert c.content_dir_name(loader) == expected_dir
     content_dir = info.server_dir / expected_dir
     content_dir.mkdir(exist_ok=True)
@@ -151,6 +158,27 @@ def test_modrinth_search_routing_for_paper():
 
     assert "project_type:plugin" in captured_facets["facets"]
     assert "categories:paper" in captured_facets["facets"]
+
+
+def test_modrinth_search_routing_for_folia():
+    """Folia uses the same Bukkit plugin project type as Paper."""
+
+    from hosty.shared.backend import modrinth_client
+
+    captured_facets = {}
+
+    def fake_pooled(url, timeout=30.0):
+        from urllib.parse import parse_qs, urlparse
+
+        qs = parse_qs(urlparse(url).query)
+        captured_facets["facets"] = qs.get("facets", [""])[0]
+        return {"hits": [], "total_hits": 0}
+
+    with patch("hosty.shared.backend.modrinth_client._request_json_pooled", side_effect=fake_pooled):
+        modrinth_client.search_mods("test", loader="folia")
+
+    assert "project_type:plugin" in captured_facets["facets"]
+    assert "categories:folia" in captured_facets["facets"]
 
 
 def test_update_runtime_keeps_loader(server_manager, tmp_path: Path):

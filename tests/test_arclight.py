@@ -46,6 +46,7 @@ def test_normalize_arclight_platform():
 def test_content_dir_names():
     assert c.content_dir_names("arclight") == ["mods", "plugins"]
     assert c.content_dir_names("paper") == ["plugins"]
+    assert c.content_dir_names("folia") == ["plugins"]
     assert c.content_dir_names("fabric") == ["mods"]
     assert c.content_dir_names("forge") == ["mods"]
     assert c.content_dir_names("neoforge") == ["mods"]
@@ -558,6 +559,7 @@ def test_geyser_config_dir_arclight(tmp_path):
     assert PlayitManager._geyser_config_dir(root, "arclight", "forge") == plugin_cfg
     # Non-arclight behavior unchanged
     assert PlayitManager._geyser_config_dir(root, "paper") == (tmp_path / "plugins" / "Geyser-Spigot")
+    assert PlayitManager._geyser_config_dir(root, "folia") == (tmp_path / "plugins" / "Geyser-Spigot")
     assert PlayitManager._geyser_config_dir(root, "fabric") == (tmp_path / "config" / "Geyser-Fabric")
 
 

@@ -211,9 +211,13 @@ class FilesView(Gtk.Box, BackupsMixin, ModsMixin, PlayersMixin, ModrinthMixin, W
         return scroll
 
     def _is_paper(self) -> bool:
-        from hosty.shared.utils.constants import LOADER_PAPER, normalize_loader_type
+        """True for plugin-only PaperMC servers (Paper, Folia)."""
+        from hosty.shared.utils.constants import supports_mods, supports_plugins
 
-        return bool(self._server_info and normalize_loader_type(self._server_info.loader_type) == LOADER_PAPER)
+        if not self._server_info:
+            return False
+        loader = getattr(self._server_info, "loader_type", None)
+        return supports_plugins(loader) and not supports_mods(loader)
 
     def _is_arclight(self) -> bool:
         from hosty.shared.utils.constants import LOADER_ARCLIGHT, normalize_loader_type

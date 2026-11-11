@@ -24,20 +24,22 @@ from hosty.shared.utils.constants import (
     HOSTY_USER_AGENT,
     LOADER_ARCLIGHT,
     LOADER_FABRIC,
+    LOADER_FOLIA,
     LOADER_FORGE,
     LOADER_NEOFORGE,
     LOADER_PAPER,
     NEOFORGE_MAVEN_INSTALLER_URL,
     NEOFORGE_VERSIONS_URL,
-    PAPER_BUILD_URL,
     PAPER_FILL_API_BASE,
-    PAPER_LATEST_BUILD_URL,
     arclight_api_urls,
     arclight_builds_path,
     arclight_loaders_path,
+    is_papermc_loader,
     mod_loader_name,
     normalize_arclight_platform,
     normalize_loader_type,
+    papermc_project,
+    server_jar_filename,
 )
 from hosty.shared.utils.net import lazy_requests
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
@@ -162,14 +164,14 @@ class DownloadManager:
         betas.sort(key=lambda item: item[0], reverse=True)
         return [v for _, v in stable] + [v for _, v in betas]
 
-    def fetch_paper_loader_versions(self, mc_version: str) -> list[str]:
-        """Fetch available Paper build numbers for a Minecraft version, newest first."""
+    def fetch_papermc_loader_versions(self, mc_version: str, project: str = "paper") -> list[str]:
+        """Fetch PaperMC Fill build numbers for a project + MC version, newest first."""
         mc_version = str(mc_version or "").strip()
         if not mc_version:
             return []
         try:
             resp = requests.get(
-                f"{PAPER_FILL_API_BASE}/projects/paper/versions/{mc_version}/builds",
+                f"{PAPER_FILL_API_BASE}/projects/{project}/versions/{mc_version}/builds",
                 headers={"User-Agent": HOSTY_USER_AGENT},
                 timeout=15,
             )
@@ -185,8 +187,54 @@ class DownloadManager:
             )
             return [str(i) for i in ids]
         except Exception as e:
-            logger.warning("Failed to fetch Paper builds: %s", e)
+            logger.warning("Failed to fetch %s builds: %s", project, e)
             return []
+
+    def fetch_paper_loader_versions(self, mc_version: str) -> list[str]:
+        """Fetch available Paper build numbers for a Minecraft version, newest first."""
+        return self.fetch_papermc_loader_versions(mc_version, "paper")
+
+    def fetch_folia_loader_versions(self, mc_version: str) -> list[str]:
+        """Fetch available Folia build numbers for a Minecraft version, newest first."""
+        return self.fetch_papermc_loader_versions(mc_version, "folia")
+
+    def fetch_papermc_mc_versions(self, project: str = "paper") -> list[str]:
+        """Fetch Minecraft versions a PaperMC project publishes builds for.
+
+        Returns newest first. The Fill response wraps each version in a
+        ``version`` object, but older/dict-shaped responses are accepted too.
+        """
+        try:
+            resp = requests.get(
+                f"{PAPER_FILL_API_BASE}/projects/{project}/versions",
+                headers={"User-Agent": HOSTY_USER_AGENT},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.warning("Failed to fetch %s versions: %s", project, e)
+            return []
+        entries = data.get("versions") if isinstance(data, dict) else data
+        if isinstance(entries, dict):
+            entries = list(entries.keys())
+        if not isinstance(entries, list):
+            return []
+        versions: list[str] = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                version = entry.get("version")
+                if isinstance(version, dict):
+                    version_id = version.get("id")
+                else:
+                    version_id = version if version is not None else entry.get("id")
+            else:
+                version_id = entry
+            text = str(version_id or "").strip()
+            if text and text not in versions:
+                versions.append(text)
+        versions.sort(key=self._mc_sort_key, reverse=True)
+        return versions
 
     # ----- Arclight (Bukkit + mods hybrid) -----
 
@@ -344,8 +392,8 @@ class DownloadManager:
             return self.fetch_forge_loader_versions(mc_version)
         if loader_type == LOADER_NEOFORGE:
             return self.fetch_neoforge_loader_versions(mc_version)
-        if loader_type == LOADER_PAPER:
-            return self.fetch_paper_loader_versions(mc_version)
+        if is_papermc_loader(loader_type):
+            return self.fetch_papermc_loader_versions(mc_version, papermc_project(loader_type))
         if loader_type == LOADER_ARCLIGHT:
             return self.fetch_arclight_loader_versions(
                 mc_version, self._arclight_platform_or_default(mc_version, platform)
@@ -372,22 +420,53 @@ class DownloadManager:
         return nums
 
     @staticmethod
-    def _fetch_paper_build(mc_version: str, build: str | None = None) -> dict:
+    def _fetch_paper_build(mc_version: str, build: str | None = None, project: str = "paper") -> dict:
         """Fetch PaperMC Fill metadata for a build (latest when build is falsy).
 
-        Returns the build JSON dict; raises on any failure.
+        Works for any PaperMC project (``paper``, ``folia``, ...). Returns the
+        build JSON dict; raises on any failure.
         """
-        if build:
-            url = PAPER_BUILD_URL.format(mc=mc_version, build=int(build))
-        else:
-            url = PAPER_LATEST_BUILD_URL.format(mc=mc_version)
+        base = f"{PAPER_FILL_API_BASE}/projects/{project}/versions/{mc_version}/builds"
+        url = f"{base}/{int(build)}" if build else f"{base}/latest"
         resp = requests.get(url, headers={"User-Agent": HOSTY_USER_AGENT}, timeout=15)
         resp.raise_for_status()
         data = resp.json()
         downloads = (data.get("downloads") or {}).get("server:default") or {}
         if not downloads.get("url"):
-            raise ValueError("Paper build has no server download")
+            raise ValueError(f"{project} build has no server download")
         return data
+
+    def _resolve_papermc_build(self, loader_type: str, mc_version: str) -> str:
+        """Resolve the preferred PaperMC build (newest stable, else latest)."""
+        project = papermc_project(loader_type) or loader_type
+        if not mc_version:
+            return ""
+        try:
+            # Prefer the newest STABLE build; the /latest endpoint may return
+            # an experimental/alpha build during pre-release windows.
+            try:
+                resp = requests.get(
+                    f"{PAPER_FILL_API_BASE}/projects/{project}/versions/{mc_version}/builds",
+                    headers={"User-Agent": HOSTY_USER_AGENT},
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                builds = resp.json()
+                # /builds returns a bare list; be defensive about wrappers
+                if isinstance(builds, dict):
+                    builds = builds.get("builds") or builds.get("data") or []
+                if isinstance(builds, list) and builds:
+                    stable_ids = [
+                        int(b.get("id")) for b in builds if b.get("channel") == "STABLE" and str(b.get("id")).isdigit()
+                    ]
+                    if stable_ids:
+                        return str(max(stable_ids))
+            except Exception:
+                pass
+            return str(self._fetch_paper_build(mc_version, project=project).get("id") or "")
+        except Exception as e:
+            logger.warning("Failed to fetch %s builds: %s", project, e)
+            return ""
 
     def resolve_loader_build(
         self,
@@ -401,8 +480,9 @@ class DownloadManager:
         For Fabric this is the newest global loader version. For Forge the
         recommended promotion is preferred over latest. For NeoForge the
         newest build on the selected Minecraft version's branch is returned.
-        For Arclight the newest build for the MC version + base platform
-        (forge/fabric/neoforge) is returned.
+        For Paper/Folia the newest stable build is preferred, falling back to
+        the latest published build. For Arclight the newest build for the MC
+        version + base platform (forge/fabric/neoforge) is returned.
 
         Returns "" when no suitable build can be resolved.
         """
@@ -474,42 +554,11 @@ class DownloadManager:
             self._loader_build_cache[cache_key] = result
             return result
 
-        if loader_type == LOADER_PAPER:
-            if not mc_version:
-                return ""
-            try:
-                # Prefer the newest STABLE build; the /latest endpoint may
-                # return an EXPERIMENTAL build during pre-release windows.
-                try:
-                    resp = requests.get(
-                        f"{PAPER_FILL_API_BASE}/projects/paper/versions/{mc_version}/builds",
-                        headers={"User-Agent": HOSTY_USER_AGENT},
-                        timeout=15,
-                    )
-                    resp.raise_for_status()
-                    builds = resp.json()
-                    # /builds returns a bare list; be defensive about wrappers
-                    if isinstance(builds, dict):
-                        builds = builds.get("builds") or builds.get("data") or []
-                    if isinstance(builds, list) and builds:
-                        stable_ids = [
-                            int(b.get("id"))
-                            for b in builds
-                            if b.get("channel") == "STABLE" and str(b.get("id")).isdigit()
-                        ]
-                        if stable_ids:
-                            result = str(max(stable_ids))
-                            self._loader_build_cache[cache_key] = result
-                            return result
-                except Exception:
-                    pass
-                result = str(self._fetch_paper_build(mc_version).get("id") or "")
-                if result:
-                    self._loader_build_cache[cache_key] = result
-                return result
-            except Exception as e:
-                logger.warning("Failed to fetch Paper builds: %s", e)
-                return ""
+        if is_papermc_loader(loader_type):
+            result = self._resolve_papermc_build(loader_type, mc_version)
+            if result:
+                self._loader_build_cache[cache_key] = result
+            return result
 
         if loader_type == LOADER_ARCLIGHT:
             if not mc_version:
@@ -575,9 +624,9 @@ class DownloadManager:
         For Fabric the newest installer is fetched from Fabric Meta (the
         installer tool itself can install any loader version). For Forge and
         NeoForge the version-specific installer is downloaded from the
-        respective maven. Paper and Arclight ship ready-to-run server jars,
-        so the "installer" is the server jar itself (no installer step).
-        Arclight additionally needs the base ``platform``
+        respective maven. Paper, Folia and Arclight ship ready-to-run server
+        jars, so the "installer" is the server jar itself (no installer
+        step). Arclight additionally needs the base ``platform``
         (forge/fabric/neoforge).
         """
         loader_type = normalize_loader_type(loader_type)
@@ -602,17 +651,18 @@ class DownloadManager:
                 return None
             url = NEOFORGE_MAVEN_INSTALLER_URL.format(version=version)
             cached_jar = CACHE_DIR / f"neoforge-installer-{version}.jar"
-        elif loader_type == LOADER_PAPER:
-            # Paper ships a ready-to-run server jar (no installer step).
+        elif is_papermc_loader(loader_type):
+            # PaperMC projects ship ready-to-run server jars (no installer step).
             if not mc_version:
                 return None
+            project = papermc_project(loader_type)
             try:
-                build = self._fetch_paper_build(mc_version, loader_version or None)
+                build = self._fetch_paper_build(mc_version, loader_version or None, project=project)
                 downloads = build["downloads"]["server:default"]
                 url = downloads["url"]
-                cached_jar = CACHE_DIR / f"paper-{mc_version}-{build['id']}.jar"
+                cached_jar = CACHE_DIR / f"{project}-{mc_version}-{build['id']}.jar"
             except Exception as e:
-                logger.warning("Failed to resolve Paper jar: %s", e)
+                logger.warning("Failed to resolve %s jar: %s", project, e)
                 return None
         elif loader_type == LOADER_ARCLIGHT:
             # Arclight ships a ready-to-run hybrid server jar per MC version
@@ -828,10 +878,12 @@ class DownloadManager:
                 loader_version=loader_version,
                 progress_callback=progress_callback,
             )
-        if loader_type == LOADER_PAPER:
-            return self._install_paper_server(
+        if is_papermc_loader(loader_type):
+            return self._install_ready_server(
                 installer_jar=installer_jar,
                 server_dir=server_dir,
+                jar_name=server_jar_filename(loader_type),
+                loader_name=mod_loader_name(loader_type),
                 progress_callback=progress_callback,
             )
         if loader_type == LOADER_ARCLIGHT:
@@ -849,41 +901,63 @@ class DownloadManager:
             progress_callback=progress_callback,
         )
 
+    def _install_ready_server(
+        self,
+        installer_jar: str,
+        server_dir: str,
+        jar_name: str,
+        loader_name: str,
+        progress_callback: Callable[[float, str], None] | None = None,
+    ) -> tuple[bool, str]:
+        """Install a ready-to-run server jar under its canonical filename."""
+        import shutil
+
+        Path(server_dir).mkdir(parents=True, exist_ok=True)
+
+        if progress_callback:
+            progress_callback(0.5, _("Installing {} server...").format(loader_name))
+
+        try:
+            source = Path(installer_jar)
+            if not source.is_file() or source.stat().st_size < 1000:
+                return False, _("{} server jar is missing or corrupted").format(loader_name)
+            shutil.copyfile(source, Path(server_dir) / jar_name)
+        except Exception as e:
+            return False, _("Installation error: {}").format(e)
+
+        if progress_callback:
+            progress_callback(1.0, _("{} server installed successfully").format(loader_name))
+        return True, _("Installation successful")
+
     def _install_paper_server(
         self,
         installer_jar: str,
         server_dir: str,
         progress_callback: Callable[[float, str], None] | None = None,
     ) -> tuple[bool, str]:
-        """
-        Install Paper by placing the downloaded server jar as paper-server.jar.
+        """Install Paper by placing the downloaded server jar as paper-server.jar."""
+        return self._install_ready_server(
+            installer_jar=installer_jar,
+            server_dir=server_dir,
+            jar_name=server_jar_filename(LOADER_PAPER),
+            loader_name=mod_loader_name(LOADER_PAPER),
+            progress_callback=progress_callback,
+        )
 
-        Args:
-            installer_jar: Path to the cached Paper server jar.
-            server_dir: Directory to install the server into.
-            progress_callback: Progress callback.
-
-        Returns:
-            (success, message) tuple.
-        """
-        import shutil
-
-        Path(server_dir).mkdir(parents=True, exist_ok=True)
-
-        if progress_callback:
-            progress_callback(0.5, _("Installing Paper server..."))
-
-        try:
-            source = Path(installer_jar)
-            if not source.is_file() or source.stat().st_size < 1000:
-                return False, _("Paper server jar is missing or corrupted")
-            shutil.copyfile(source, Path(server_dir) / "paper-server.jar")
-        except Exception as e:
-            return False, _("Installation error: {}").format(e)
-
-        if progress_callback:
-            progress_callback(1.0, _("Paper server installed successfully"))
-        return True, _("Installation successful")
+    def _install_folia_server(
+        self,
+        installer_jar: str,
+        server_dir: str,
+        progress_callback: Callable[[float, str], None] | None = None,
+    ) -> tuple[bool, str]:
+        """Install Folia by placing the downloaded server jar as folia-server.jar."""
+        return self._install_ready_server(
+            installer_jar=installer_jar,
+            server_dir=server_dir,
+            jar_name=server_jar_filename(LOADER_FOLIA),
+            loader_name=mod_loader_name(LOADER_FOLIA),
+            progress_callback=progress_callback,
+        )
 
     def _install_arclight_server(
         self,
@@ -898,33 +972,14 @@ class DownloadManager:
         The jar is launched directly (``java -jar arclight-server.jar
         nogui``); it fetches its remaining runtime files on first start, so
         the first launch needs network access and may take a while.
-
-        Args:
-            installer_jar: Path to the cached Arclight server jar.
-            server_dir: Directory to install the server into.
-            progress_callback: Progress callback.
-
-        Returns:
-            (success, message) tuple.
         """
-        import shutil
-
-        Path(server_dir).mkdir(parents=True, exist_ok=True)
-
-        if progress_callback:
-            progress_callback(0.5, _("Installing Arclight server..."))
-
-        try:
-            source = Path(installer_jar)
-            if not source.is_file() or source.stat().st_size < 1000:
-                return False, _("Arclight server jar is missing or corrupted")
-            shutil.copyfile(source, Path(server_dir) / "arclight-server.jar")
-        except Exception as e:
-            return False, _("Installation error: {}").format(e)
-
-        if progress_callback:
-            progress_callback(1.0, _("Arclight server installed successfully"))
-        return True, _("Installation successful")
+        return self._install_ready_server(
+            installer_jar=installer_jar,
+            server_dir=server_dir,
+            jar_name=server_jar_filename(LOADER_ARCLIGHT),
+            loader_name=mod_loader_name(LOADER_ARCLIGHT),
+            progress_callback=progress_callback,
+        )
 
     def _install_maven_loader_server(
         self,

@@ -24,6 +24,7 @@ from hosty.shared.core.events import EventEmitter
 from hosty.shared.utils.constants import (
     CONFIG_FILE,
     DEFAULT_RAM_MB,
+    DIRECT_LAUNCH_JARS,
     LOADER_ARCLIGHT,
     LOADER_FABRIC,
     SERVERS_DIR,
@@ -31,9 +32,11 @@ from hosty.shared.utils.constants import (
     content_dir_name,
     effective_mod_loader,
     get_required_java_version,
+    is_papermc_loader,
     mod_loader_name,
     normalize_arclight_platform,
     normalize_loader_type,
+    papermc_project,
 )
 from hosty.shared.utils.file_utils import atomic_write_json
 
@@ -447,7 +450,7 @@ class ServerManager(EventEmitter):
         ):
             # Fabric versions are global, so an older Fabric build is a
             # downgrade regardless of MC version. Other loaders are
-            # branch-specific (NeoForge/Paper/Forge per-MC builds), so only
+            # branch-specific (NeoForge/Paper/Folia/Forge per-MC builds), so only
             # the same-MC case is a comparable downgrade. (Arclight builds
             # are unordered snapshots, so any different build is allowed.)
             if loader_type == LOADER_FABRIC or mc_version == info.mc_version:
@@ -489,15 +492,15 @@ class ServerManager(EventEmitter):
         if not installer_path:
             return False, _("Failed to download {} installer").format(loader_name)
 
-        for filename in ("server.jar", "fabric-server-launch.jar", "paper-server.jar", "arclight-server.jar"):
+        for filename in ("server.jar", *DIRECT_LAUNCH_JARS):
             try:
                 (root / filename).unlink(missing_ok=True)
             except Exception:
                 pass
 
         # Fabric needs the vanilla server.jar pre-placed; Forge/NeoForge
-        # installers fetch their own Minecraft files, and Paper/Arclight jars
-        # are ready to run.
+        # installers fetch their own Minecraft files, and Paper/Folia/Arclight
+        # jars are ready to run.
         if loader_type == LOADER_FABRIC:
             progress(0.42, _("Downloading Minecraft {} server").format(mc_version))
             ok, msg = self.download_manager.download_server_jar(
@@ -716,9 +719,15 @@ class ServerManager(EventEmitter):
             games = self.download_manager.fetch_game_versions()
         except Exception:
             games = []
-        if normalize_loader_type(info.loader_type) == LOADER_ARCLIGHT:
+        loader_type = normalize_loader_type(info.loader_type)
+        if loader_type == LOADER_ARCLIGHT:
             try:
                 games = self.download_manager.fetch_arclight_mc_versions() or games
+            except Exception:
+                pass
+        elif is_papermc_loader(loader_type):
+            try:
+                games = self.download_manager.fetch_papermc_mc_versions(papermc_project(loader_type)) or games
             except Exception:
                 pass
         has_mc = any(self.is_version_after(v, info.mc_version) for v in (games or []))

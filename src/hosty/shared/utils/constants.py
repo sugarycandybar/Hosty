@@ -5,6 +5,7 @@ Central constants for Hosty application.
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import hosty.i18n  # noqa: F401 - installs _() into builtins
@@ -115,15 +116,62 @@ LOADER_FABRIC = "fabric"
 LOADER_NEOFORGE = "neoforge"
 LOADER_FORGE = "forge"
 LOADER_PAPER = "paper"
+LOADER_FOLIA = "folia"
 LOADER_ARCLIGHT = "arclight"
-SUPPORTED_LOADERS = [LOADER_FABRIC, LOADER_NEOFORGE, LOADER_FORGE, LOADER_PAPER, LOADER_ARCLIGHT]
-LOADER_NAMES = {
-    LOADER_FABRIC: _("Fabric"),
-    LOADER_NEOFORGE: _("NeoForge"),
-    LOADER_FORGE: _("Forge"),
-    LOADER_PAPER: _("Paper"),
-    LOADER_ARCLIGHT: _("Arclight"),
+
+
+@dataclass(frozen=True)
+class LoaderSpec:
+    """Declarative description of one server loader.
+
+    This is the single place to register a new loader's display name, content
+    directories, direct-launch jar and support flags. PaperMC-backed loaders
+    only need ``papermc_project``; everything else (build lookup, download
+    naming and installation) is handled by the shared PaperMC path in
+    :class:`DownloadManager`.
+    """
+
+    name: str
+    supports_mods: bool = True
+    supports_plugins: bool = False
+    content_dirs: tuple[str, ...] = ("mods",)
+    server_jar: str = ""
+    papermc_project: str = ""
+
+
+# Insertion order doubles as the order shown in the Create Server dialog.
+LOADER_SPECS: dict[str, LoaderSpec] = {
+    LOADER_FABRIC: LoaderSpec(_("Fabric"), server_jar="fabric-server-launch.jar"),
+    LOADER_NEOFORGE: LoaderSpec(_("NeoForge")),
+    LOADER_FORGE: LoaderSpec(_("Forge")),
+    LOADER_PAPER: LoaderSpec(
+        _("Paper"),
+        supports_mods=False,
+        supports_plugins=True,
+        content_dirs=("plugins",),
+        server_jar="paper-server.jar",
+        papermc_project="paper",
+    ),
+    LOADER_FOLIA: LoaderSpec(
+        _("Folia"),
+        supports_mods=False,
+        supports_plugins=True,
+        content_dirs=("plugins",),
+        server_jar="folia-server.jar",
+        papermc_project="folia",
+    ),
+    LOADER_ARCLIGHT: LoaderSpec(
+        _("Arclight"),
+        supports_plugins=True,
+        content_dirs=("mods", "plugins"),
+        server_jar="arclight-server.jar",
+    ),
 }
+SUPPORTED_LOADERS = list(LOADER_SPECS)
+LOADER_NAMES = {loader_id: spec.name for loader_id, spec in LOADER_SPECS.items()}
+
+# Direct-launch jars, in priority order (Fabric first, then ready-to-run jars).
+DIRECT_LAUNCH_JARS = tuple(spec.server_jar for spec in LOADER_SPECS.values() if spec.server_jar)
 
 # Base mod platforms an Arclight build can target. Arclight is a Bukkit
 # implementation on top of a mod loader, so each Minecraft version offers one
@@ -143,41 +191,56 @@ def normalize_arclight_platform(value: str | None) -> str:
 def normalize_loader_type(value: str | None) -> str:
     """Return a known loader id, defaulting to fabric for unknown/legacy values."""
     value = str(value or "").strip().lower()
-    return value if value in SUPPORTED_LOADERS else LOADER_FABRIC
+    return value if value in LOADER_SPECS else LOADER_FABRIC
+
+
+def loader_spec(loader_type: str | None) -> LoaderSpec:
+    """Return the registered spec for a loader type."""
+    return LOADER_SPECS[normalize_loader_type(loader_type)]
 
 
 def mod_loader_name(loader_type: str | None) -> str:
     """Return the display name for a loader type."""
-    return LOADER_NAMES.get(normalize_loader_type(loader_type), LOADER_NAMES[LOADER_FABRIC])
+    return loader_spec(loader_type).name
 
 
 def content_dir_name(loader_type: str | None) -> str:
     """Directory (inside the server dir) where loader jars live."""
-    return "plugins" if normalize_loader_type(loader_type) == LOADER_PAPER else "mods"
+    return loader_spec(loader_type).content_dirs[0]
 
 
 def content_dir_names(loader_type: str | None) -> list[str]:
     """All content directories (inside the server dir) for a loader type.
 
     Arclight is a hybrid: mods live in ``mods/`` and Bukkit plugins in
-    ``plugins/`` simultaneously. Paper only has ``plugins/``.
+    ``plugins/`` simultaneously. Paper and Folia only have ``plugins/``.
     """
-    loader = normalize_loader_type(loader_type)
-    if loader == LOADER_ARCLIGHT:
-        return ["mods", "plugins"]
-    if loader == LOADER_PAPER:
-        return ["plugins"]
-    return ["mods"]
+    return list(loader_spec(loader_type).content_dirs)
 
 
 def supports_mods(loader_type: str | None) -> bool:
     """True when the loader runs mods from ``mods/``."""
-    return normalize_loader_type(loader_type) != LOADER_PAPER
+    return loader_spec(loader_type).supports_mods
 
 
 def supports_plugins(loader_type: str | None) -> bool:
     """True when the loader runs Bukkit plugins from ``plugins/``."""
-    return normalize_loader_type(loader_type) in (LOADER_PAPER, LOADER_ARCLIGHT)
+    return loader_spec(loader_type).supports_plugins
+
+
+def server_jar_filename(loader_type: str | None) -> str:
+    """Name of the direct-launch server jar for a loader ("" when none)."""
+    return loader_spec(loader_type).server_jar
+
+
+def papermc_project(loader_type: str | None) -> str:
+    """PaperMC Fill project id for a loader ("" when not PaperMC-backed)."""
+    return loader_spec(loader_type).papermc_project
+
+
+def is_papermc_loader(loader_type: str | None) -> bool:
+    """True for PaperMC Fill-backed loaders (Paper, Folia)."""
+    return bool(papermc_project(loader_type))
 
 
 def effective_mod_loader(loader_type: str | None, arclight_platform: str | None = None) -> str:

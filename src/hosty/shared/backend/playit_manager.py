@@ -2559,15 +2559,16 @@ class PlayitManager(EventEmitter):
         """Return the loader-specific Geyser config directory (e.g. config/Geyser-Fabric)."""
         from hosty.shared.utils.constants import (
             LOADER_ARCLIGHT,
-            LOADER_PAPER,
             mod_loader_name,
             normalize_arclight_platform,
             normalize_loader_type,
+            supports_mods,
+            supports_plugins,
         )
 
         loader = normalize_loader_type(loader)
-        if loader == LOADER_PAPER:
-            # Geyser runs as a Bukkit plugin on Paper (Geyser-Spigot.jar)
+        if supports_plugins(loader) and not supports_mods(loader):
+            # Geyser runs as a Bukkit plugin on Paper/Folia (Geyser-Spigot.jar)
             return Path(server_dir) / "plugins" / "Geyser-Spigot"
         if loader == LOADER_ARCLIGHT:
             # Arclight can run Geyser either as a platform mod
@@ -2685,7 +2686,12 @@ class PlayitManager(EventEmitter):
         3) Overwrite port, voice_host, and bind_address.
         4) Save the file, clean up any stale .toml sibling.
         """
-        from hosty.shared.utils.constants import LOADER_ARCLIGHT, LOADER_PAPER, normalize_loader_type
+        from hosty.shared.utils.constants import (
+            LOADER_ARCLIGHT,
+            normalize_loader_type,
+            supports_mods,
+            supports_plugins,
+        )
 
         domain, remote_port = _split_endpoint(endpoint)
         voice_tunnel = None
@@ -2763,7 +2769,7 @@ class PlayitManager(EventEmitter):
         except Exception:
             pass
 
-        if normalize_loader_type(loader) == LOADER_PAPER:
+        if supports_plugins(loader) and not supports_mods(loader):
             config_dir = Path(server_dir) / "plugins" / "voicechat"
         elif normalize_loader_type(loader) == LOADER_ARCLIGHT:
             # Arclight: Simple Voice Chat may live in plugins/ (Bukkit) or

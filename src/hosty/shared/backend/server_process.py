@@ -10,7 +10,7 @@ import threading
 from pathlib import Path
 
 from hosty.shared.core.events import EventEmitter
-from hosty.shared.utils.constants import ServerStatus
+from hosty.shared.utils.constants import LOADER_SPECS, ServerStatus
 from hosty.shared.utils.subprocess_utils import hidden_subprocess_kwargs
 
 
@@ -92,18 +92,12 @@ class ServerProcess(EventEmitter):
 
         Returns (command_args, error_message). Exactly one is populated.
         """
-        fabric_jar = self.server_dir / "fabric-server-launch.jar"
-        if fabric_jar.exists():
-            return ["-jar", "fabric-server-launch.jar", "nogui"], ""
-
-        paper_jar = self.server_dir / "paper-server.jar"
-        if paper_jar.exists():
-            return ["-jar", "paper-server.jar", "nogui"], ""
-
-        # Arclight: hybrid Bukkit + mods server, launched directly like Paper
-        arclight_jar = self.server_dir / "arclight-server.jar"
-        if arclight_jar.exists():
-            return ["-jar", "arclight-server.jar", "nogui"], ""
+        # Ready-to-run loaders (Fabric, Paper, Folia, Arclight) are launched
+        # directly from their installed jar. Registry order keeps Fabric first.
+        direct_jars = [(spec.server_jar, spec.name) for spec in LOADER_SPECS.values() if spec.server_jar]
+        for jar_name, _loader_name in direct_jars:
+            if (self.server_dir / jar_name).exists():
+                return ["-jar", jar_name, "nogui"], ""
 
         # Forge / NeoForge: launch via the installer-generated Java argfile
         # under libraries/, e.g. libraries/net/neoforged/neoforge/<ver>/
@@ -129,11 +123,10 @@ class ServerProcess(EventEmitter):
                         cmd.append("nogui")
                         return cmd, ""
 
+        expected = ", ".join(f"{jar_name} ({loader_name})" for jar_name, loader_name in direct_jars)
         return None, (
             "[Hosty] Error: No server launch configuration found "
-            "(expected fabric-server-launch.jar (Fabric), paper-server.jar (Paper), "
-            "arclight-server.jar (Arclight), "
-            "or a run configuration under libraries/ (Forge/NeoForge))\n"
+            f"(expected {expected}, or a run configuration under libraries/ (Forge/NeoForge))\n"
         )
 
     def start(self) -> bool:

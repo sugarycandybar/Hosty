@@ -25,7 +25,22 @@ def test_content_dir_name():
 
 def test_mod_loader_name():
     assert c.mod_loader_name("paper") == "Paper"
+    assert c.mod_loader_name("folia") == "Folia"
     assert c.mod_loader_name("fabric") == "Fabric"
+
+
+def test_folia_loader_registered():
+    assert c.normalize_loader_type("Folia") == "folia"
+    assert c.LOADER_FOLIA in c.SUPPORTED_LOADERS
+    assert c.content_dir_name("folia") == "plugins"
+    assert c.content_dir_names("folia") == ["plugins"]
+    assert c.supports_mods("folia") is False
+    assert c.supports_plugins("folia") is True
+    assert c.server_jar_filename("folia") == "folia-server.jar"
+    assert c.papermc_project("folia") == "folia"
+    assert c.is_papermc_loader("paper") is True
+    assert c.is_papermc_loader("folia") is True
+    assert c.is_papermc_loader("fabric") is False
 
 
 def test_get_required_java_version():

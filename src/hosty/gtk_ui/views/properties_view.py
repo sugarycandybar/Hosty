@@ -27,19 +27,20 @@ from hosty.shared.utils.constants import (
     GAMEMODES,
     LOADER_ARCLIGHT,
     LOADER_FABRIC,
-    LOADER_PAPER,
     MAX_RAM_MB,
     MIN_RAM_MB,
     get_required_java_version,
+    is_papermc_loader,
     mod_loader_name,
     normalize_arclight_platform,
     normalize_loader_type,
+    papermc_project,
 )
 
 DIFFICULTY_MODES = [*DIFFICULTIES, "hardcore"]
 COMMON_JAVA_VERSIONS = [8, 11, 16, 17, 21, 25]
 
-# Aikar's recommended flags for Paper servers (Xmx/Xms are handled via RAM row)
+# Aikar's recommended flags for Paper/Folia servers (Xmx/Xms are handled via RAM row)
 AIKAR_FLAGS = (
     "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 "
     "-XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch "
@@ -290,8 +291,8 @@ class PropertiesView(Gtk.Box):
     def _update_paper_flags_visibility(self) -> None:
         if not hasattr(self, "_paper_flags_row") or not self._paper_flags_row:
             return
-        is_paper = bool(self._server_info and normalize_loader_type(self._server_info.loader_type) == LOADER_PAPER)
-        self._paper_flags_row.set_visible(is_paper)
+        is_paper_family = bool(self._server_info and is_papermc_loader(self._server_info.loader_type))
+        self._paper_flags_row.set_visible(is_paper_family)
 
     def _on_apply_paper_flags(self, *_args) -> None:
         if not self._server_info:
@@ -836,11 +837,21 @@ class PropertiesView(Gtk.Box):
             add_review_row(expander)
 
         def versions_worker():
-            if is_arclight_server:
+            loader_type = normalize_loader_type(self._server_info.loader_type)
+            if loader_type == LOADER_ARCLIGHT:
                 try:
                     games = self._server_manager.download_manager.fetch_arclight_mc_versions()
                 except Exception:
                     games = []
+            elif is_papermc_loader(loader_type):
+                try:
+                    games = self._server_manager.download_manager.fetch_papermc_mc_versions(
+                        papermc_project(loader_type)
+                    )
+                except Exception:
+                    games = []
+                if not games:
+                    games = self._server_manager.download_manager.fetch_game_versions()
             else:
                 games = self._server_manager.download_manager.fetch_game_versions()
 

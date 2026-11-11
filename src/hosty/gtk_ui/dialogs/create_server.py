@@ -27,6 +27,7 @@ from hosty.shared.utils.constants import (
     LEVEL_TYPES,
     LOADER_ARCLIGHT,
     LOADER_FABRIC,
+    LOADER_FOLIA,
     LOADER_NAMES,
     MAX_RAM_MB,
     MIN_RAM_MB,
@@ -65,6 +66,7 @@ class CreateServerDialog(Adw.Dialog):
         self._server_manager = server_manager
         self._game_versions: list[str] = []
         self._arclight_games: list[str] = []
+        self._folia_games: list[str] = []
         self._loader_versions: list[str] = []
         self._loader_version_values: list[str] = []
         self._loader_build: str = ""
@@ -340,9 +342,17 @@ class CreateServerDialog(Adw.Dialog):
             self._arclight_games = game_vers
             GLib.idle_add(self._maybe_populate_arclight_versions)
 
+        def on_folia_games(game_vers):
+            self._folia_games = game_vers
+            GLib.idle_add(self._maybe_populate_folia_versions)
+
         self._server_manager.download_manager.fetch_all_versions_async(on_versions)
         threading.Thread(
             target=lambda: on_arclight_games(self._server_manager.download_manager.fetch_arclight_mc_versions()),
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=lambda: on_folia_games(self._server_manager.download_manager.fetch_papermc_mc_versions("folia")),
             daemon=True,
         ).start()
 
@@ -352,9 +362,20 @@ class CreateServerDialog(Adw.Dialog):
             self._populate_mc_versions()
         return False
 
+    def _maybe_populate_folia_versions(self):
+        """Swap in Folia MC versions if Folia is currently selected."""
+        if self._selected_loader_type() == LOADER_FOLIA and self._folia_games:
+            self._populate_mc_versions()
+        return False
+
     def _mc_versions_for_loader(self) -> list[str]:
-        if self._selected_loader_type() == LOADER_ARCLIGHT:
+        loader_type = self._selected_loader_type()
+        if loader_type == LOADER_ARCLIGHT:
             return self._arclight_games
+        if loader_type == LOADER_FOLIA:
+            # Until the Folia version list arrives, fall back to the general
+            # list so the dialog stays usable (the selection is refreshed).
+            return self._folia_games or self._game_versions
         return self._game_versions
 
     def _populate_mc_versions(self):
@@ -378,8 +399,12 @@ class CreateServerDialog(Adw.Dialog):
 
     def _populate_versions(self):
         """Populate version dropdowns (called on main thread)."""
-        if self._selected_loader_type() == LOADER_ARCLIGHT:
+        loader_type = self._selected_loader_type()
+        if loader_type == LOADER_ARCLIGHT:
             if self._arclight_games:
+                self._populate_mc_versions()
+        elif loader_type == LOADER_FOLIA:
+            if self._folia_games or self._game_versions:
                 self._populate_mc_versions()
         elif self._game_versions:
             self._populate_mc_versions()
